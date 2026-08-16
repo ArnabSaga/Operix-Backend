@@ -57,11 +57,12 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 
 /src/generated
+/generated
 .vscode/settings.json
 
 #AI
-GEMINI.md
-context
 .agents
-AGENT.md
+GEMINI.md
+AGENTS
+context
 skills-lock.json
