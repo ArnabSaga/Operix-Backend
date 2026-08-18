@@ -65,8 +65,8 @@ better-auth.generated.prisma
 
 #AI
 .agents
+AGENTS.md
 GEMINI.md
-AGENTS
 context
 skills-lock.json
 
