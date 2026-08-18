@@ -7,7 +7,7 @@ export default defineConfig({
   schema: 'prisma/schema',
 
   migrations: {
-    path: 'prisma/schema/migrations',
+    path: 'prisma/migrations',
   },
 
   ...(databaseUrl

@@ -6,6 +6,8 @@ const validEnvironment = {
   DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/operix',
   FRONTEND_URL: 'http://localhost:3001',
   SWAGGER_ENABLED: 'false',
+  BETTER_AUTH_SECRET: 'test-secret-at-least-32-characters-long',
+  BETTER_AUTH_URL: 'http://localhost:3000',
 };
 
 describe('validateEnvironment', () => {

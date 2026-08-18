@@ -1,0 +1,27 @@
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  adminId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  admin   User         @relation("AdminTeams", fields: [adminId], references: [id], onDelete: Restrict)
+  members TeamMember[]
+  tasks   Task[]
+
+  @@index([adminId])
+  @@map("team")
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  teamId   String
+  memberId String   @unique
+  joinedAt DateTime @default(now())
+
+  team   Team @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  member User @relation("MemberTeam", fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@index([teamId])
+  @@map("team_member")
+}

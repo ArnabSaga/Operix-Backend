@@ -16,8 +16,20 @@ enum TaskStatus {
   IN_PROGRESS
   SUBMITTED
   UNDER_REVIEW
+  COMPLETED
   REVISION_REQUIRED
   RESUBMITTED
-  COMPLETED
   CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskReviewAction {
+  APPROVE
+  REQUEST_REVISION
 }

@@ -28,18 +28,18 @@
 
 **Operix** is an internal enterprise operations platform designed for pharmaceutical and medical organizations to manage:
 
-* organizational workload;
-* task creation and assignment;
-* task execution;
-* submission and review;
-* staff performance;
-* Admin activity;
-* operational reporting;
-* workload distribution;
-* notifications;
-* activity history;
-* management analytics;
-* real-time operational visibility.
+- organizational workload;
+- task creation and assignment;
+- task execution;
+- submission and review;
+- staff performance;
+- Admin activity;
+- operational reporting;
+- workload distribution;
+- notifications;
+- activity history;
+- management analytics;
+- real-time operational visibility.
 
 The platform replaces fragmented Excel-based operational tracking with a structured digital workflow.
 
@@ -61,11 +61,11 @@ Operix is **not simply an Excel replacement, task CRUD system, inventory applica
 
 It is a workflow-driven operational management platform where every meaningful work action generates structured information that management can use for:
 
-* monitoring;
-* reporting;
-* performance measurement;
-* workload balancing;
-* operational decision-making.
+- monitoring;
+- reporting;
+- performance measurement;
+- workload balancing;
+- operational decision-making.
 
 ---
 
@@ -75,18 +75,18 @@ The organization currently relies heavily on Excel-based tracking for operationa
 
 This creates several problems:
 
-* information is fragmented across spreadsheets;
-* updates are manual;
-* calculations are manual;
-* task status is difficult to monitor;
-* historical activity is difficult to trace;
-* management has limited real-time visibility;
-* workload imbalance is difficult to identify;
-* Admin activity is difficult to monitor;
-* staff performance requires manual calculation;
-* reports require repeated manual preparation;
-* overdue work may not be immediately visible;
-* the organization has no centralized operational activity history.
+- information is fragmented across spreadsheets;
+- updates are manual;
+- calculations are manual;
+- task status is difficult to monitor;
+- historical activity is difficult to trace;
+- management has limited real-time visibility;
+- workload imbalance is difficult to identify;
+- Admin activity is difficult to monitor;
+- staff performance requires manual calculation;
+- reports require repeated manual preparation;
+- overdue work may not be immediately visible;
+- the organization has no centralized operational activity history.
 
 Operix will convert this process into a centralized digital workflow.
 
@@ -146,21 +146,21 @@ Excel becomes an import/export format rather than the primary operational system
 
 Operix should allow management to answer questions such as:
 
-* What work is currently active?
-* Who is responsible for each task?
-* Which tasks are overdue?
-* What is waiting for review?
-* Which Members currently have too much work?
-* Which Members have available capacity?
-* Which Members consistently complete work on time?
-* Which work is repeatedly rejected or corrected?
-* Which Admins have high or low team workload?
-* How much work was completed this week or month?
-* How is individual performance changing?
-* How is organizational workload changing?
-* What important activities happened today?
-* Which reports are waiting for management review?
-* Which areas require immediate attention?
+- What work is currently active?
+- Who is responsible for each task?
+- Which tasks are overdue?
+- What is waiting for review?
+- Which Members currently have too much work?
+- Which Members have available capacity?
+- Which Members consistently complete work on time?
+- Which work is repeatedly rejected or corrected?
+- Which Admins have high or low team workload?
+- How much work was completed this week or month?
+- How is individual performance changing?
+- How is organizational workload changing?
+- What important activities happened today?
+- Which reports are waiting for management review?
+- Which areas require immediate attention?
 
 The Chief should not need to collect multiple spreadsheets before understanding the current operational situation.
 
@@ -237,9 +237,9 @@ SUPER_ADMIN / CHIEF
 
 Default V1 assumption:
 
-* one Member has one primary responsible Admin;
-* an Admin can manage multiple Members;
-* Super Admin has organization-wide visibility.
+- one Member has one primary responsible Admin;
+- an Admin can manage multiple Members;
+- Super Admin has organization-wide visibility.
 
 Multiple-Admin Member relationships remain a **pending business decision**.
 
@@ -251,31 +251,31 @@ The Super Admin is the highest-level management user.
 
 The Super Admin can:
 
-* view and manage Admin accounts;
-* view Members;
-* create Members where permitted by organization policy;
-* assign or transfer Members to Admins;
-* view organization-wide tasks;
-* view task assignments;
-* view task submissions;
-* view task review history;
-* view task lifecycle history;
-* view Admin activity;
-* view Member activity;
-* view organization-wide workload;
-* view Admin/team workload;
-* view Member performance;
-* view Admin/team performance;
-* view reports;
-* review Admin-submitted reports;
-* view analytics;
-* monitor overdue work;
-* monitor task completion;
-* monitor workload imbalance;
-* view important operational alerts;
-* view activity history;
-* access system-level settings where applicable;
-* export reports/data where permitted.
+- view and manage Admin accounts;
+- view Members;
+- create Members where permitted by organization policy;
+- assign or transfer Members to Admins;
+- view organization-wide tasks;
+- view task assignments;
+- view task submissions;
+- view task review history;
+- view task lifecycle history;
+- view Admin activity;
+- view Member activity;
+- view organization-wide workload;
+- view Admin/team workload;
+- view Member performance;
+- view Admin/team performance;
+- view reports;
+- review Admin-submitted reports;
+- view analytics;
+- monitor overdue work;
+- monitor task completion;
+- monitor workload imbalance;
+- view important operational alerts;
+- view activity history;
+- access system-level settings where applicable;
+- export reports/data where permitted.
 
 The Super Admin should obtain the organization's operational overview without manually collecting Excel sheets.
 
@@ -287,31 +287,31 @@ Admins manage Members and workload within their permitted organizational scope.
 
 An Admin can:
 
-* view Members under their responsibility;
-* view Member profile information;
-* view Member workload;
-* view Member task history;
-* view Member performance;
-* create tasks;
-* assign tasks;
-* reassign tasks where permitted;
-* set task priority;
-* set task deadline;
-* provide task instructions;
-* monitor task progress;
-* review submitted work;
-* approve submitted work;
-* request correction/revision;
-* reject work if the final business workflow requires rejection;
-* add feedback;
-* provide quality ratings where required;
-* monitor overdue tasks;
-* identify workload imbalance;
-* create management reports;
-* submit reports to Super Admin;
-* view team analytics;
-* view relevant activity history;
-* receive operational notifications.
+- view Members under their responsibility;
+- view Member profile information;
+- view Member workload;
+- view Member task history;
+- view Member performance;
+- create tasks;
+- assign tasks;
+- reassign tasks where permitted;
+- set task priority;
+- set task deadline;
+- provide task instructions;
+- monitor task progress;
+- review submitted work;
+- approve submitted work;
+- request correction/revision;
+- reject work if the final business workflow requires rejection;
+- add feedback;
+- provide quality ratings where required;
+- monitor overdue tasks;
+- identify workload imbalance;
+- create management reports;
+- submit reports to Super Admin;
+- view team analytics;
+- view relevant activity history;
+- receive operational notifications.
 
 Admins must only access Members and operational data within their authorized scope.
 
@@ -323,36 +323,36 @@ Members perform assigned work.
 
 A Member can:
 
-* log in;
-* view assigned tasks;
-* view task details;
-* view priority;
-* view deadline;
-* view instructions;
-* start work;
-* update permitted work status;
-* add remarks/comments;
-* upload supporting files where required;
-* submit completed work;
-* view Admin feedback;
-* receive correction/revision requests;
-* correct work;
-* resubmit work;
-* view personal task history;
-* view own workload;
-* view personal performance where permitted;
-* receive notifications;
-* manage permitted personal profile information.
+- log in;
+- view assigned tasks;
+- view task details;
+- view priority;
+- view deadline;
+- view instructions;
+- start work;
+- update permitted work status;
+- add remarks/comments;
+- upload supporting files where required;
+- submit completed work;
+- view Admin feedback;
+- receive correction/revision requests;
+- correct work;
+- resubmit work;
+- view personal task history;
+- view own workload;
+- view personal performance where permitted;
+- receive notifications;
+- manage permitted personal profile information.
 
 Members cannot:
 
-* assign work;
-* manage other Members;
-* review other Members' work;
-* modify their own performance calculation;
-* access organization-wide analytics;
-* access Super Admin reports;
-* bypass Admin review.
+- assign work;
+- manage other Members;
+- review other Members' work;
+- modify their own performance calculation;
+- access organization-wide analytics;
+- access Super Admin reports;
+- bypass Admin review.
 
 ---
 
@@ -360,38 +360,38 @@ Members cannot:
 
 The following matrix establishes the initial authorization baseline.
 
-| Capability                     | Super Admin |             Admin             |        Member       |
+| Capability                     | Super Admin |             Admin             |       Member        |
 | ------------------------------ | :---------: | :---------------------------: | :-----------------: |
-| Manage Admin accounts          |      ✅      |               ❌               |          ❌          |
-| View all Admins                |      ✅      |               ❌               |          ❌          |
-| Create Member                  |      ✅      | Scoped / Pending confirmation |          ❌          |
-| Edit Member                    |      ✅      |            Own team           | Own limited profile |
-| Suspend Member                 |      ✅      |      Pending confirmation     |          ❌          |
-| Transfer Member between Admins |      ✅      |               ❌               |          ❌          |
-| View all Members               |      ✅      |            Own team           |          ❌          |
-| View own profile               |      ✅      |               ✅               |          ✅          |
-| Create Task                    |      ✅*     |               ✅               |          ❌          |
-| Assign Task                    |      ✅*     |            Own team           |          ❌          |
-| Reassign Task                  |      ✅      |            Own team           |          ❌          |
-| View all Tasks                 |      ✅      |               ❌               |          ❌          |
-| View Team Tasks                |      ✅      |            Own team           |          ❌          |
-| View Own Tasks                 |      ✅      |               ✅               |          ✅          |
-| Submit Task                    |      ❌      |               ❌               |  Own assigned task  |
-| Review Submission              |      ✅*     |            Own team           |          ❌          |
-| Approve Work                   |      ✅*     |            Own team           |          ❌          |
-| Request Revision               |      ✅*     |            Own team           |          ❌          |
-| View Performance               |     All     |            Own team           |         Own         |
-| Edit Performance Formula       |      ✅      |               ❌               |          ❌          |
-| View Activity Logs             |     All     |             Scoped            |     Limited/Own     |
-| Create Management Report       |   Optional  |               ✅               |          ❌          |
-| Submit Report to Chief         |   Optional  |               ✅               |          ❌          |
-| Review Admin Report            |      ✅      |               ❌               |          ❌          |
-| View Global Analytics          |      ✅      |               ❌               |          ❌          |
-| View Team Analytics            |      ✅      |               ✅               |          ❌          |
-| View Personal Analytics        |      ✅      |               ✅               |          ✅          |
-| Manage Inventory               |      ✅      |             Scoped            |          ❌          |
-| View Assigned Inventory        |      ✅      |               ✅               |  Own relevant data  |
-| System Settings                |      ✅      |               ❌               |          ❌          |
+| Manage Admin accounts          |     ✅      |              ❌               |         ❌          |
+| View all Admins                |     ✅      |              ❌               |         ❌          |
+| Create Member                  |     ✅      | Scoped / Pending confirmation |         ❌          |
+| Edit Member                    |     ✅      |           Own team            | Own limited profile |
+| Suspend Member                 |     ✅      |     Pending confirmation      |         ❌          |
+| Transfer Member between Admins |     ✅      |              ❌               |         ❌          |
+| View all Members               |     ✅      |           Own team            |         ❌          |
+| View own profile               |     ✅      |              ✅               |         ✅          |
+| Create Task                    |     ✅*     |              ✅               |         ❌          |
+| Assign Task                    |     ✅*     |           Own team            |         ❌          |
+| Reassign Task                  |     ✅      |           Own team            |         ❌          |
+| View all Tasks                 |     ✅      |              ❌               |         ❌          |
+| View Team Tasks                |     ✅      |           Own team            |         ❌          |
+| View Own Tasks                 |     ✅      |              ✅               |         ✅          |
+| Submit Task                    |     ❌      |              ❌               |  Own assigned task  |
+| Review Submission              |     ✅*     |           Own team            |         ❌          |
+| Approve Work                   |     ✅*     |           Own team            |         ❌          |
+| Request Revision               |     ✅*     |           Own team            |         ❌          |
+| View Performance               |     All     |           Own team            |         Own         |
+| Edit Performance Formula       |     ✅      |              ❌               |         ❌          |
+| View Activity Logs             |     All     |            Scoped             |     Limited/Own     |
+| Create Management Report       |  Optional   |              ✅               |         ❌          |
+| Submit Report to Chief         |  Optional   |              ✅               |         ❌          |
+| Review Admin Report            |     ✅      |              ❌               |         ❌          |
+| View Global Analytics          |     ✅      |              ❌               |         ❌          |
+| View Team Analytics            |     ✅      |              ✅               |         ❌          |
+| View Personal Analytics        |     ✅      |              ✅               |         ✅          |
+| Manage Inventory               |     ✅      |            Scoped             |         ❌          |
+| View Assigned Inventory        |     ✅      |              ✅               |  Own relevant data  |
+| System Settings                |     ✅      |              ❌               |         ❌          |
 
 `*` Final Chief operational permissions should be confirmed with the client.
 
@@ -407,16 +407,16 @@ Operix must provide secure authentication.
 
 Minimum requirements:
 
-* email/username and password authentication;
-* secure password hashing;
-* login;
-* logout;
-* current authenticated user;
-* forgot password;
-* reset password;
-* session expiration;
-* role validation;
-* account status validation.
+- email/username and password authentication;
+- secure password hashing;
+- login;
+- logout;
+- current authenticated user;
+- forgot password;
+- reset password;
+- session expiration;
+- role validation;
+- account status validation.
 
 Initial account statuses:
 
@@ -430,9 +430,9 @@ Inactive or suspended accounts must not access protected operational workflows.
 
 Future options:
 
-* two-factor authentication;
-* Microsoft/Google enterprise login;
-* device/session management.
+- two-factor authentication;
+- Microsoft/Google enterprise login;
+- device/session management.
 
 ---
 
@@ -511,11 +511,11 @@ URGENT
 
 Priority must be visible in:
 
-* task lists;
-* task details;
-* assignment views;
-* workload views;
-* analytics where relevant.
+- task lists;
+- task details;
+- assignment views;
+- workload views;
+- analytics where relevant.
 
 ---
 
@@ -649,17 +649,17 @@ The system should not blindly assign more work to the highest-performing Member.
 
 Assignment considerations may include:
 
-* current active workload;
-* overdue workload;
-* completion rate;
-* on-time completion;
-* performance;
-* task priority;
-* deadline;
-* task category;
-* suitability;
-* historical completion;
-* availability.
+- current active workload;
+- overdue workload;
+- completion rate;
+- on-time completion;
+- performance;
+- task priority;
+- deadline;
+- task category;
+- suitability;
+- historical completion;
+- availability.
 
 MVP behavior:
 
@@ -688,12 +688,12 @@ LOW
 
 Admins can use the queue to assign work based on:
 
-* priority;
-* deadline;
-* Member workload;
-* performance;
-* category;
-* suitability.
+- priority;
+- deadline;
+- Member workload;
+- performance;
+- category;
+- suitability.
 
 Whether the Work Queue is mandatory in the first MVP should be confirmed during detailed workflow analysis.
 
@@ -803,11 +803,11 @@ Task #1042
 
 Task history supports:
 
-* audit trail;
-* performance calculations;
-* reporting;
-* activity feeds;
-* management investigation.
+- audit trail;
+- performance calculations;
+- reporting;
+- activity feeds;
+- management investigation.
 
 ---
 
@@ -947,13 +947,13 @@ These values are examples only.
 
 The organization must define:
 
-* final metrics;
-* weights;
-* reporting periods;
-* whether task priority matters;
-* whether task complexity matters;
-* whether manual quality rating is used;
-* whether Super Admin can override a calculated score.
+- final metrics;
+- weights;
+- reporting periods;
+- whether task priority matters;
+- whether task complexity matters;
+- whether manual quality rating is used;
+- whether Super Admin can override a calculated score.
 
 ---
 
@@ -1172,13 +1172,13 @@ Charts
 
 Backend/database aggregation should be used where practical for:
 
-* count;
-* sum;
-* average;
-* status distribution;
-* trend calculation;
-* workload summary;
-* performance aggregation.
+- count;
+- sum;
+- average;
+- status distribution;
+- trend calculation;
+- workload summary;
+- performance aggregation.
 
 ---
 
@@ -1495,13 +1495,13 @@ Resource Assignment
 
 Inventory should only be implemented when the organization confirms:
 
-* what is being inventoried;
-* whether quantity is required;
-* whether stock-in/out is required;
-* whether assets are assigned to Members;
-* whether warehouses/branches exist;
-* whether inventory relates to tasks;
-* whether batch/serial information exists.
+- what is being inventoried;
+- whether quantity is required;
+- whether stock-in/out is required;
+- whether assets are assigned to Members;
+- whether warehouses/branches exist;
+- whether inventory relates to tasks;
+- whether batch/serial information exists.
 
 Advanced inventory features must not be invented without confirmation.
 
@@ -1532,11 +1532,11 @@ InventoryAssignment
 
 Final schema must reflect:
 
-* confirmed business workflow;
-* actual Excel structure;
-* role ownership;
-* task assignment rules;
-* inventory requirements.
+- confirmed business workflow;
+- actual Excel structure;
+- role ownership;
+- task assignment rules;
+- inventory requirements.
 
 ---
 
@@ -1665,40 +1665,40 @@ Inventory Transaction History
 
 Operix must provide:
 
-* secure authentication;
-* backend-enforced RBAC;
-* protected APIs;
-* input validation;
-* secure file handling;
-* account status enforcement;
-* rate limiting where appropriate;
-* secure headers;
-* audit/activity logging;
-* protection from unauthorized data access.
+- secure authentication;
+- backend-enforced RBAC;
+- protected APIs;
+- input validation;
+- secure file handling;
+- account status enforcement;
+- rate limiting where appropriate;
+- secure headers;
+- audit/activity logging;
+- protection from unauthorized data access.
 
 ## Performance
 
 The platform should provide:
 
-* pagination;
-* optimized queries;
-* database indexes;
-* backend aggregation;
-* efficient dashboards;
-* minimal unnecessary frontend processing.
+- pagination;
+- optimized queries;
+- database indexes;
+- backend aggregation;
+- efficient dashboards;
+- minimal unnecessary frontend processing.
 
 ## Scalability
 
 The system should support growth in:
 
-* users;
-* tasks;
-* submissions;
-* activity logs;
-* reports;
-* notifications;
-* performance records;
-* inventory records.
+- users;
+- tasks;
+- submissions;
+- activity logs;
+- reports;
+- notifications;
+- performance records;
+- inventory records.
 
 ## Reliability
 
@@ -2028,13 +2028,13 @@ Admin A creates and assigns a task to Member A.
 
 **Then**
 
-* the task is stored;
-* assignment is stored;
-* Member A can access the task;
-* unauthorized Members cannot access the task;
-* `TASK_ASSIGNED` activity is created;
-* Member A receives a notification;
-* relevant dashboard counters update.
+- the task is stored;
+- assignment is stored;
+- Member A can access the task;
+- unauthorized Members cannot access the task;
+- `TASK_ASSIGNED` activity is created;
+- Member A receives a notification;
+- relevant dashboard counters update.
 
 ---
 
@@ -2050,12 +2050,12 @@ Member A submits completed work.
 
 **Then**
 
-* a submission is stored;
-* submission timestamp is recorded;
-* task moves to the review workflow;
-* task history is updated;
-* `TASK_SUBMITTED` activity is created;
-* responsible Admin receives a notification.
+- a submission is stored;
+- submission timestamp is recorded;
+- task moves to the review workflow;
+- task history is updated;
+- `TASK_SUBMITTED` activity is created;
+- responsible Admin receives a notification.
 
 ---
 
@@ -2071,11 +2071,11 @@ Admin requests revision.
 
 **Then**
 
-* review feedback is stored;
-* task enters `REVISION_REQUIRED`;
-* Member receives notification;
-* review history is preserved;
-* Member can submit a new version.
+- review feedback is stored;
+- task enters `REVISION_REQUIRED`;
+- Member receives notification;
+- review history is preserved;
+- Member can submit a new version.
 
 ---
 
@@ -2091,13 +2091,13 @@ Admin approves the work.
 
 **Then**
 
-* review record is stored;
-* task enters `COMPLETED`;
-* completion timestamp is stored;
-* activity is generated;
-* Member is notified;
-* performance/workload data reflects the completion;
-* dashboard counters update.
+- review record is stored;
+- task enters `COMPLETED`;
+- completion timestamp is stored;
+- activity is generated;
+- Member is notified;
+- performance/workload data reflects the completion;
+- dashboard counters update.
 
 ---
 
@@ -2129,11 +2129,11 @@ a task deadline has passed and the task is not completed or cancelled.
 
 Operix shall identify the task as overdue in:
 
-* task views;
-* Admin dashboard;
-* Super Admin dashboard;
-* relevant reports;
-* relevant analytics.
+- task views;
+- Admin dashboard;
+- Super Admin dashboard;
+- relevant reports;
+- relevant analytics.
 
 ---
 
@@ -2269,85 +2269,85 @@ Operix will be considered successful when:
 
 ## Organization
 
-* How many Admins exist?
-* How many Members exist?
-* Are there departments?
-* Are there teams?
-* Are there branches?
-* Can one Member report to multiple Admins?
-* Can Admins create Members?
-* Can Admins suspend Members?
-* Can Chief directly assign tasks?
+- How many Admins exist?
+- How many Members exist?
+- Are there departments?
+- Are there teams?
+- Are there branches?
+- Can one Member report to multiple Admins?
+- Can Admins create Members?
+- Can Admins suspend Members?
+- Can Chief directly assign tasks?
 
 ## Tasks
 
-* What exact work is currently tracked?
-* What columns exist in the Excel files?
-* What defines completion?
-* Who performs final approval?
-* Can one task have multiple Members?
-* Can Members decline work?
-* Can tasks be reassigned?
-* Can tasks be cancelled?
-* Can deadlines change?
-* Are recurring tasks needed?
-* Does the company distinguish rejection from revision?
+- What exact work is currently tracked?
+- What columns exist in the Excel files?
+- What defines completion?
+- Who performs final approval?
+- Can one task have multiple Members?
+- Can Members decline work?
+- Can tasks be reassigned?
+- Can tasks be cancelled?
+- Can deadlines change?
+- Are recurring tasks needed?
+- Does the company distinguish rejection from revision?
 
 ## Performance
 
-* How is performance currently measured?
-* Does priority affect performance?
-* Does complexity affect performance?
-* Does Admin rating affect performance?
-* What is considered good performance?
-* What reporting period is used?
+- How is performance currently measured?
+- Does priority affect performance?
+- Does complexity affect performance?
+- Does Admin rating affect performance?
+- What is considered good performance?
+- What reporting period is used?
 
 ## Reports
 
-* What reports does the Chief currently receive?
-* Daily?
-* Weekly?
-* Monthly?
-* What exact report format is required?
-* Are Admin-written management summaries required?
-* Does Chief approve/reject reports?
-* Is Excel export mandatory?
-* Is PDF export mandatory?
+- What reports does the Chief currently receive?
+- Daily?
+- Weekly?
+- Monthly?
+- What exact report format is required?
+- Are Admin-written management summaries required?
+- Does Chief approve/reject reports?
+- Is Excel export mandatory?
+- Is PDF export mandatory?
 
 ## Inventory
 
-* Is inventory actually part of the workflow?
-* What items are tracked?
-* Stock or assets?
-* Are quantities required?
-* Stock-in?
-* Stock-out?
-* Returns?
-* Are warehouses required?
-* Is inventory linked to tasks?
+- Is inventory actually part of the workflow?
+- What items are tracked?
+- Stock or assets?
+- Are quantities required?
+- Stock-in?
+- Stock-out?
+- Returns?
+- Are warehouses required?
+- Is inventory linked to tasks?
 
 ## Files
 
-* Which file types are permitted?
-* Maximum file size?
-* Maximum file count?
+- Which file types are permitted?
+- Maximum file size?
+- Maximum file count?
 
 ## Real-Time
 
-* Which events require immediate updates?
-* Which roles require live activity?
-* Are dashboard counters real-time?
-* Are external notifications required?
+- Which events require immediate updates?
+- Which roles require live activity?
+- Are dashboard counters real-time?
+- Are external notifications required?
 
 ## Migration
 
-* How many Excel files exist?
-* How many sheets exist?
-* How much historical data is required?
-* Are staff names consistent?
-* Are duplicate records present?
-* Are statuses standardized?
-* Are task IDs available?
+- How many Excel files exist?
+- How many sheets exist?
+- How much historical data is required?
+- Are staff names consistent?
+- Are duplicate records present?
+- Are statuses standardized?
+- Are task IDs available?
 
 ---
 

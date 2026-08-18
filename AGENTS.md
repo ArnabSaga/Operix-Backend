@@ -8,7 +8,7 @@ This file is the mandatory entry point for any AI coding agent or developer work
 
 Before making architectural or implementation decisions, read in this exact order:
 
-1. `PRD.md`
+1. `resource/PRD.md`
 2. `context/project-overview.md`
 3. `context/architecture.md`
 4. `context/ui-tokens.md`
@@ -26,7 +26,7 @@ Do not begin implementation from memory when the repository already documents th
 Priority order when instructions conflict:
 
 1. Current explicit user/client instruction
-2. `PRD.md`
+2. `resource/PRD.md`
 3. `context/architecture.md`
 4. Relevant context file
 5. Existing implementation
@@ -68,7 +68,7 @@ Do not introduce separate `CHIEF`, `STAFF`, `EMPLOYEE`, or similar role enums un
 
 ## 5. Canonical Task State Machine
 
-Use the V2 baseline:
+Use the V1 baseline:
 
 ```text
 PENDING
@@ -127,7 +127,7 @@ ADMIN
 MEMBER
 ```
 
-Default V2 assumption:
+Default V1 assumption:
 
 - one Member has one primary responsible Admin;
 - one Admin can manage many Members;
@@ -239,7 +239,7 @@ After every meaningful feature:
 - update `context/ui-registry.md` when reusable UI changes;
 - update `context/library-docs.md` when dependencies change;
 - update `context/architecture.md` when architecture decisions become canonical;
-- update `PRD.md` only for genuine product requirement changes.
+- update `resource/PRD.md` only for genuine product requirement changes.
 
 ## 14. Verification
 

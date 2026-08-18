@@ -69,3 +69,6 @@ GEMINI.md
 AGENTS
 context
 skills-lock.json
+
+# IDE
+.vscode
