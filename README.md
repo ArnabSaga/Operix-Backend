@@ -2,7 +2,7 @@
 
 Backend API for **Operix**, the Pharmaceutical Workload & Operations Management Platform.
 
-The current repository contains the NestJS application foundation only. Authentication, RBAC, users, tasks, submissions, reports, analytics, notifications, and inventory are intentionally not implemented yet.
+The current repository contains the NestJS backend foundation, Prisma schema foundation, and Better Auth authentication foundation. RBAC guards, user management, task workflow, reports, analytics, notification delivery, and inventory are not implemented yet.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ The current repository contains the NestJS application foundation only. Authenti
 pnpm install --frozen-lockfile
 cp .env.example .env
 pnpm prisma:generate
-pnpm start:dev
+pnpm dev
 ```
 
 On Windows PowerShell, copy the environment template with:
@@ -29,14 +29,19 @@ The application validates its runtime environment before starting. Update `DATAB
 
 ## Environment
 
-| Variable            |            Required | Purpose                                                     |
-| ------------------- | ------------------: | ----------------------------------------------------------- |
-| `NODE_ENV`          |                 Yes | `development`, `test`, or `production`                      |
-| `PORT`              |                 Yes | HTTP port from 1 through 65535                              |
-| `DATABASE_URL`      |                 Yes | PostgreSQL connection string used lazily by Prisma          |
-| `FRONTEND_URL`      |                 Yes | One origin or a comma separated CORS allowlist              |
-| `SWAGGER_ENABLED`   |                 Yes | Enables or disables Swagger                                 |
-| `TEST_DATABASE_URL` | Database tests only | Isolated PostgreSQL database for database integration tests |
+| Variable                    |            Required | Purpose                                                     |
+| --------------------------- | ------------------: | ----------------------------------------------------------- |
+| `NODE_ENV`                  |                 Yes | `development`, `test`, or `production`                      |
+| `PORT`                      |                 Yes | HTTP port from 1 through 65535                              |
+| `DATABASE_URL`              |                 Yes | PostgreSQL connection string used lazily by Prisma          |
+| `FRONTEND_URL`              |                 Yes | One origin or a comma separated CORS allowlist              |
+| `SWAGGER_ENABLED`           |                 Yes | Enables or disables Swagger                                 |
+| `BETTER_AUTH_SECRET`        |                 Yes | Better Auth session and token secret                        |
+| `BETTER_AUTH_URL`           |                 Yes | Backend origin used by Better Auth                          |
+| `TEST_DATABASE_URL`         | Database tests only | Isolated PostgreSQL database for database integration tests |
+| `SEED_SUPER_ADMIN_EMAIL`    |           Seed only | Initial Super Admin email                                   |
+| `SEED_SUPER_ADMIN_PASSWORD` |           Seed only | Initial Super Admin password, never log this                |
+| `SEED_SUPER_ADMIN_NAME`     |           Seed only | Initial Super Admin display name                            |
 
 ## API
 
@@ -47,6 +52,17 @@ GET /api/v1/health
 ```
 
 The health endpoint reports application liveness and does not query PostgreSQL.
+
+Better Auth native routes are mounted under `/api/v1/auth`.
+
+```http
+POST /api/v1/auth/sign-in/email
+POST /api/v1/auth/sign-out
+GET  /api/v1/auth/get-session
+GET  /api/v1/auth/me
+```
+
+Public signup is disabled. Use the seed command to create the first trusted Super Admin after confirming `DATABASE_URL` points to the intended development database.
 
 Swagger is available at `/api/docs` when `SWAGGER_ENABLED=true`.
 
@@ -64,12 +80,13 @@ API errors use this shape:
 ## Scripts
 
 ```bash
-pnpm start:dev
+pnpm dev
 pnpm typecheck
 pnpm lint
 pnpm format:check
 pnpm prisma:generate
 pnpm prisma:validate
+pnpm seed:super-admin
 pnpm test:unit
 pnpm test:integration
 pnpm build

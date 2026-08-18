@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
+import { GlobalExceptionFilter } from './shared/filters/global-exception.filter.js';
 
 export function configureApplication(app: NestExpressApplication): void {
   const config = app.get(ConfigService);
@@ -28,7 +28,7 @@ export function configureApplication(app: NestExpressApplication): void {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Operix API')
       .setDescription('Operix pharmaceutical workload and operations API')
-      .setVersion('2.0')
+      .setVersion('1.0')
       .build();
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup('api/docs', app, document);

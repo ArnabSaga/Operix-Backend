@@ -2,10 +2,11 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import configuration from './config/configuration';
-import { validateEnvironment } from './config/env.validation';
-import { PrismaModule } from './database/prisma.module';
-import { HealthModule } from './modules/health/health.module';
+import configuration from './config/configuration.js';
+import { validateEnvironment } from './config/env.validation.js';
+import { PrismaModule } from './database/prisma.module.js';
+import { OperixAuthModule } from './modules/auth/auth.module.js';
+import { HealthModule } from './modules/health/health.module.js';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { HealthModule } from './modules/health/health.module';
       },
     ]),
     PrismaModule,
+    OperixAuthModule,
     HealthModule,
   ],
   providers: [

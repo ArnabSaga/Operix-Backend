@@ -1,9 +1,11 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { HealthService } from './health.service';
-import type { HealthResponse } from './health.service';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { HealthService } from './health.service.js';
+import type { HealthResponse } from './health.service.js';
 
 @ApiTags('health')
+@AllowAnonymous()
 @Controller('health')
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}

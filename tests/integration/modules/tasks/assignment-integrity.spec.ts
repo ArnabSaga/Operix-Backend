@@ -3,12 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
-import { PrismaClient } from '../../../../src/generated/prisma/client';
+import { PrismaClient } from '../../../../generated/prisma/client';
 import {
   TaskPriority,
   TaskStatus,
   UserRole,
-} from '../../../../src/generated/prisma/enums';
+} from '../../../../generated/prisma/enums';
 import { getTestDatabaseUrl } from '../../../support/database/test-database-url';
 
 interface AssignmentFixture {

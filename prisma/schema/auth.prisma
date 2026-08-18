@@ -25,6 +25,10 @@ model User {
   uploadedFiles      FileAsset[]         @relation("UploadedFiles")
   taskSubmissions    TaskSubmission[]    @relation("TaskSubmissions")
   taskReviews        TaskReview[]        @relation("TaskReviews")
+  activityLogs       ActivityLog[]       @relation("ActivityActor")
+
+  receivedNotifications Notification[] @relation("ReceivedNotifications")
+  actedNotifications    Notification[] @relation("NotificationActor")
 
   @@map("user")
 }
