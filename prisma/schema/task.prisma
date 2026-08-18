@@ -1,0 +1,90 @@
+model TaskCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks Task[]
+
+  @@map("task_category")
+}
+
+model Task {
+  id            String       @id @default(cuid())
+  referenceCode String       @unique
+  title         String
+  description   String?
+  remarks       String?
+  priority      TaskPriority @default(MEDIUM)
+  status        TaskStatus   @default(PENDING)
+  dueAt         DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  cancelledAt   DateTime?
+
+  teamId              String
+  categoryId          String?
+  createdById         String
+  currentAssignmentId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team      Team          @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  category  TaskCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy User          @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  currentAssignment TaskAssignment?     @relation("CurrentTaskAssignment", fields: [currentAssignmentId], references: [id], onDelete: SetNull)
+  assignments       TaskAssignment[]    @relation("TaskAssignments")
+  statusHistory     TaskStatusHistory[]
+  submissions       TaskSubmission[]
+  attachments       TaskAttachment[]
+
+  @@index([teamId])
+  @@index([status])
+  @@index([priority])
+  @@index([dueAt])
+  @@index([createdById])
+  @@index([categoryId])
+  @@map("task")
+}
+
+model TaskAssignment {
+  id           String    @id @default(cuid())
+  taskId       String
+  memberId     String
+  assignedById String
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+  note         String?
+
+  task       Task @relation("TaskAssignments", fields: [taskId], references: [id], onDelete: Cascade)
+  member     User @relation("MemberAssignments", fields: [memberId], references: [id], onDelete: Restrict)
+  assignedBy User @relation("AssignmentsCreated", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  currentForTask Task? @relation("CurrentTaskAssignment")
+
+  @@index([taskId, assignedAt])
+  @@index([memberId])
+  @@index([assignedById])
+  @@map("task_assignment")
+}
+
+model TaskStatusHistory {
+  id          String      @id @default(cuid())
+  taskId      String
+  fromStatus  TaskStatus?
+  toStatus    TaskStatus
+  changedById String
+  notes       String?
+  changedAt   DateTime    @default(now())
+
+  task      Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  changedBy User @relation("TaskStatusChanges", fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([taskId, changedAt])
+  @@index([changedById])
+  @@map("task_status_history")
+}

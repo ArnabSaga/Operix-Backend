@@ -1,0 +1,36 @@
+model TaskSubmission {
+  id             String   @id @default(cuid())
+  taskId         String
+  submittedById  String
+  version        Int
+  submissionText String?
+  submittedAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  task        Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  submittedBy User @relation("TaskSubmissions", fields: [submittedById], references: [id], onDelete: Restrict)
+
+  attachments SubmissionAttachment[]
+  reviews     TaskReview[]
+
+  @@unique([taskId, version])
+  @@index([submittedById])
+  @@map("task_submission")
+}
+
+model TaskReview {
+  id           String           @id @default(cuid())
+  submissionId String
+  reviewerId   String
+  action       TaskReviewAction
+  feedback     String?
+  reviewedAt   DateTime         @default(now())
+  createdAt    DateTime         @default(now())
+
+  submission TaskSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  reviewer   User           @relation("TaskReviews", fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([submissionId, reviewedAt])
+  @@index([reviewerId])
+  @@map("task_review")
+}

@@ -1,0 +1,45 @@
+model FileAsset {
+  id           String   @id @default(cuid())
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String   @unique
+  publicUrl    String?
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  uploadedBy            User                   @relation("UploadedFiles", fields: [uploadedById], references: [id], onDelete: Restrict)
+  submissionAttachments SubmissionAttachment[]
+  taskAttachments       TaskAttachment[]
+
+  @@index([uploadedById])
+  @@map("file_asset")
+}
+
+model SubmissionAttachment {
+  id           String   @id @default(cuid())
+  submissionId String
+  fileId       String
+  createdAt    DateTime @default(now())
+
+  submission TaskSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  file       FileAsset      @relation(fields: [fileId], references: [id], onDelete: Restrict)
+
+  @@unique([submissionId, fileId])
+  @@index([fileId])
+  @@map("submission_attachment")
+}
+
+model TaskAttachment {
+  id        String   @id @default(cuid())
+  taskId    String
+  fileId    String
+  createdAt DateTime @default(now())
+
+  task Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  file FileAsset @relation(fields: [fileId], references: [id], onDelete: Restrict)
+
+  @@unique([taskId, fileId])
+  @@index([fileId])
+  @@map("task_attachment")
+}

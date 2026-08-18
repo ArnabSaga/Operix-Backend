@@ -10,9 +10,23 @@
 
 ---
 
-## 1. Executive Product Definition
+# Document Control
 
-Operix is an internal enterprise operations platform designed for pharmaceutical and medical organizations to manage:
+| Field                           | Value                                         |
+| ------------------------------- | --------------------------------------------- |
+| Product                         | Operix                                        |
+| Version                         | 1.0                                           |
+| Status                          | Development Baseline                          |
+| Primary Roles                   | Super Admin / Chief, Admin, Member / Staff    |
+| Primary Platform                | Responsive Web Application                    |
+| Data Source of Truth            | Central Application Database                  |
+| Existing Process Being Replaced | Excel-based workload and operational tracking |
+
+---
+
+# 1. Executive Product Definition
+
+**Operix** is an internal enterprise operations platform designed for pharmaceutical and medical organizations to manage:
 
 - organizational workload;
 - task creation and assignment;
@@ -29,95 +43,168 @@ Operix is an internal enterprise operations platform designed for pharmaceutical
 
 The platform replaces fragmented Excel-based operational tracking with a structured digital workflow.
 
-Permanent product principle:
+The fundamental product flow is:
 
 ```text
-Work → Activity → Structured Data → Analytics → Decision
+Work
+  ↓
+Activity
+  ↓
+Structured Data
+  ↓
+Analytics
+  ↓
+Decision
 ```
 
-Operix is not simply an Excel replacement, task CRUD system, inventory application, or dashboard. It is a workflow-driven operational management platform where every meaningful work action generates structured information that management can use for monitoring, reporting, performance measurement, workload balancing, and decision-making.
+Operix is **not simply an Excel replacement, task CRUD system, inventory application, or dashboard**.
+
+It is a workflow-driven operational management platform where every meaningful work action generates structured information that management can use for:
+
+- monitoring;
+- reporting;
+- performance measurement;
+- workload balancing;
+- operational decision-making.
 
 ---
 
-## 2. Business Problem
+# 2. Business Background
 
-The organization currently relies on Excel-based workload tracking, creating:
+The organization currently relies heavily on Excel-based tracking for operational workload and reporting.
 
-- fragmented data;
-- manual updates;
-- manual calculations;
-- weak traceability;
-- limited real-time visibility;
-- difficulty measuring performance;
-- workload imbalance;
-- manual report preparation;
-- poor activity history;
-- delayed identification of overdue work.
+This creates several problems:
 
-Operix centralizes these operations.
+- information is fragmented across spreadsheets;
+- updates are manual;
+- calculations are manual;
+- task status is difficult to monitor;
+- historical activity is difficult to trace;
+- management has limited real-time visibility;
+- workload imbalance is difficult to identify;
+- Admin activity is difficult to monitor;
+- staff performance requires manual calculation;
+- reports require repeated manual preparation;
+- overdue work may not be immediately visible;
+- the organization has no centralized operational activity history.
+
+Operix will convert this process into a centralized digital workflow.
 
 ---
 
-## 3. Current vs Future Workflow
+# 3. Current vs Future Workflow
 
-### Existing
+## Existing Process
 
 ```text
 Excel
-→ Manual Updates
-→ Manual Tracking
-→ Manual Calculations
-→ Manual Reports
-→ Chief Review
+   ↓
+Manual Updates
+   ↓
+Manual Tracking
+   ↓
+Manual Calculations
+   ↓
+Manual Reports
+   ↓
+Chief Review
 ```
 
-### Operix
+## Operix Process
 
 ```text
+Operix
+   ↓
 Create & Assign Work
-→ Member Executes
-→ Member Submits
-→ Admin Reviews
-→ Activity Automatically Recorded
-→ Central Database
-→ Performance + Reports + Notifications
-→ Analytics
-→ Management Dashboard
-→ Decision
+   ↓
+Members Execute
+   ↓
+Members Submit
+   ↓
+Admin Reviews
+   ↓
+Activity Automatically Recorded
+   ↓
+Central Database
+   ↓
+Performance + Reports + Notifications
+   ↓
+Analytics
+   ↓
+Management Dashboard
+   ↓
+Decision
 ```
+
+The central database becomes the organization's operational source of truth.
+
+Excel becomes an import/export format rather than the primary operational system.
 
 ---
 
-## 4. Product Goals
+# 4. Product Vision
+
+Operix should allow management to answer questions such as:
+
+- What work is currently active?
+- Who is responsible for each task?
+- Which tasks are overdue?
+- What is waiting for review?
+- Which Members currently have too much work?
+- Which Members have available capacity?
+- Which Members consistently complete work on time?
+- Which work is repeatedly rejected or corrected?
+- Which Admins have high or low team workload?
+- How much work was completed this week or month?
+- How is individual performance changing?
+- How is organizational workload changing?
+- What important activities happened today?
+- Which reports are waiting for management review?
+- Which areas require immediate attention?
+
+The Chief should not need to collect multiple spreadsheets before understanding the current operational situation.
+
+---
+
+# 5. Product Goals
 
 Operix must:
 
 1. Replace Excel as the primary workload tracking system.
 2. Centralize organizational work.
 3. Create a structured task workflow.
-4. Enforce backend RBAC.
+4. Provide backend-enforced role-based access control.
 5. Allow Admins to assign work.
-6. Allow Members to execute and submit work.
+6. Allow Members to execute and submit assigned work.
 7. Allow Admins to review submitted work.
-8. Preserve task/review history.
-9. Track important activities automatically.
-10. Measure staff performance from actual operational data.
+8. Preserve task and review history.
+9. Track important activity automatically.
+10. Measure staff performance using real operational data.
 11. Make workload imbalance visible.
 12. Support performance-informed work allocation.
 13. Provide dynamic dashboards.
 14. Provide operational reports.
-15. Provide management analytics.
-16. Identify overdue/pending work immediately.
-17. Support important real-time updates.
-18. Preserve historical data.
+15. Provide management-level analytics.
+16. Identify overdue and pending work immediately.
+17. Support real-time updates for important events.
+18. Preserve historical operational data.
 19. Support Excel export.
-20. Support PDF reporting where required.
+20. Support PDF reports where required.
+21. Support future expansion without redesigning the core workflow.
 
 ---
 
-## 5. Canonical Roles
+# 6. Product Terminology
 
-Backend roles:
+To prevent inconsistent implementation, Operix uses the following canonical system roles.
+
+| System Role   | Business/UI Label   |
+| ------------- | ------------------- |
+| `SUPER_ADMIN` | Chief / Super Admin |
+| `ADMIN`       | Admin               |
+| `MEMBER`      | Member / Staff      |
+
+Backend implementation must use the canonical enum values:
 
 ```text
 SUPER_ADMIN
@@ -125,160 +212,213 @@ ADMIN
 MEMBER
 ```
 
-UI/business labels:
-
-```text
-SUPER_ADMIN → Chief / Super Admin
-ADMIN       → Admin
-MEMBER      → Member / Staff
-```
-
-Do not create separate role enums for Chief, Staff, Employee, etc.
+Terms such as `CHIEF`, `STAFF`, or `EMPLOYEE` should not be introduced as separate authorization roles unless the product requirements change.
 
 ---
 
-## 6. User Hierarchy
+# 7. User Hierarchy
 
 ```text
 SUPER_ADMIN / CHIEF
         │
-        ├── ADMIN A
-        │    ├── MEMBER 1
-        │    └── MEMBER 2
+        ├──────── ADMIN A
+        │            ├── MEMBER 1
+        │            ├── MEMBER 2
+        │            └── MEMBER 3
         │
-        └── ADMIN B
-             ├── MEMBER 3
-             └── MEMBER 4
+        ├──────── ADMIN B
+        │            ├── MEMBER 4
+        │            └── MEMBER 5
+        │
+        └──────── ADMIN C
+                     ├── MEMBER 6
+                     └── MEMBER 7
 ```
 
-Default V2 assumption:
+Default V1 assumption:
+
 - one Member has one primary responsible Admin;
-- one Admin manages many Members;
+- an Admin can manage multiple Members;
 - Super Admin has organization-wide visibility.
 
-Multiple-Admin relationships remain pending confirmation.
+Multiple-Admin Member relationships remain a **pending business decision**.
 
 ---
 
-## 7. Super Admin / Chief
+# 8. Role — Super Admin / Chief
 
-Can:
+The Super Admin is the highest-level management user.
 
-- manage Admin accounts;
-- view Members organization-wide;
-- assign/transfer Members to Admins;
-- view all tasks/assignments/submissions/reviews/history;
-- view Admin and Member activity;
-- view workload distribution;
-- view performance;
+The Super Admin can:
+
+- view and manage Admin accounts;
+- view Members;
+- create Members where permitted by organization policy;
+- assign or transfer Members to Admins;
+- view organization-wide tasks;
+- view task assignments;
+- view task submissions;
+- view task review history;
+- view task lifecycle history;
+- view Admin activity;
+- view Member activity;
+- view organization-wide workload;
+- view Admin/team workload;
+- view Member performance;
+- view Admin/team performance;
 - view reports;
 - review Admin-submitted reports;
 - view analytics;
 - monitor overdue work;
 - monitor task completion;
+- monitor workload imbalance;
+- view important operational alerts;
+- view activity history;
 - access system-level settings where applicable;
-- export data where allowed.
+- export reports/data where permitted.
+
+The Super Admin should obtain the organization's operational overview without manually collecting Excel sheets.
 
 ---
 
-## 8. Admin
+# 9. Role — Admin
 
-Within authorized scope, Admin can:
+Admins manage Members and workload within their permitted organizational scope.
 
-- view/manage responsible Members;
-- view workload/performance/history;
+An Admin can:
+
+- view Members under their responsibility;
+- view Member profile information;
+- view Member workload;
+- view Member task history;
+- view Member performance;
 - create tasks;
-- assign/reassign tasks;
-- set priority/deadline;
-- monitor progress;
-- review submissions;
-- approve or request revision;
-- reject only if final business workflow requires it;
-- add feedback/ratings;
-- create and submit management reports;
+- assign tasks;
+- reassign tasks where permitted;
+- set task priority;
+- set task deadline;
+- provide task instructions;
+- monitor task progress;
+- review submitted work;
+- approve submitted work;
+- request correction/revision;
+- reject work if the final business workflow requires rejection;
+- add feedback;
+- provide quality ratings where required;
+- monitor overdue tasks;
+- identify workload imbalance;
+- create management reports;
+- submit reports to Super Admin;
 - view team analytics;
-- view relevant activity;
-- receive notifications.
+- view relevant activity history;
+- receive operational notifications.
+
+Admins must only access Members and operational data within their authorized scope.
 
 ---
 
-## 9. Member / Staff
+# 10. Role — Member / Staff
 
-Can:
+Members perform assigned work.
+
+A Member can:
 
 - log in;
 - view assigned tasks;
-- view details/priority/deadline;
+- view task details;
+- view priority;
+- view deadline;
+- view instructions;
 - start work;
-- submit work;
-- add remarks;
-- upload supporting files;
-- receive feedback;
-- correct and resubmit;
-- view own task history;
-- view own workload/performance where permitted;
-- receive notifications.
+- update permitted work status;
+- add remarks/comments;
+- upload supporting files where required;
+- submit completed work;
+- view Admin feedback;
+- receive correction/revision requests;
+- correct work;
+- resubmit work;
+- view personal task history;
+- view own workload;
+- view personal performance where permitted;
+- receive notifications;
+- manage permitted personal profile information.
 
-Cannot:
+Members cannot:
+
 - assign work;
-- manage Members;
-- review others' work;
-- modify own performance calculation;
-- access global analytics/reports.
+- manage other Members;
+- review other Members' work;
+- modify their own performance calculation;
+- access organization-wide analytics;
+- access Super Admin reports;
+- bypass Admin review.
 
 ---
 
-## 10. RBAC Matrix
+# 11. Role-Based Access Control Matrix
 
-| Capability | Super Admin | Admin | Member |
-|---|:---:|:---:|:---:|
-| Manage Admins | ✅ | ❌ | ❌ |
-| View all Admins | ✅ | ❌ | ❌ |
-| Create Member | ✅ | Scoped / Pending | ❌ |
-| Edit Member | ✅ | Own team | Own limited |
-| Suspend Member | ✅ | Pending | ❌ |
-| Transfer Member | ✅ | ❌ | ❌ |
-| View all Members | ✅ | Own team | ❌ |
-| Create Task | ✅* | ✅ | ❌ |
-| Assign Task | ✅* | Own team | ❌ |
-| Reassign Task | ✅ | Own team | ❌ |
-| View all Tasks | ✅ | ❌ | ❌ |
-| View Team Tasks | ✅ | ✅ | ❌ |
-| View Own Tasks | ✅ | ✅ | ✅ |
-| Submit Task | ❌ | ❌ | Own |
-| Review Submission | ✅* | Own team | ❌ |
-| Approve Work | ✅* | Own team | ❌ |
-| Request Revision | ✅* | Own team | ❌ |
-| View Performance | All | Own team | Own |
-| Edit Performance Formula | ✅ | ❌ | ❌ |
-| View Activity | All | Scoped | Limited |
-| Submit Management Report | Optional | ✅ | ❌ |
-| Review Admin Report | ✅ | ❌ | ❌ |
-| View Global Analytics | ✅ | ❌ | ❌ |
-| View Team Analytics | ✅ | ✅ | ❌ |
-| View Personal Analytics | ✅ | ✅ | ✅ |
-| Manage Inventory | ✅ | Scoped | ❌ |
-| View Assigned Inventory | ✅ | ✅ | Own relevant |
-| System Settings | ✅ | ❌ | ❌ |
+The following matrix establishes the initial authorization baseline.
 
-`*` Final Chief operational permissions remain a client confirmation item.
+| Capability                     | Super Admin |             Admin             |       Member        |
+| ------------------------------ | :---------: | :---------------------------: | :-----------------: |
+| Manage Admin accounts          |     ✅      |              ❌               |         ❌          |
+| View all Admins                |     ✅      |              ❌               |         ❌          |
+| Create Member                  |     ✅      | Scoped / Pending confirmation |         ❌          |
+| Edit Member                    |     ✅      |           Own team            | Own limited profile |
+| Suspend Member                 |     ✅      |     Pending confirmation      |         ❌          |
+| Transfer Member between Admins |     ✅      |              ❌               |         ❌          |
+| View all Members               |     ✅      |           Own team            |         ❌          |
+| View own profile               |     ✅      |              ✅               |         ✅          |
+| Create Task                    |     ✅*     |              ✅               |         ❌          |
+| Assign Task                    |     ✅*     |           Own team            |         ❌          |
+| Reassign Task                  |     ✅      |           Own team            |         ❌          |
+| View all Tasks                 |     ✅      |              ❌               |         ❌          |
+| View Team Tasks                |     ✅      |           Own team            |         ❌          |
+| View Own Tasks                 |     ✅      |              ✅               |         ✅          |
+| Submit Task                    |     ❌      |              ❌               |  Own assigned task  |
+| Review Submission              |     ✅*     |           Own team            |         ❌          |
+| Approve Work                   |     ✅*     |           Own team            |         ❌          |
+| Request Revision               |     ✅*     |           Own team            |         ❌          |
+| View Performance               |     All     |           Own team            |         Own         |
+| Edit Performance Formula       |     ✅      |              ❌               |         ❌          |
+| View Activity Logs             |     All     |            Scoped             |     Limited/Own     |
+| Create Management Report       |  Optional   |              ✅               |         ❌          |
+| Submit Report to Chief         |  Optional   |              ✅               |         ❌          |
+| Review Admin Report            |     ✅      |              ❌               |         ❌          |
+| View Global Analytics          |     ✅      |              ❌               |         ❌          |
+| View Team Analytics            |     ✅      |              ✅               |         ❌          |
+| View Personal Analytics        |     ✅      |              ✅               |         ✅          |
+| Manage Inventory               |     ✅      |            Scoped             |         ❌          |
+| View Assigned Inventory        |     ✅      |              ✅               |  Own relevant data  |
+| System Settings                |     ✅      |              ❌               |         ❌          |
+
+`*` Final Chief operational permissions should be confirmed with the client.
+
+Backend authorization is mandatory.
+
+Hiding frontend buttons is not authorization.
 
 ---
 
-## 11. Authentication
+# 12. Authentication Requirements
 
-Required:
+Operix must provide secure authentication.
 
+Minimum requirements:
+
+- email/username and password authentication;
+- secure password hashing;
 - login;
 - logout;
-- current user;
+- current authenticated user;
 - forgot password;
 - reset password;
-- secure password/session handling;
+- session expiration;
 - role validation;
-- account-status validation.
+- account status validation.
 
-Statuses:
+Initial account statuses:
 
 ```text
 ACTIVE
@@ -286,9 +426,19 @@ INACTIVE
 SUSPENDED
 ```
 
+Inactive or suspended accounts must not access protected operational workflows.
+
+Future options:
+
+- two-factor authentication;
+- Microsoft/Google enterprise login;
+- device/session management.
+
 ---
 
-## 12. Core Modules
+# 13. Core Application Modules
+
+Operix V1 contains the following primary modules:
 
 ```text
 Authentication
@@ -316,9 +466,11 @@ Settings
 
 ---
 
-## 13. Task Model
+# 14. Task Management
 
-Candidate task fields:
+Task Management is the primary operational module.
+
+A task may contain:
 
 ```text
 Task ID
@@ -340,9 +492,15 @@ Remarks
 Attachments
 ```
 
-Additional fields must come from real Excel workflow analysis.
+Additional fields must be mapped from the organization's existing Excel workflow.
 
-Priority:
+The real Excel sheets should be analyzed before final task fields are frozen.
+
+---
+
+# 15. Task Priority
+
+Supported initial task priorities:
 
 ```text
 LOW
@@ -351,46 +509,79 @@ HIGH
 URGENT
 ```
 
+Priority must be visible in:
+
+- task lists;
+- task details;
+- assignment views;
+- workload views;
+- analytics where relevant.
+
 ---
 
-## 14. Canonical Task Lifecycle
+# 16. Canonical Task Lifecycle
+
+V1 standardizes the task lifecycle to avoid contradictory states.
 
 ```text
 PENDING
-  ↓
+   ↓
 ASSIGNED
-  ↓
+   ↓
 IN_PROGRESS
-  ↓
+   ↓
 SUBMITTED
-  ↓
+   ↓
 UNDER_REVIEW
-  ├──→ COMPLETED
-  └──→ REVISION_REQUIRED
-          ↓
-      RESUBMITTED
-          ↓
-      UNDER_REVIEW
+   ├──────────────→ COMPLETED
+   │
+   └──→ REVISION_REQUIRED
+              ↓
+          RESUBMITTED
+              ↓
+          UNDER_REVIEW
 ```
 
-Exceptional terminal:
+Exceptional terminal state:
 
 ```text
 CANCELLED
 ```
 
-Overdue is initially derived:
+---
+
+# 17. Overdue Logic
+
+`OVERDUE` should initially be treated as a **derived operational condition**, not a manually selected workflow state.
+
+A task is overdue when:
 
 ```text
-now > deadline
-AND status NOT IN (COMPLETED, CANCELLED)
+Current Time > Deadline
+AND
+Task Status is not COMPLETED
+AND
+Task Status is not CANCELLED
 ```
+
+The UI may display:
+
+```text
+Status: IN_PROGRESS
+Alert: OVERDUE
+```
+
+This preserves the real task state while still making overdue work visible.
+
+If the actual business workflow requires a persisted `OVERDUE` state, this can be changed after confirmation.
 
 ---
 
-## 15. Task Rules
+# 18. Task Lifecycle Rules
 
-Allowed examples:
+Examples:
+
+### Allowed
 
 ```text
 PENDING → ASSIGNED
@@ -403,20 +594,29 @@ REVISION_REQUIRED → RESUBMITTED
 RESUBMITTED → UNDER_REVIEW
 ```
 
-Forbidden examples:
+### Not Allowed
 
 ```text
-Member manually sets COMPLETED
-Member approves own work
-IN_PROGRESS → COMPLETED without review
-Completed task silently returned to active work
+MEMBER → manually set COMPLETED
+
+MEMBER → approve own work
+
+IN_PROGRESS → COMPLETED without submission/review
+
+COMPLETED → silently return to IN_PROGRESS
 ```
+
+Completed tasks should not be silently edited.
+
+Administrative correction workflows, if needed, must preserve audit history.
 
 ---
 
-## 16. Task Assignment
+# 19. Task Assignment
 
-Assignment UI should expose:
+Admins can assign tasks to Members within permitted scope.
+
+The assignment interface should provide:
 
 ```text
 Member Name
@@ -428,17 +628,65 @@ Performance Score
 Relevant Task History
 ```
 
-Operix provides decision support; Admin makes the final assignment.
+Example:
 
-Automatic assignment is not MVP.
+| Member   | Active | Overdue | Completion | Performance |
+| -------- | -----: | ------: | ---------: | ----------: |
+| Member A |     17 |       3 |        91% |          88 |
+| Member B |      3 |       0 |        96% |          93 |
+| Member C |      8 |       1 |        88% |          86 |
+| Member D |      1 |       0 |        94% |          91 |
+
+The system should help Admins understand workload before assignment.
 
 ---
 
-## 17. Work Queue
+# 20. Performance-Assisted Assignment
 
-Operix may provide an unassigned queue organized by priority.
+Operix should provide **decision support**.
 
-Admins may assign based on:
+The system should not blindly assign more work to the highest-performing Member.
+
+Assignment considerations may include:
+
+- current active workload;
+- overdue workload;
+- completion rate;
+- on-time completion;
+- performance;
+- task priority;
+- deadline;
+- task category;
+- suitability;
+- historical completion;
+- availability.
+
+MVP behavior:
+
+```text
+System provides information/recommendations
+              ↓
+Admin makes final assignment decision
+```
+
+Automatic task assignment is not part of the MVP.
+
+---
+
+# 21. Work Queue
+
+Operix may provide a centralized queue of unassigned work.
+
+Example:
+
+```text
+URGENT
+HIGH
+MEDIUM
+LOW
+```
+
+Admins can use the queue to assign work based on:
 
 - priority;
 - deadline;
@@ -447,13 +695,15 @@ Admins may assign based on:
 - category;
 - suitability.
 
-Work Queue remains subject to workflow confirmation.
+Whether the Work Queue is mandatory in the first MVP should be confirmed during detailed workflow analysis.
 
 ---
 
-## 18. Submission & Review
+# 22. Task Submission
 
-Submission may contain:
+Members can submit work for assigned tasks.
+
+A submission may contain:
 
 ```text
 Task
@@ -464,42 +714,106 @@ Supporting Files
 Submitted At
 ```
 
-Review actions:
+Supported file types and maximum sizes must be confirmed before implementation.
+
+---
+
+# 23. Task Review
+
+After submission, the Admin reviews the work.
+
+Initial review actions:
 
 ```text
 APPROVE
 REQUEST_REVISION
 ```
 
-Optional if business requires:
+Optional business action:
 
 ```text
 REJECT
 ```
 
-Previous submission versions must remain preserved.
+A separate permanent `REJECTED` task state should only be added if the organization's actual workflow distinguishes rejection from revision.
 
----
-
-## 19. Task History
-
-Important events must remain traceable.
-
-Example:
+### Approval
 
 ```text
-10:02 Created
-10:04 Assigned
-10:31 Started
-14:12 Submitted
-14:30 Revision requested
-15:02 Resubmitted
-15:20 Approved / Completed
+UNDER_REVIEW
+      ↓
+COMPLETED
+```
+
+### Revision
+
+```text
+UNDER_REVIEW
+      ↓
+REVISION_REQUIRED
+      ↓
+Member Corrects Work
+      ↓
+RESUBMITTED
+      ↓
+UNDER_REVIEW
 ```
 
 ---
 
-## 20. Activity Tracking
+# 24. Submission & Review History
+
+Operix must preserve all important submission versions.
+
+Example:
+
+```text
+Version 1
+Submitted: 10:30
+Reviewed: 11:00
+Result: Revision Required
+
+Version 2
+Submitted: 13:20
+Reviewed: 14:05
+Result: Approved
+```
+
+Previous submissions should not be overwritten by the latest submission.
+
+---
+
+# 25. Task History
+
+The platform must preserve significant task changes.
+
+Example:
+
+```text
+Task #1042
+
+10:02 — Created by Admin A
+10:04 — Assigned to Member B
+10:31 — Work started
+14:12 — Submitted
+14:30 — Revision requested
+15:02 — Resubmitted
+15:20 — Approved / Completed
+```
+
+Task history supports:
+
+- audit trail;
+- performance calculations;
+- reporting;
+- activity feeds;
+- management investigation.
+
+---
+
+# 26. Activity Tracking
+
+Important operations automatically create structured activity records.
 
 Examples:
 
@@ -531,7 +845,7 @@ INVENTORY_ASSIGNED
 INVENTORY_RETURNED
 ```
 
-Activity fields:
+Each activity should contain:
 
 ```text
 Actor
@@ -542,36 +856,66 @@ Metadata
 Timestamp
 ```
 
-Optional technical metadata:
-- IP;
-- user agent;
-- request id.
+Optional technical audit information:
 
-Never log secrets.
+```text
+IP Address
+User Agent
+Request ID
+```
+
+Sensitive authentication information must never be recorded in activity metadata.
 
 ---
 
-## 21. Core Activity Principle
+# 27. Core Activity Principle
+
+Whenever an important business operation occurs:
 
 ```text
 Business Action
-→ Database Change
-→ Activity Record
-→ Notification if relevant
-→ Analytics / Performance impact
-→ Dashboard visibility
+      ↓
+Database Change
+      ↓
+Activity Record
+      ↓
+Notification if relevant
+      ↓
+Analytics/Performance impact
+      ↓
+Dashboard visibility
+```
+
+Example:
+
+```text
+Member submits task
+      ↓
+Submission stored
+      ↓
+Task state changes
+      ↓
+TASK_SUBMITTED activity created
+      ↓
+Admin notification created
+      ↓
+Dashboard pending-review count changes
+      ↓
+Real-time event may update Admin UI
 ```
 
 ---
 
-## 22. Performance Management
+# 28. Performance Management
 
-Potential metrics:
+Performance should be based primarily on actual work activity.
+
+Potential metrics include:
 
 ```text
 Completion Rate
 On-Time Completion Rate
-Revision/Rejection Rate
+Rejection / Revision Rate
 Average Completion Time
 Rework Rate
 Task Complexity
@@ -583,25 +927,60 @@ Consistency
 
 Completed task count alone must not define performance.
 
-Example weights are illustrative only:
+---
 
-| Metric | Example Weight |
-|---|---:|
-| Completion Rate | 30% |
-| On-Time Completion | 25% |
-| Quality / Review Score | 25% |
-| Rework / Revision | 10% |
-| Consistency | 10% |
+# 29. Performance Formula
 
-Final formula is client-defined.
+The final performance calculation is a **client decision**.
 
-Performance records should be versionable if formulas change.
+Illustrative metrics may include:
+
+| Metric                 | Example Weight |
+| ---------------------- | -------------: |
+| Completion Rate        |            30% |
+| On-Time Completion     |            25% |
+| Quality / Review Score |            25% |
+| Rework / Revision      |            10% |
+| Consistency            |            10% |
+
+These values are examples only.
+
+The organization must define:
+
+- final metrics;
+- weights;
+- reporting periods;
+- whether task priority matters;
+- whether task complexity matters;
+- whether manual quality rating is used;
+- whether Super Admin can override a calculated score.
 
 ---
 
-## 23. Workload Management
+# 30. Performance Versioning
 
-Workload indicators:
+If the performance formula changes over time, Operix should retain enough information to explain historical performance.
+
+Recommended concept:
+
+```text
+Performance Record
+Period
+Calculation Version
+Metric Values
+Overall Score
+Generated At
+```
+
+This avoids historical scores becoming impossible to explain after formula changes.
+
+---
+
+# 31. Workload Management
+
+The system should make workload imbalance visible.
+
+Important workload indicators:
 
 ```text
 Active Tasks
@@ -615,92 +994,197 @@ Task Category
 Availability
 ```
 
-High performance does not equal high capacity.
+Example:
+
+```text
+Member A
+17 active
+3 overdue
+91% completion
+
+Member B
+3 active
+0 overdue
+96% completion
+
+Member C
+8 active
+1 overdue
+88% completion
+
+Member D
+1 active
+0 overdue
+94% completion
+```
+
+High performance should not automatically mean high capacity.
 
 ---
 
-## 24. Dashboards
+# 32. Super Admin Dashboard
 
-### Super Admin
+The Super Admin dashboard provides organization-wide visibility.
 
-KPIs:
-- Admins;
-- Members;
-- total tasks;
-- pending;
-- in progress;
-- submitted/under review;
-- completed;
-- overdue;
-- completion rate.
+## KPI Cards
 
-Analytics:
-- task status;
-- completion trend;
-- workload by Admin;
-- workload by Member;
-- Member/team performance;
-- overdue trend;
-- productivity;
-- report status;
-- activity feed.
+```text
+Total Admins
+Total Members
+Total Tasks
+Pending Tasks
+In Progress
+Submitted / Under Review
+Completed Tasks
+Overdue Tasks
+Overall Completion Rate
+```
 
-### Admin
+## Analytics
 
-KPIs:
-- Members;
-- assigned;
-- pending;
-- in progress;
-- submitted for review;
-- completed;
-- overdue;
-- team completion rate.
+```text
+Task Status Distribution
+Task Completion Trend
+Workload by Admin
+Workload by Member
+Member Performance
+Team Performance
+Completed vs Pending
+Overdue Trend
+Weekly Productivity
+Monthly Productivity
+Report Status
+```
 
-Analytics:
-- Member performance;
-- workload;
-- task status;
-- completion trend;
-- revision rate;
-- on-time completion.
+## Operational Activity
 
-### Member
+The dashboard should include important recent events.
 
-KPIs:
-- assigned;
-- pending;
-- in progress;
-- submitted;
-- revision required;
-- completed;
-- overdue.
+Example:
 
-Analytics:
-- completion trend;
-- completed vs pending;
-- average completion time;
-- on-time rate;
-- workload;
-- personal performance.
+```text
+Admin A assigned Task #1042
+Member B submitted Task #1042
+Admin C requested revision on Task #990
+Admin D submitted Monthly Report
+```
 
 ---
 
-## 25. Analytics Architecture
+# 33. Admin Dashboard
+
+The Admin dashboard focuses on Members and workload under the Admin.
+
+## KPI Cards
+
+```text
+Total Members
+Assigned Tasks
+Pending Tasks
+In Progress
+Submitted for Review
+Completed
+Overdue
+Team Completion Rate
+```
+
+## Analytics
+
+```text
+Member Performance
+Member Workload
+Task Status Distribution
+Completion Trend
+Overdue Work
+Revision / Rework Rate
+On-Time Completion
+```
+
+## Action Areas
+
+Admin should quickly see:
+
+```text
+Tasks waiting for review
+Members with heavy workload
+Members with available capacity
+Overdue tasks
+Upcoming deadlines
+Recent submissions
+```
+
+---
+
+# 34. Member Dashboard
+
+The Member dashboard focuses only on personal workload.
+
+## KPI Cards
+
+```text
+Assigned
+Pending
+In Progress
+Submitted
+Revision Required
+Completed
+Overdue
+```
+
+## Personal Analytics
+
+```text
+Completion Trend
+Completed vs Pending
+Average Completion Time
+On-Time Completion
+Personal Workload
+Personal Performance
+```
+
+The Member dashboard should prioritize:
+
+```text
+What do I need to do now?
+What is due soon?
+What needs correction?
+```
+
+---
+
+# 35. Analytics Architecture
+
+Operix must not load large raw task datasets into the browser to calculate simple dashboard analytics.
+
+Preferred architecture:
 
 ```text
 Database
-→ Database / Backend Aggregation
-→ Dashboard API
-→ Frontend
-→ Charts
+   ↓
+Database / Backend Aggregation
+   ↓
+Dashboard API
+   ↓
+Frontend
+   ↓
+Charts
 ```
 
-Do not download entire task datasets just to calculate dashboard metrics client-side.
+Backend/database aggregation should be used where practical for:
+
+- count;
+- sum;
+- average;
+- status distribution;
+- trend calculation;
+- workload summary;
+- performance aggregation.
 
 ---
 
-## 26. Dashboard API Baseline
+# 36. Dashboard APIs
+
+Initial business-focused endpoints may include:
 
 ```http
 GET /api/v1/dashboard/overview
@@ -712,13 +1196,19 @@ GET /api/v1/dashboard/overdue
 GET /api/v1/dashboard/activity
 ```
 
-Responses must be viewer-scope aware.
+Responses must be authorization-aware.
+
+The same endpoint may return different scope depending on viewer role.
 
 ---
 
-## 27. Real-Time
+# 37. Real-Time Updates
 
-Real-time is for important events:
+Real-time does not mean refreshing every page every second.
+
+Real-time should be reserved for meaningful operational events.
+
+Potential events:
 
 ```text
 TASK_ASSIGNED
@@ -731,80 +1221,147 @@ IMPORTANT_ACTIVITY
 DASHBOARD_COUNTER_CHANGED
 ```
 
-Normal CRUD remains REST.
+Possible implementation:
 
-Potential transport:
-- WebSocket;
-- Socket.IO.
-
-Real-time delivery failure must not invalidate a successfully committed database operation.
-
----
-
-## 28. Notifications
-
-Member:
-- new task;
-- deadline approaching;
-- revision;
-- feedback;
-- approval/completion.
-
-Admin:
-- submission;
-- resubmission;
-- overdue;
-- important Member activity.
-
-Super Admin:
-- Admin report;
-- critical overdue;
-- important organizational alert.
-
-MVP:
 ```text
-In-App
+REST API
++
+WebSocket / Socket.IO
 ```
 
-External channels remain future scope.
+Normal CRUD remains REST-based.
 
 ---
 
-## 29. Reporting Model
+# 38. Real-Time Example
 
-### A. System-Generated Reports
+```text
+Member submits task
+      ↓
+Backend validates request
+      ↓
+Database transaction completes
+      ↓
+Activity created
+      ↓
+Notification created
+      ↓
+Real-time event emitted
+      ↓
+Admin receives notification
+      ↓
+Pending Review counter updates
+```
+
+Real-time failure must not cause the underlying task transaction to fail after the database has already successfully committed.
+
+---
+
+# 39. Notifications
+
+## Member Notifications
+
+```text
+New Task Assigned
+Deadline Approaching
+Revision Required
+Admin Feedback
+Task Approved
+Task Completed
+```
+
+## Admin Notifications
+
+```text
+Task Submitted
+Task Resubmitted
+Task Overdue
+Important Member Activity
+Upcoming Deadline
+```
+
+## Super Admin Notifications
+
+```text
+Admin Report Submitted
+Important Operational Alert
+Critical Overdue Work
+Organization-Level Event
+```
+
+MVP channel:
+
+```text
+In-App Notification
+```
+
+Possible future channels:
+
+```text
+Email
+Push Notification
+SMS
+WhatsApp
+```
+
+External channels should only be added when confirmed.
+
+---
+
+# 40. Reporting — Two Separate Concepts
+
+Operix V1 separates reports into two categories.
+
+---
+
+# 41. System-Generated Reports
+
+These reports are automatically produced from platform data.
 
 Examples:
-- Daily Workload
-- Weekly Workload
-- Monthly Workload
-- Member Performance
-- Admin Activity
-- Task Completion
-- Pending Tasks
-- Overdue Tasks
-- Revision/Rejection
-- Workload Distribution
 
-Filters:
-- date;
-- Admin;
-- Member;
-- status;
-- priority;
-- category;
-- department/team.
+```text
+Daily Workload Report
+Weekly Workload Report
+Monthly Workload Report
+Member Performance Report
+Admin Activity Report
+Task Completion Report
+Pending Task Report
+Overdue Task Report
+Revision / Rejection Report
+Workload Distribution Report
+```
 
-Exports:
-- Excel;
-- PDF;
-- CSV;
+Filters may include:
 
-depending on requirements.
+```text
+Date Range
+Admin
+Member
+Status
+Priority
+Category
+Department / Team
+```
 
-### B. Admin-Submitted Management Reports
+Exports may include:
 
-Potential fields:
+```text
+Excel
+PDF
+CSV
+```
+
+depending on business requirements.
+
+---
+
+# 42. Admin-Submitted Management Reports
+
+These are reports prepared by Admins and submitted to the Super Admin.
+
+Example contents:
 
 ```text
 Report Title
@@ -823,7 +1380,7 @@ Next Period Plan
 Attachments
 ```
 
-Candidate statuses:
+Potential statuses:
 
 ```text
 DRAFT
@@ -833,78 +1390,126 @@ REVISION_REQUIRED
 APPROVED
 ```
 
-Final templates/cadence are pending client confirmation.
+Final report templates and cadence must be confirmed by the company.
 
 ---
 
-## 30. Excel Replacement & Migration
+# 43. Excel Replacement Strategy
 
-Migration flow:
+The goal is **not** to rebuild Excel inside a browser.
+
+Existing spreadsheet data should be migrated into structured entities.
+
+Migration workflow:
 
 ```text
 Existing Excel
-→ Analyze Structure
-→ Identify Sheets & Columns
-→ Clean Data
-→ Map Columns
-→ Resolve Duplicates
-→ Validate
-→ Import
-→ Verify
-→ Operix Database
+      ↓
+Analyze Structure
+      ↓
+Identify Sheets & Columns
+      ↓
+Clean Data
+      ↓
+Map Columns
+      ↓
+Resolve Duplicates
+      ↓
+Validate
+      ↓
+Import
+      ↓
+Verify
+      ↓
+Platform Database
 ```
 
-Example mapping:
+---
 
-| Excel Column | Operix |
-|---|---|
-| Staff Name | User |
-| Work | Task |
-| Assigned By | Task Assignment |
-| Assigned To | Member / Assignment |
-| Deadline | Task Deadline |
-| Status | Task Status |
-| Completed Date | Task Completion |
-| Remarks | Submission / Review / Note |
+# 44. Example Excel Mapping
 
-After migration:
+Possible mapping:
+
+| Excel Column   | Operix Entity                   |
+| -------------- | ------------------------------- |
+| Staff Name     | User                            |
+| Work           | Task                            |
+| Assigned By    | Task Assignment                 |
+| Assigned To    | Member / Task Assignment        |
+| Deadline       | Task Deadline                   |
+| Status         | Task Status                     |
+| Completed Date | Task Completion                 |
+| Remarks        | Submission / Review / Task Note |
+
+Exact mapping must come from the company's real Excel files.
+
+---
+
+# 45. New Source of Truth
+
+After successful implementation and migration:
 
 ```text
 Operix Database = Source of Truth
 ```
 
----
-
-## 31. Inventory — Conditional
-
-Potential scope:
+Excel will primarily be used for:
 
 ```text
-Product / Item
-Category
-Quantity
-Stock In
-Stock Out
-Adjustment
-History
-Low Stock
-Reports
-Inventory-Related Tasks
-Asset / Resource Assignment
+Export
+Import
+Management Reporting
+Historical Migration
 ```
 
-Do not implement advanced inventory until the client confirms:
-- what inventory is;
-- quantity requirements;
-- stock-in/out;
-- assets;
-- branches/warehouses;
-- task linkage;
-- batch/serial needs.
+Users should not maintain a separate operational Excel file that conflicts with Operix.
 
 ---
 
-## 32. Core Data Entities
+# 46. Inventory Module — Conditional
+
+Inventory is not yet confirmed as a core workflow requirement.
+
+The term "inventory" must be clarified from the organization's actual process.
+
+Potential inventory scope:
+
+```text
+Product / Item Management
+Categories
+Stock Quantity
+Stock In
+Stock Out
+Stock Adjustment
+Inventory History
+Low-Stock Monitoring
+Inventory Reports
+Inventory-Related Tasks
+Asset Assignment
+Resource Assignment
+```
+
+---
+
+# 47. Inventory Implementation Rule
+
+Inventory should only be implemented when the organization confirms:
+
+- what is being inventoried;
+- whether quantity is required;
+- whether stock-in/out is required;
+- whether assets are assigned to Members;
+- whether warehouses/branches exist;
+- whether inventory relates to tasks;
+- whether batch/serial information exists.
+
+Advanced inventory features must not be invented without confirmation.
+
+---
+
+# 48. Core Data Entities
+
+Initial domain entities:
 
 ```text
 User
@@ -925,118 +1530,236 @@ InventoryTransaction
 InventoryAssignment
 ```
 
-Final schema follows confirmed workflow + Excel structure.
+Final schema must reflect:
+
+- confirmed business workflow;
+- actual Excel structure;
+- role ownership;
+- task assignment rules;
+- inventory requirements.
 
 ---
 
-## 33. Search / Filter / Sort
+# 49. Search
 
-Search:
-- Task ID;
-- title;
-- Member;
-- Admin;
-- employee ID;
-- report;
-- inventory item/SKU.
+Operix should support search using appropriate business keys.
 
-Filters:
-- date;
-- status;
-- priority;
-- Admin;
-- Member;
-- category;
-- department;
-- performance;
-- overdue.
+Examples:
 
-Sort:
-- newest;
-- oldest;
-- deadline;
-- priority;
-- status;
-- Member;
-- performance;
-- completion date.
+```text
+Task ID
+Task Title
+Member Name
+Admin Name
+Employee ID
+Report Title
+Inventory Item
+SKU
+```
 
 ---
 
-## 34. File Management
+# 50. Filters
 
-Attachments may belong to:
-- tasks;
-- submissions;
-- reports;
-- profiles;
-- inventory.
+Common filters may include:
 
-Store:
-- name;
-- MIME;
-- size;
-- storage reference;
-- uploader;
-- timestamp;
-- related entity.
-
-File limits remain pending.
+```text
+Date Range
+Task Status
+Task Priority
+Admin
+Member
+Category
+Department
+Performance Range
+Overdue
+```
 
 ---
 
-## 35. Auditability
+# 51. Sorting
 
-Preserve:
-- assignment history;
-- task state history;
-- submissions;
-- reviews;
-- activity;
-- performance history;
-- report history;
-- inventory transactions.
+Operational tables should support relevant sorting.
+
+Examples:
+
+```text
+Newest
+Oldest
+Deadline
+Priority
+Status
+Member
+Performance
+Completion Date
+```
 
 ---
 
-## 36. Non-Functional Requirements
+# 52. Pagination
 
-### Security
-- secure auth;
-- backend RBAC;
-- input validation;
+Large operational datasets must use pagination.
+
+Typical examples:
+
+```text
+20 per page
+50 per page
+100 per page
+```
+
+API limits should prevent unbounded data retrieval.
+
+---
+
+# 53. File Management
+
+Supporting files may be attached to:
+
+```text
+Tasks
+Submissions
+Reports
+User Profiles
+Inventory Records
+```
+
+Each uploaded asset should retain:
+
+```text
+File Name
+MIME Type
+File Size
+Storage Reference
+Uploaded By
+Uploaded At
+Related Entity
+```
+
+Final file limits require confirmation.
+
+---
+
+# 54. Auditability
+
+Important operational records must not be silently overwritten.
+
+Operix should preserve:
+
+```text
+Task Assignment History
+Task State History
+Submission History
+Review History
+Activity History
+Performance History
+Report History
+Inventory Transaction History
+```
+
+---
+
+# 55. Non-Functional Requirements
+
+## Security
+
+Operix must provide:
+
+- secure authentication;
+- backend-enforced RBAC;
 - protected APIs;
-- secure uploads;
-- rate limiting;
+- input validation;
+- secure file handling;
 - account status enforcement;
-- audit logging.
+- rate limiting where appropriate;
+- secure headers;
+- audit/activity logging;
+- protection from unauthorized data access.
 
-### Performance
+## Performance
+
+The platform should provide:
+
 - pagination;
-- indexes;
-- efficient queries;
+- optimized queries;
+- database indexes;
 - backend aggregation;
+- efficient dashboards;
 - minimal unnecessary frontend processing.
 
-### Scalability
-Support growth in:
+## Scalability
+
+The system should support growth in:
+
 - users;
 - tasks;
 - submissions;
-- logs;
+- activity logs;
 - reports;
 - notifications;
-- performance;
-- inventory.
+- performance records;
+- inventory records.
 
-### Reliability
-Critical multi-write operations must persist consistently.
+## Reliability
+
+Critical operations must be persisted reliably.
+
+Examples:
+
+```text
+Task Assignment
+Task Submission
+Task Review
+Approval
+Revision Request
+Member Transfer
+User Status Changes
+Inventory Transactions
+```
 
 ---
 
-## 37. Technical Direction
+# 56. Transactional Operations
 
-Frontend:
+Operations involving multiple dependent database changes should execute transactionally.
+
+Example:
+
+```text
+Member submits task
+
+1. Create submission
+2. Update task state
+3. Create task history
+4. Create activity
+5. Create notification
+```
+
+These related writes should not leave the system in a partially updated state.
+
+---
+
+# 57. Responsive Design
+
+Operix should support:
+
+```text
+Desktop
+Laptop
+Tablet
+Mobile
+```
+
+Primary Admin and Super Admin workflows are desktop-oriented.
+
+Member task workflows must remain comfortable on mobile devices.
+
+---
+
+# 58. Recommended Technical Architecture
+
+## Frontend
+
 ```text
 Next.js
 TypeScript
@@ -1047,32 +1770,68 @@ Zod
 Recharts
 ```
 
-Backend:
+## Backend
+
 ```text
 NestJS
 TypeScript
-Prisma
+Prisma ORM
 PostgreSQL
 ```
 
-Auth candidate:
+## Authentication
+
+Candidate:
+
 ```text
 Better Auth
 ```
 
-Storage candidate:
+or another finalized secure session-based authentication mechanism.
+
+## File Storage
+
+Candidate:
+
 ```text
-Cloudinary or S3-compatible
+Cloudinary
 ```
 
-Backend flow:
+or:
+
 ```text
-Route / Module → Controller → Service → Prisma → PostgreSQL
+S3-Compatible Object Storage
 ```
 
 ---
 
-## 38. API Namespace
+# 59. Backend Architecture Rule
+
+Canonical request flow:
+
+```text
+Route / Module
+      ↓
+Controller
+      ↓
+Service
+      ↓
+Prisma
+      ↓
+PostgreSQL
+```
+
+Controllers should remain thin.
+
+Business logic belongs in services.
+
+Authorization must be enforced before accessing or modifying protected resources.
+
+---
+
+# 60. API Namespace
+
+Recommended API namespace:
 
 ```text
 /api/v1
@@ -1100,7 +1859,11 @@ Primary resource groups:
 
 ---
 
-## 39. Requirement ID System
+# 61. Requirement Identification System
+
+Development requirements should use stable IDs.
+
+Naming convention:
 
 ```text
 AUTH-FR-###
@@ -1115,98 +1878,347 @@ ACT-FR-###
 INV-FR-###
 ```
 
-Core requirements include:
+---
 
-- active user authentication;
-- account-status enforcement;
-- Admin scope isolation;
-- valid task state transitions;
-- preserved submission versions;
-- backend review authorization;
-- structured activity generation;
-- performance from actual work;
-- system-generated reports;
-- Admin-submitted reports;
-- authorized analytics;
-- in-app notifications.
+# 62. Core Functional Requirements
+
+## Authentication
+
+**AUTH-FR-001**
+The system shall allow an active user to authenticate.
+
+**AUTH-FR-002**
+The system shall prevent suspended or inactive accounts from normal protected access.
+
+**AUTH-FR-003**
+The system shall expose the current authenticated user's role and permitted application scope.
 
 ---
 
-## 40. Core Acceptance Criteria
+## User Management
 
-### AC-001 — Assignment
-Admin assigns a task to an authorized Member:
-- task stored;
-- assignment stored;
-- Member can access;
-- unauthorized users cannot;
-- activity generated;
-- notification generated;
-- dashboard counters update.
+**USER-FR-001**
+Super Admin shall be able to create and manage Admin accounts.
 
-### AC-002 — Submission
-Member submits:
-- submission stored;
-- timestamp stored;
-- task moves to review;
-- history updated;
-- activity generated;
-- Admin notified.
+**USER-FR-002**
+Super Admin shall be able to view Members organization-wide.
 
-### AC-003 — Revision
-Admin requests revision:
-- feedback stored;
+**USER-FR-003**
+Admin shall only access Members within permitted responsibility scope.
+
+**USER-FR-004**
+Member shall not access another Member's management data.
+
+---
+
+## Task Management
+
+**TASK-FR-001**
+Authorized Admin users shall be able to create tasks.
+
+**TASK-FR-002**
+Authorized Admin users shall be able to assign tasks to permitted Members.
+
+**TASK-FR-003**
+A Member shall only access tasks assigned to that Member unless a broader business permission is explicitly granted.
+
+**TASK-FR-004**
+The system shall enforce valid task state transitions.
+
+**TASK-FR-005**
+Important task state changes shall create task history.
+
+**TASK-FR-006**
+Important task state changes shall create activity records.
+
+**TASK-FR-007**
+The system shall identify overdue tasks from deadline and task state.
+
+---
+
+## Submission
+
+**SUB-FR-001**
+A Member shall be able to submit an assigned task.
+
+**SUB-FR-002**
+A submission shall preserve its submission timestamp.
+
+**SUB-FR-003**
+Revision/resubmission shall not overwrite previous submission versions.
+
+**SUB-FR-004**
+An Admin shall only review submissions within permitted scope.
+
+**SUB-FR-005**
+A Member shall not approve their own submission.
+
+---
+
+## Performance
+
+**PERF-FR-001**
+Performance metrics shall be derived from structured operational activity.
+
+**PERF-FR-002**
+Completed task count alone shall not define overall performance.
+
+**PERF-FR-003**
+The performance formula shall remain configurable or versioned if calculation rules change.
+
+---
+
+## Reports
+
+**RPT-FR-001**
+The platform shall generate operational reports from stored platform data.
+
+**RPT-FR-002**
+Authorized Admins shall be able to submit management reports to the Super Admin where required.
+
+**RPT-FR-003**
+Super Admin shall be able to review submitted Admin reports.
+
+---
+
+## Analytics
+
+**AN-FR-001**
+Dashboard charts shall use actual platform data.
+
+**AN-FR-002**
+Large analytics calculations should be aggregated by the backend/database rather than calculated from entire raw task datasets in the frontend.
+
+**AN-FR-003**
+Analytics responses shall respect viewer authorization scope.
+
+---
+
+## Activity
+
+**ACT-FR-001**
+Important operational changes shall generate structured activity records.
+
+**ACT-FR-002**
+Activity records shall include actor, action, entity, metadata, and timestamp.
+
+---
+
+## Notifications
+
+**NOT-FR-001**
+Important workflow events shall generate notifications for relevant users.
+
+**NOT-FR-002**
+MVP notifications shall support in-app delivery.
+
+---
+
+# 63. Core Acceptance Criteria
+
+## AC-001 — Admin Task Assignment
+
+**Given**
+
+Admin A manages Member A.
+
+**When**
+
+Admin A creates and assigns a task to Member A.
+
+**Then**
+
+- the task is stored;
+- assignment is stored;
+- Member A can access the task;
+- unauthorized Members cannot access the task;
+- `TASK_ASSIGNED` activity is created;
+- Member A receives a notification;
+- relevant dashboard counters update.
+
+---
+
+## AC-002 — Member Submission
+
+**Given**
+
+Member A has an active assigned task.
+
+**When**
+
+Member A submits completed work.
+
+**Then**
+
+- a submission is stored;
+- submission timestamp is recorded;
+- task moves to the review workflow;
+- task history is updated;
+- `TASK_SUBMITTED` activity is created;
+- responsible Admin receives a notification.
+
+---
+
+## AC-003 — Revision
+
+**Given**
+
+A submitted task is under Admin review.
+
+**When**
+
+Admin requests revision.
+
+**Then**
+
+- review feedback is stored;
 - task enters `REVISION_REQUIRED`;
-- Member notified;
-- history preserved;
-- resubmission allowed.
+- Member receives notification;
+- review history is preserved;
+- Member can submit a new version.
 
-### AC-004 — Completion
-Admin approves:
-- review stored;
+---
+
+## AC-004 — Completion
+
+**Given**
+
+A valid submission is under review.
+
+**When**
+
+Admin approves the work.
+
+**Then**
+
+- review record is stored;
 - task enters `COMPLETED`;
-- completion time stored;
-- activity generated;
-- Member notified;
-- performance/workload updated;
+- completion timestamp is stored;
+- activity is generated;
+- Member is notified;
+- performance/workload data reflects the completion;
 - dashboard counters update.
 
-### AC-005 — Authorization Isolation
-Admin A cannot access Admin B private Member/task/submission data.
+---
 
-### AC-006 — Overdue
-Past-due non-completed/non-cancelled task appears as overdue in relevant views, reports, and analytics.
+## AC-005 — Authorization Isolation
+
+**Given**
+
+Admin A and Admin B manage different Members.
+
+**When**
+
+Admin A attempts to access Admin B's private Member/task/submission data.
+
+**Then**
+
+the backend must deny access.
+
+Frontend hiding alone is insufficient.
 
 ---
 
-## 41. MVP Roadmap
+## AC-006 — Overdue Detection
 
-### Phase 1
-Authentication, RBAC, users, database, basic shell/dashboard.
+**Given**
 
-### Phase 2
-Task creation, assignment, status, submission, review, revision, approval, history, activity.
+a task deadline has passed and the task is not completed or cancelled.
 
-### Phase 3
-KPIs, analytics, performance, workload, reports, filters, activity feed.
+**Then**
 
-### Phase 4
-Real-time events, notifications, dashboard counter updates.
+Operix shall identify the task as overdue in:
 
-### Phase 5
-Excel analysis, cleaning, mapping, import, validation, export, PDF if required.
-
-### Phase 6
-Inventory only if confirmed.
-
-### Phase 7
-Advanced analytics/workload recommendations/predictive analysis.
+- task views;
+- Admin dashboard;
+- Super Admin dashboard;
+- relevant reports;
+- relevant analytics.
 
 ---
 
-## 42. Deferred Scope
+# 64. MVP Roadmap
 
-Not MVP unless explicitly approved:
+## Phase 1 — Foundation
+
+```text
+Authentication
+RBAC
+User Management
+Database Structure
+Basic Application Shell
+Basic Dashboards
+```
+
+## Phase 2 — Core Workflow
+
+```text
+Task Creation
+Task Assignment
+Task Status
+Task Submission
+Task Review
+Revision
+Approval
+Task History
+Activity Tracking
+```
+
+## Phase 3 — Analytics & Reports
+
+```text
+KPI Dashboards
+Task Analytics
+Performance Metrics
+Workload Analytics
+Reports
+Filters
+Activity Feed
+```
+
+## Phase 4 — Real-Time
+
+```text
+Task Update Events
+Notifications
+Activity Events
+Dashboard Counter Updates
+```
+
+## Phase 5 — Excel Migration
+
+```text
+Excel Analysis
+Data Cleaning
+Column Mapping
+Import
+Validation
+Historical Data Migration
+Excel Export
+PDF Reporting where required
+```
+
+## Phase 6 — Inventory
+
+Only if confirmed as an actual organizational requirement.
+
+## Phase 7 — Advanced Analytics
+
+Possible later features:
+
+```text
+Workload Recommendations
+Performance Trends
+Workload Balancing Suggestions
+Advanced Operational Analytics
+Predictive Workload Analysis
+```
+
+---
+
+# 65. Deferred / Future Scope
+
+Not part of the initial MVP unless explicitly approved:
 
 ```text
 Fully Automatic Task Assignment
@@ -1220,7 +2232,7 @@ Accounting
 Procurement
 Advanced Warehouse Management
 Multi-Company SaaS
-Native Mobile App
+Native Mobile Application
 Biometric Integration
 WhatsApp Automation
 SMS Automation
@@ -1229,70 +2241,119 @@ External ERP Integration
 
 ---
 
-## 43. Business Questions Before Development
+# 66. Success Criteria
 
-Need client confirmation for:
+Operix will be considered successful when:
 
-### Organization
-- number of Admins/Members;
-- departments/teams/branches;
-- multiple Admin relationships;
-- Admin user-management permissions;
-- Chief direct task actions.
-
-### Tasks
-- actual Excel fields;
-- completion definition;
-- approval responsibility;
-- single/multiple assignees;
-- decline/reassign/cancel;
-- deadline changes;
-- recurring work;
-- rejection vs revision.
-
-### Performance
-- exact formula;
-- priority/complexity effect;
-- rating;
-- reporting period;
-- overrides.
-
-### Reports
-- exact templates;
-- cadence;
-- Chief review;
-- Excel/PDF requirements.
-
-### Inventory
-- actual meaning;
-- stock vs assets;
-- quantity;
-- stock-in/out;
-- branches/warehouses;
-- task linkage.
-
-### Files
-- types;
-- max size;
-- max count.
-
-### Real-Time
-- required events;
-- live activity;
-- external channels.
-
-### Migration
-- file/sheet count;
-- historical depth;
-- duplicates;
-- status quality;
-- task identifiers.
+1. Excel is no longer the primary operational workload tracker.
+2. Work can be created and assigned digitally.
+3. Work can be tracked from assignment to completion.
+4. Members can submit work digitally.
+5. Admins can review work digitally.
+6. Revision history is preserved.
+7. Member performance can be monitored.
+8. Admin activity can be monitored.
+9. Pending work can be identified immediately.
+10. Overdue work can be identified immediately.
+11. Workload imbalance becomes visible.
+12. Reports can be generated without manual spreadsheet calculations.
+13. Dashboards reflect current operational data.
+14. Important updates can appear in real time.
+15. Historical task/activity information remains available.
+16. Data can be exported when required.
+17. The Chief can obtain a complete organizational overview from one system.
 
 ---
 
-## 44. Development Lock Conditions
+# 67. Key Business Questions Before Development
 
-Before major domain implementation, confirm:
+## Organization
+
+- How many Admins exist?
+- How many Members exist?
+- Are there departments?
+- Are there teams?
+- Are there branches?
+- Can one Member report to multiple Admins?
+- Can Admins create Members?
+- Can Admins suspend Members?
+- Can Chief directly assign tasks?
+
+## Tasks
+
+- What exact work is currently tracked?
+- What columns exist in the Excel files?
+- What defines completion?
+- Who performs final approval?
+- Can one task have multiple Members?
+- Can Members decline work?
+- Can tasks be reassigned?
+- Can tasks be cancelled?
+- Can deadlines change?
+- Are recurring tasks needed?
+- Does the company distinguish rejection from revision?
+
+## Performance
+
+- How is performance currently measured?
+- Does priority affect performance?
+- Does complexity affect performance?
+- Does Admin rating affect performance?
+- What is considered good performance?
+- What reporting period is used?
+
+## Reports
+
+- What reports does the Chief currently receive?
+- Daily?
+- Weekly?
+- Monthly?
+- What exact report format is required?
+- Are Admin-written management summaries required?
+- Does Chief approve/reject reports?
+- Is Excel export mandatory?
+- Is PDF export mandatory?
+
+## Inventory
+
+- Is inventory actually part of the workflow?
+- What items are tracked?
+- Stock or assets?
+- Are quantities required?
+- Stock-in?
+- Stock-out?
+- Returns?
+- Are warehouses required?
+- Is inventory linked to tasks?
+
+## Files
+
+- Which file types are permitted?
+- Maximum file size?
+- Maximum file count?
+
+## Real-Time
+
+- Which events require immediate updates?
+- Which roles require live activity?
+- Are dashboard counters real-time?
+- Are external notifications required?
+
+## Migration
+
+- How many Excel files exist?
+- How many sheets exist?
+- How much historical data is required?
+- Are staff names consistent?
+- Are duplicate records present?
+- Are statuses standardized?
+- Are task IDs available?
+
+---
+
+# 68. Development Lock Conditions
+
+The following should be confirmed before major domain implementation:
 
 ```text
 Role Permission Matrix
@@ -1307,57 +2368,120 @@ File Limits
 Notification Scope
 ```
 
-Do not invent missing business rules.
+The core architecture can begin before every business answer is complete, but unresolved requirements must not be replaced by invented business rules.
 
 ---
 
-## 45. Final Product Architecture
+# 69. Final Product Architecture
 
 ```text
 OPERIX
-  ├── Users / Teams
-  ├── Tasks / Assignments
-  ├── Submissions / Reviews
-  ├── Inventory — if required
-  ↓
+   │
+   ├── Users / Teams
+   │
+   ├── Tasks / Assignments
+   │
+   ├── Submissions / Reviews
+   │
+   ├── Inventory — if required
+   │
+   ↓
 Activities
-  ↓
+   ↓
 Central Database
-  ↓
-Performance / Reports / Notifications / Analytics
-  ↓
-Dashboards / Real-Time Updates
-  ↓
+   ↓
+Performance
+Reports
+Notifications
+Analytics
+   ↓
+Dashboards
+Real-Time Updates
+   ↓
 Management Decision
 ```
 
 ---
 
-## 46. Product Positioning
+# 70. Core Product Principle
+
+Every important operational action should generate structured information that the platform can use for:
+
+```text
+Tracking
+Reporting
+Performance Analysis
+Workload Analysis
+Notifications
+Audit History
+Analytics
+Management Decision-Making
+```
+
+The permanent Operix operational philosophy is:
+
+# Work → Activity → Data → Analytics → Decision
+
+---
+
+# 71. Product Positioning
+
+## Product Name
 
 **Operix**
 
-**Full Title:** Pharmaceutical Workload & Operations Management Platform
-**Short Description:** Smart Workforce, Task & Operational Management
-**Tagline:** Operate. Track. Perform.
+## Full Product Title
 
-Development priority:
+**Operix — Pharmaceutical Workload & Operations Management Platform**
+
+## Short Description
+
+**Smart Workforce, Task & Operational Management**
+
+## Primary Tagline
+
+**Operate. Track. Perform.**
+
+## Product Statement
+
+Operix is a role-based enterprise operational management platform that enables organizational leadership to monitor work from assignment through completion, allows Admins to distribute and review work using real workload and performance information, enables Members to execute and submit tasks digitally, and converts operational activity into structured data, reports, analytics, notifications, and management insight.
+
+---
+
+# 72. V1 Development Priority
+
+The recommended development order is:
 
 ```text
 Authentication
-→ RBAC
-→ Users / Teams
-→ Task Assignment
-→ Task Execution
-→ Submission
-→ Review / Revision
-→ Activity Tracking
-→ Performance
-→ Reports
-→ Analytics
-→ Real-Time
-→ Excel Migration
-→ Inventory — if confirmed
+     ↓
+RBAC
+     ↓
+Users / Teams
+     ↓
+Task Assignment
+     ↓
+Task Execution
+     ↓
+Submission
+     ↓
+Review / Revision
+     ↓
+Activity Tracking
+     ↓
+Performance
+     ↓
+Reports
+     ↓
+Analytics
+     ↓
+Real-Time
+     ↓
+Excel Migration
+     ↓
+Inventory — if confirmed
 ```
 
-Build trustworthy operational data before advanced charts.
+The first production objective is to make the **core work lifecycle trustworthy**.
+
+Charts and advanced analytics should be built on top of accurate operational data rather than before it.

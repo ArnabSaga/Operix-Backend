@@ -1,0 +1,9 @@
+{
+  "tool": "jest",
+  "gate": null,
+  "additionalTools": [],
+  "e2eTool": "none",
+  "testDir": "tests",
+  "filePattern": "*.spec.ts",
+  "packageManager": "pnpm"
+}
