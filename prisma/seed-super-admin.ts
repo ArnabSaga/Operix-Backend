@@ -91,7 +91,8 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : 'SUPER_ADMIN seed failed.';
+  const message =
+    error instanceof Error ? error.message : 'SUPER_ADMIN seed failed.';
   console.error(message);
   process.exitCode = 1;
 });

@@ -1,6 +1,8 @@
 import { OperixAuthService } from '../../../src/modules/auth/auth.service';
 import { UserRole, UserStatus } from '../../../generated/prisma/enums';
 
+const jestApi = import.meta.jest;
+
 describe('OperixAuthService', () => {
   const service = new OperixAuthService({} as never);
 
@@ -43,7 +45,7 @@ describe('OperixAuthService', () => {
   it('preserves viewer status separately from scope for later account blocking', async () => {
     const prisma = {
       user: {
-        findUnique: jest.fn().mockResolvedValue({
+        findUnique: jestApi.fn().mockResolvedValue({
           id: 'user-a',
           role: UserRole.MEMBER,
           status: UserStatus.SUSPENDED,

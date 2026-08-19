@@ -1,14 +1,18 @@
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../src/database/prisma.service';
-import { createOperixAuth } from '../../../src/modules/auth/auth.factory';
 
-jest.mock('@better-auth/prisma-adapter', () => ({
-  prismaAdapter: jest.fn(() => 'database-adapter'),
+const jestApi = import.meta.jest;
+
+jestApi.unstable_mockModule('@better-auth/prisma-adapter', () => ({
+  prismaAdapter: jestApi.fn(() => 'database-adapter'),
 }));
 
-jest.mock('better-auth', () => ({
-  betterAuth: jest.fn((options: unknown) => ({ options })),
+jestApi.unstable_mockModule('better-auth', () => ({
+  betterAuth: jestApi.fn((options: unknown) => ({ options })),
 }));
+
+const { createOperixAuth } =
+  await import('../../../src/modules/auth/auth.factory');
 
 describe('createOperixAuth', () => {
   it('creates Better Auth with the Operix API namespace and disabled public sign-up', () => {

@@ -6,6 +6,8 @@ import {
 import type { Response } from 'express';
 import { GlobalExceptionFilter } from '../../../src/shared/filters/global-exception.filter';
 
+const jestApi = import.meta.jest;
+
 interface ResponseHarness {
   response: Response;
   status: jest.Mock;
@@ -13,8 +15,8 @@ interface ResponseHarness {
 }
 
 function createResponseHarness(): ResponseHarness {
-  const json = jest.fn();
-  const status = jest.fn().mockReturnValue({ json });
+  const json = jestApi.fn();
+  const status = jestApi.fn().mockReturnValue({ json });
   const response = { status } as unknown as Response;
 
   return { response, status, json };
