@@ -7,6 +7,8 @@ import { validateEnvironment } from './config/env.validation.js';
 import { PrismaModule } from './database/prisma.module.js';
 import { OperixAuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { TeamModule } from './modules/team/team.module.js';
+import { UserManagementModule } from './modules/user-management/user-management.module.js';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { HealthModule } from './modules/health/health.module.js';
     ]),
     PrismaModule,
     OperixAuthModule,
+    TeamModule,
+    UserManagementModule,
     HealthModule,
   ],
   providers: [

@@ -3,7 +3,12 @@ import { prismaAdapter } from '@better-auth/prisma-adapter';
 import { betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
 import type { PrismaService } from '../../database/prisma.service.js';
+import { UserStatus, type UserRole } from '../../../generated/prisma/enums.js';
 import { OPERIX_AUTH_BASE_PATH } from './auth.constant.js';
+import {
+  INITIAL_PASSWORD_MAX_LENGTH,
+  INITIAL_PASSWORD_MIN_LENGTH,
+} from '../user-management/user-management.constant.js';
 
 const operixUserAdditionalFields = {
   role: {
@@ -62,6 +67,48 @@ export function createOperixSeedAuth(seedOptions: {
     emailAndPassword: {
       enabled: true,
       disableSignUp: false,
+    },
+    user: {
+      additionalFields: operixUserAdditionalFields,
+    },
+  } satisfies BetterAuthOptions;
+
+  return betterAuth(options);
+}
+
+export function createOperixProvisioningAuth(provisioningOptions: {
+  prisma: PrismaService;
+  baseUrl: string;
+  secret: string;
+  forcedRole: UserRole;
+}) {
+  const options = {
+    basePath: OPERIX_AUTH_BASE_PATH,
+    baseURL: provisioningOptions.baseUrl,
+    secret: provisioningOptions.secret,
+    database: prismaAdapter(provisioningOptions.prisma, {
+      provider: 'postgresql',
+    }),
+    emailAndPassword: {
+      enabled: true,
+      disableSignUp: false,
+      autoSignIn: false,
+      minPasswordLength: INITIAL_PASSWORD_MIN_LENGTH,
+      maxPasswordLength: INITIAL_PASSWORD_MAX_LENGTH,
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          before: (user) =>
+            Promise.resolve({
+              data: {
+                ...user,
+                role: provisioningOptions.forcedRole,
+                status: UserStatus.ACTIVE,
+              },
+            }),
+        },
+      },
     },
     user: {
       additionalFields: operixUserAdditionalFields,
