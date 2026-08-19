@@ -6,7 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import type { ApiErrorResponse } from '../errors/api-error-response';
+import type { ApiErrorResponse } from '../errors/api-error-response.js';
 
 const statusCodes: Record<number, string> = {
   [HttpStatus.BAD_REQUEST]: 'VALIDATION_ERROR',

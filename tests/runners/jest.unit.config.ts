@@ -4,6 +4,7 @@ const config: Config = {
   rootDir: '../..',
   testEnvironment: 'node',
   testMatch: ['<rootDir>/tests/unit/**/*.spec.ts'],
+  extensionsToTreatAsEsm: ['.ts'],
   moduleFileExtensions: ['ts', 'js', 'json'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
@@ -12,10 +13,10 @@ const config: Config = {
     '^.+\\.ts$': [
       'ts-jest',
       {
+        useESM: true,
         tsconfig: {
-          module: 'CommonJS',
-          moduleResolution: 'Node',
-          resolvePackageJsonExports: false,
+          module: 'ESNext',
+          moduleResolution: 'Bundler',
         },
       },
     ],

@@ -57,7 +57,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 
 # Prisma generated client
-src/generated/prisma/
+/generated/prisma/
+/src/generated/prisma/
 
 # Better Auth scratch schema (temporary — delete after merge)
 better-auth.generated.prisma
@@ -65,8 +66,8 @@ better-auth.generated.prisma
 
 #AI
 .agents
+AGENTS.md
 GEMINI.md
-AGENTS
 context
 skills-lock.json
 

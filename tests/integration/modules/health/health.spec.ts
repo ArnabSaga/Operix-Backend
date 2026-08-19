@@ -12,6 +12,8 @@ describe('Health endpoint', () => {
       'postgresql://postgres:postgres@127.0.0.1:1/operix_unavailable';
     process.env.FRONTEND_URL = 'http://localhost:3001';
     process.env.SWAGGER_ENABLED = 'false';
+    process.env.BETTER_AUTH_SECRET = 'test-secret-that-is-long-enough-for-auth';
+    process.env.BETTER_AUTH_URL = 'http://localhost:5000';
     app = await createTestApplication();
   });
 

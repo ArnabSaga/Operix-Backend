@@ -24,10 +24,9 @@ model Task {
   completedAt   DateTime?
   cancelledAt   DateTime?
 
-  teamId              String
-  categoryId          String?
-  createdById         String
-  currentAssignmentId String? @unique
+  teamId      String
+  categoryId  String?
+  createdById String
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -36,11 +35,10 @@ model Task {
   category  TaskCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   createdBy User          @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
-  currentAssignment TaskAssignment?     @relation("CurrentTaskAssignment", fields: [currentAssignmentId], references: [id], onDelete: SetNull)
-  assignments       TaskAssignment[]    @relation("TaskAssignments")
-  statusHistory     TaskStatusHistory[]
-  submissions       TaskSubmission[]
-  attachments       TaskAttachment[]
+  assignments   TaskAssignment[]    @relation("TaskAssignments")
+  statusHistory TaskStatusHistory[]
+  submissions   TaskSubmission[]
+  attachments   TaskAttachment[]
 
   @@index([teamId])
   @@index([status])
@@ -63,8 +61,6 @@ model TaskAssignment {
   task       Task @relation("TaskAssignments", fields: [taskId], references: [id], onDelete: Cascade)
   member     User @relation("MemberAssignments", fields: [memberId], references: [id], onDelete: Restrict)
   assignedBy User @relation("AssignmentsCreated", fields: [assignedById], references: [id], onDelete: Restrict)
-
-  currentForTask Task? @relation("CurrentTaskAssignment")
 
   @@index([taskId, assignedAt])
   @@index([memberId])
