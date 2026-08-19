@@ -6,12 +6,16 @@ import { USER_MANAGEMENT_ERROR_CODE } from '../../../src/modules/user-management
 
 const jestApi = import.meta.jest;
 const signUpEmailMock = jestApi.fn();
+let capturedCreatedUserId: string | null = null;
 
 jestApi.unstable_mockModule('../../../src/modules/auth/auth.factory', () => ({
   createOperixProvisioningAuth: jestApi.fn(() => ({
-    api: {
-      signUpEmail: signUpEmailMock,
+    auth: {
+      api: {
+        signUpEmail: signUpEmailMock,
+      },
     },
+    getCreatedUserId: () => capturedCreatedUserId,
   })),
 }));
 
@@ -47,6 +51,7 @@ function expectAppException(
 
 describe('AccountProvisioningService', () => {
   beforeEach(() => {
+    capturedCreatedUserId = null;
     signUpEmailMock.mockReset();
     signUpEmailMock.mockResolvedValue({});
   });
@@ -56,7 +61,6 @@ describe('AccountProvisioningService', () => {
       user: {
         findUnique: jestApi
           .fn()
-          .mockResolvedValueOnce(null)
           .mockResolvedValueOnce(null)
           .mockResolvedValueOnce(null),
         update: jestApi.fn(),
@@ -99,6 +103,7 @@ describe('AccountProvisioningService', () => {
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     };
     const enrichmentError = new Error('update failed');
+    capturedCreatedUserId = 'admin-a';
     const prisma = {
       user: {
         findUnique: jestApi

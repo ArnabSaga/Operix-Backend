@@ -8,7 +8,7 @@ import { OPERIX_AUTH_BASE_PATH } from './auth.constant.js';
 import {
   INITIAL_PASSWORD_MAX_LENGTH,
   INITIAL_PASSWORD_MIN_LENGTH,
-} from '../user-management/user-management.constant.js';
+} from './password-policy.constant.js';
 
 const operixUserAdditionalFields = {
   role: {
@@ -82,6 +82,8 @@ export function createOperixProvisioningAuth(provisioningOptions: {
   secret: string;
   forcedRole: UserRole;
 }) {
+  let createdUserId: string | null = null;
+
   const options = {
     basePath: OPERIX_AUTH_BASE_PATH,
     baseURL: provisioningOptions.baseUrl,
@@ -107,6 +109,10 @@ export function createOperixProvisioningAuth(provisioningOptions: {
                 status: UserStatus.ACTIVE,
               },
             }),
+          after: (user) => {
+            createdUserId = user.id;
+            return Promise.resolve();
+          },
         },
       },
     },
@@ -115,7 +121,10 @@ export function createOperixProvisioningAuth(provisioningOptions: {
     },
   } satisfies BetterAuthOptions;
 
-  return betterAuth(options);
+  return {
+    auth: betterAuth(options),
+    getCreatedUserId: () => createdUserId,
+  };
 }
 
 export type OperixAuth = ReturnType<typeof createOperixAuth>;

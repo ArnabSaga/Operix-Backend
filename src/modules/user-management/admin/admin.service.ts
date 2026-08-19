@@ -4,6 +4,7 @@ import { UserRole, UserStatus } from '../../../../generated/prisma/enums.js';
 import { PrismaService } from '../../../database/prisma.service.js';
 import { writeActivity } from '../../../shared/activity/activity-write.js';
 import { AppException } from '../../../shared/errors/app.exception.js';
+import { runSerializableTransaction } from '../../../shared/database/serializable-transaction.js';
 import {
   createPaginationMeta,
   normalizePagination,
@@ -44,17 +45,22 @@ export class AdminService {
       role: UserRole.ADMIN,
     });
 
-    await this.prisma.$transaction(async (tx) => {
-      await writeActivity(tx, {
-        actorId: viewer.userId,
-        action: USER_MANAGEMENT_ACTIVITY.ADMIN_CREATED,
-        entityType: 'USER',
-        entityId: admin.id,
-        metadata: {
-          adminId: admin.id,
-        },
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await writeActivity(tx, {
+          actorId: viewer.userId,
+          action: USER_MANAGEMENT_ACTIVITY.ADMIN_CREATED,
+          entityType: 'USER',
+          entityId: admin.id,
+          metadata: {
+            adminId: admin.id,
+          },
+        });
       });
-    });
+    } catch (error) {
+      await this.provisioner.cleanupCreatedUser(admin.id);
+      throw error;
+    }
 
     return admin;
   }
@@ -159,23 +165,23 @@ export class AdminService {
       return admin;
     }
 
-    if (dto.status !== UserStatus.ACTIVE) {
-      const ownedTeamCount = await this.prisma.team.count({
-        where: {
-          adminId,
-        },
-      });
+    return runSerializableTransaction(this.prisma, async (tx) => {
+      if (dto.status !== UserStatus.ACTIVE) {
+        const ownedTeamCount = await tx.team.count({
+          where: {
+            adminId,
+          },
+        });
 
-      if (ownedTeamCount > 0) {
-        throw new AppException(
-          HttpStatus.CONFLICT,
-          USER_MANAGEMENT_ERROR_CODE.ADMIN_HAS_ASSIGNED_TEAMS,
-          'Admin has assigned teams.',
-        );
+        if (ownedTeamCount > 0) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            USER_MANAGEMENT_ERROR_CODE.ADMIN_HAS_ASSIGNED_TEAMS,
+            'Admin has assigned teams.',
+          );
+        }
       }
-    }
 
-    return this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({
         where: { id: adminId },
         data: {

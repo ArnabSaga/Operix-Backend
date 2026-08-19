@@ -1,8 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { Prisma } from '../../../generated/prisma/client.js';
 import { UserRole, UserStatus } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { writeActivity } from '../../shared/activity/activity-write.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { runSerializableTransaction } from '../../shared/database/serializable-transaction.js';
 import { AppException } from '../../shared/errors/app.exception.js';
 import { createNotification } from '../../shared/notification/notification-write.js';
 import {
@@ -35,9 +37,9 @@ export class TeamService {
     viewer: OperixViewer,
     dto: CreateTeamDto,
   ): Promise<SafeTeamResponse> {
-    await this.assertActiveAdmin(dto.adminId);
+    return runSerializableTransaction(this.prisma, async (tx) => {
+      await this.assertActiveAdmin(tx, dto.adminId);
 
-    return this.prisma.$transaction(async (tx) => {
       const team = await tx.team.create({
         data: {
           name: dto.name,
@@ -161,9 +163,9 @@ export class TeamService {
       );
     }
 
-    await this.assertActiveAdmin(dto.adminId);
+    return runSerializableTransaction(this.prisma, async (tx) => {
+      await this.assertActiveAdmin(tx, dto.adminId);
 
-    return this.prisma.$transaction(async (tx) => {
       const updated = await tx.team.update({
         where: {
           id: teamId,
@@ -244,45 +246,49 @@ export class TeamService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      await tx.teamMember.create({
-        data: {
-          teamId,
-          memberId: dto.memberId,
-        },
-      });
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.teamMember.create({
+          data: {
+            teamId,
+            memberId: dto.memberId,
+          },
+        });
 
-      await writeActivity(tx, {
-        actorId: viewer.userId,
-        action: TEAM_ACTIVITY.MEMBER_ASSIGNED_TO_TEAM,
-        entityType: 'TEAM',
-        entityId: teamId,
-        metadata: {
-          memberId: dto.memberId,
-          teamId,
-          adminId: team.adminId,
-        },
-      });
+        await writeActivity(tx, {
+          actorId: viewer.userId,
+          action: TEAM_ACTIVITY.MEMBER_ASSIGNED_TO_TEAM,
+          entityType: 'TEAM',
+          entityId: teamId,
+          metadata: {
+            memberId: dto.memberId,
+            teamId,
+            adminId: team.adminId,
+          },
+        });
 
-      await createNotification(tx, {
-        receiverId: dto.memberId,
-        actorId: viewer.userId,
-        type: TEAM_NOTIFICATION.MEMBER_ASSIGNED_TO_TEAM,
-        title: 'Team assignment updated',
-        body: 'You have been assigned to a team.',
-        targetType: 'TEAM',
-        targetId: teamId,
-      });
+        await createNotification(tx, {
+          receiverId: dto.memberId,
+          actorId: viewer.userId,
+          type: TEAM_NOTIFICATION.MEMBER_ASSIGNED_TO_TEAM,
+          title: 'Team assignment updated',
+          body: 'You have been assigned to a team.',
+          targetType: 'TEAM',
+          targetId: teamId,
+        });
 
-      const assignedTeam = await tx.team.findUniqueOrThrow({
-        where: {
-          id: teamId,
-        },
-        select: teamSelect,
-      });
+        const assignedTeam = await tx.team.findUniqueOrThrow({
+          where: {
+            id: teamId,
+          },
+          select: teamSelect,
+        });
 
-      return assignedTeam;
-    });
+        return assignedTeam;
+      });
+    } catch (error) {
+      throw mapAssignmentRace(error);
+    }
   }
 
   async transferMember(
@@ -336,57 +342,68 @@ export class TeamService {
     const targetTeam = await this.findTeamWithAdmin(targetTeamId);
     this.assertTeamHasActiveAdmin(targetTeam);
 
-    return this.prisma.$transaction(async (tx) => {
-      await tx.teamMember.delete({
-        where: {
-          id: currentMembership.id,
-        },
-      });
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.teamMember.delete({
+          where: {
+            id: currentMembership.id,
+          },
+        });
 
-      await tx.teamMember.create({
-        data: {
-          teamId: targetTeamId,
-          memberId,
-        },
-      });
+        await tx.teamMember.create({
+          data: {
+            teamId: targetTeamId,
+            memberId,
+          },
+        });
 
-      await writeActivity(tx, {
-        actorId: viewer.userId,
-        action: TEAM_ACTIVITY.MEMBER_TRANSFERRED,
-        entityType: 'USER',
-        entityId: memberId,
-        metadata: {
-          memberId,
-          fromTeamId: currentMembership.teamId,
-          toTeamId: targetTeamId,
-          fromAdminId: currentMembership.team.adminId,
-          toAdminId: targetTeam.adminId,
-        },
-      });
+        await writeActivity(tx, {
+          actorId: viewer.userId,
+          action: TEAM_ACTIVITY.MEMBER_TRANSFERRED,
+          entityType: 'USER',
+          entityId: memberId,
+          metadata: {
+            memberId,
+            fromTeamId: currentMembership.teamId,
+            toTeamId: targetTeamId,
+            fromAdminId: currentMembership.team.adminId,
+            toAdminId: targetTeam.adminId,
+          },
+        });
 
-      await createNotification(tx, {
-        receiverId: memberId,
-        actorId: viewer.userId,
-        type: TEAM_NOTIFICATION.MEMBER_TRANSFERRED,
-        title: 'Team assignment changed',
-        body: 'You have been transferred to another team.',
-        targetType: 'TEAM',
-        targetId: targetTeamId,
-      });
+        await createNotification(tx, {
+          receiverId: memberId,
+          actorId: viewer.userId,
+          type: TEAM_NOTIFICATION.MEMBER_TRANSFERRED,
+          title: 'Team assignment changed',
+          body: 'You have been transferred to another team.',
+          targetType: 'TEAM',
+          targetId: targetTeamId,
+        });
 
-      const updatedTeam = await tx.team.findUniqueOrThrow({
-        where: {
-          id: targetTeamId,
-        },
-        select: teamSelect,
-      });
+        const updatedTeam = await tx.team.findUniqueOrThrow({
+          where: {
+            id: targetTeamId,
+          },
+          select: teamSelect,
+        });
 
-      return updatedTeam;
-    });
+        return updatedTeam;
+      });
+    } catch (error) {
+      throw mapTransferRace(error);
+    }
   }
 
-  private async assertActiveAdmin(adminId: string): Promise<void> {
-    const admin = await this.prisma.user.findFirst({
+  private async assertActiveAdmin(
+    tx: {
+      user: {
+        findFirst: PrismaTransactionFindFirstUser;
+      };
+    },
+    adminId: string,
+  ): Promise<void> {
+    const admin = await tx.user.findFirst({
       where: {
         id: adminId,
         role: UserRole.ADMIN,
@@ -416,6 +433,7 @@ export class TeamService {
         adminId: true,
         admin: {
           select: {
+            role: true,
             status: true,
           },
         },
@@ -431,10 +449,14 @@ export class TeamService {
 
   private assertTeamHasActiveAdmin(team: {
     admin: {
+      role: UserRole;
       status: UserStatus;
     };
   }): void {
-    if (team.admin.status !== UserStatus.ACTIVE) {
+    if (
+      team.admin.role !== UserRole.ADMIN ||
+      team.admin.status !== UserStatus.ACTIVE
+    ) {
       throw new AppException(
         HttpStatus.CONFLICT,
         TEAM_ERROR_CODE.TARGET_ADMIN_NOT_ACTIVE,
@@ -458,4 +480,38 @@ export class TeamService {
       'Team not found.',
     );
   }
+}
+
+type PrismaTransactionFindFirstUser =
+  PrismaTransactionUserDelegate['findFirst'];
+type PrismaTransactionUserDelegate = Prisma.TransactionClient['user'];
+
+function mapAssignmentRace(error: unknown): Error {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  ) {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      TEAM_ERROR_CODE.MEMBER_ALREADY_ASSIGNED,
+      'Member is already assigned to a team.',
+    );
+  }
+
+  return error instanceof Error ? error : new Error('Unexpected error.');
+}
+
+function mapTransferRace(error: unknown): Error {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === 'P2002' || error.code === 'P2025')
+  ) {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      TEAM_ERROR_CODE.MEMBER_ASSIGNMENT_CHANGED,
+      'The member assignment changed while processing this request. Please retry.',
+    );
+  }
+
+  return error instanceof Error ? error : new Error('Unexpected error.');
 }

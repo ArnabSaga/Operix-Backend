@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, HttpStatus } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  HttpStatus,
+  Injectable,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { UserRole } from '../../../generated/prisma/enums.js';
 import { APP_ERROR_CODE } from '../errors/app-error-code.constant.js';
@@ -6,6 +11,7 @@ import { AppException } from '../errors/app.exception.js';
 import { OPERIX_REQUIRED_ROLES_METADATA_KEY } from './auth-metadata.constant.js';
 import type { OperixRequest } from './operix-request.interface.js';
 
+@Injectable()
 export class OperixRoleGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 

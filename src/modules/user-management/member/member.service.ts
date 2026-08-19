@@ -49,17 +49,22 @@ export class MemberService {
       role: UserRole.MEMBER,
     });
 
-    await this.prisma.$transaction(async (tx) => {
-      await writeActivity(tx, {
-        actorId: viewer.userId,
-        action: USER_MANAGEMENT_ACTIVITY.MEMBER_CREATED,
-        entityType: 'USER',
-        entityId: member.id,
-        metadata: {
-          memberId: member.id,
-        },
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await writeActivity(tx, {
+          actorId: viewer.userId,
+          action: USER_MANAGEMENT_ACTIVITY.MEMBER_CREATED,
+          entityType: 'USER',
+          entityId: member.id,
+          metadata: {
+            memberId: member.id,
+          },
+        });
       });
-    });
+    } catch (error) {
+      await this.provisioner.cleanupCreatedUser(member.id);
+      throw error;
+    }
 
     return member;
   }

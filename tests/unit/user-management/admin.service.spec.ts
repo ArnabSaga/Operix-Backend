@@ -89,9 +89,18 @@ describe('AdminService', () => {
       user: {
         findFirst: jestApi.fn().mockResolvedValue(admin),
       },
-      team: {
-        count: jestApi.fn().mockResolvedValue(1),
-      },
+      $transaction: jestApi.fn(
+        (
+          callback: (transaction: {
+            team: { count: () => Promise<number> };
+          }) => Promise<unknown>,
+        ) =>
+          callback({
+            team: {
+              count: jestApi.fn().mockResolvedValue(1),
+            },
+          }),
+      ),
     };
     const service = new AdminService(
       prisma as unknown as PrismaService,

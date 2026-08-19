@@ -34,14 +34,14 @@ export class AccountProvisioningService {
     await this.assertEmailAvailable(input.email);
     await this.assertEmployeeIdAvailable(input.employeeId ?? null);
 
-    const auth = createOperixProvisioningAuth({
+    const provisioning = createOperixProvisioningAuth({
       prisma: this.prisma,
       baseUrl: this.config.getOrThrow<string>('auth.baseUrl'),
       secret: this.config.getOrThrow<string>('auth.secret'),
       forcedRole: input.role,
     });
 
-    await auth.api.signUpEmail({
+    await provisioning.auth.api.signUpEmail({
       body: {
         email: input.email,
         password: input.initialPassword,
@@ -49,17 +49,26 @@ export class AccountProvisioningService {
       },
     });
 
+    const createdUserId = provisioning.getCreatedUserId();
+
+    if (!createdUserId) {
+      await this.throwProvisioningPostconditionError(input.email);
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        USER_MANAGEMENT_ERROR_CODE.ACCOUNT_PROVISIONING_FAILED,
+        'Account provisioning failed.',
+      );
+    }
+
     const createdUser = await this.prisma.user.findUnique({
       where: {
-        email: input.email,
+        id: createdUserId,
       },
       select: adminSelect,
     });
 
     if (createdUser?.role !== input.role) {
-      if (createdUser?.id) {
-        await this.cleanupUser(createdUser.id);
-      }
+      await this.cleanupCreatedUser(createdUserId);
 
       throw new AppException(
         HttpStatus.CONFLICT,
@@ -71,7 +80,7 @@ export class AccountProvisioningService {
     try {
       return await this.prisma.user.update({
         where: {
-          id: createdUser.id,
+          id: createdUserId,
         },
         data: {
           employeeId: input.employeeId ?? null,
@@ -81,7 +90,7 @@ export class AccountProvisioningService {
         select: adminSelect,
       });
     } catch (error) {
-      await this.cleanupUser(createdUser.id);
+      await this.cleanupCreatedUser(createdUserId);
 
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -142,7 +151,34 @@ export class AccountProvisioningService {
     }
   }
 
-  private async cleanupUser(userId: string): Promise<void> {
+  private async throwProvisioningPostconditionError(
+    email: string,
+  ): Promise<never> {
+    const existing = await this.prisma.user.findUnique({
+      where: {
+        email,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (existing) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        USER_MANAGEMENT_ERROR_CODE.EMAIL_ALREADY_EXISTS,
+        'Email already exists.',
+      );
+    }
+
+    throw new AppException(
+      HttpStatus.CONFLICT,
+      USER_MANAGEMENT_ERROR_CODE.ACCOUNT_PROVISIONING_FAILED,
+      'Account provisioning failed.',
+    );
+  }
+
+  async cleanupCreatedUser(userId: string): Promise<void> {
     await this.prisma.user.deleteMany({
       where: {
         id: userId,

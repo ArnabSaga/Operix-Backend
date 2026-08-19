@@ -8,7 +8,7 @@ import {
 import {
   INITIAL_PASSWORD_MAX_LENGTH,
   INITIAL_PASSWORD_MIN_LENGTH,
-} from '../../user-management.constant.js';
+} from '../../../auth/password-policy.constant.js';
 
 export class CreateAdminDto {
   @IsString()
