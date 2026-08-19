@@ -4,7 +4,7 @@ import { Session } from '@thallesp/nestjs-better-auth';
 import type { UserSession } from '@thallesp/nestjs-better-auth';
 import type { OperixAuth } from './auth.factory.js';
 import { OperixAuthService } from './auth.service.js';
-import type { OperixViewer } from './auth.interface.js';
+import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 
 @ApiTags('auth')
 @Controller('auth')

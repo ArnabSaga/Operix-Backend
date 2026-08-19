@@ -1,7 +1,10 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import { UserRole } from '../../../generated/prisma/enums.js';
-import type { OperixViewer, OperixViewerScope } from './auth.interface.js';
+import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
+import { AppException } from '../../shared/errors/app.exception.js';
+import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import type { OperixViewerScope } from '../../shared/auth/scope/viewer-scope.interface.js';
 
 @Injectable()
 export class OperixAuthService {
@@ -28,11 +31,11 @@ export class OperixAuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException({
-        message: 'Authentication required.',
-        code: 'AUTH_REQUIRED',
-        details: null,
-      });
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        APP_ERROR_CODE.AUTH_REQUIRED,
+        'Authentication required.',
+      );
     }
 
     return {

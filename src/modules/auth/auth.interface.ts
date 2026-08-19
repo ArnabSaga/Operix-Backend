@@ -1,17 +1,3 @@
-import type { UserRole, UserStatus } from '../../../generated/prisma/enums.js';
-
-export type OperixViewerScope =
-  | { type: 'GLOBAL' }
-  | { type: 'ADMIN'; teamIds: string[] }
-  | { type: 'MEMBER'; teamId: string | null };
-
-export interface OperixViewer {
-  userId: string;
-  role: UserRole;
-  status: UserStatus;
-  scope: OperixViewerScope;
-}
-
 export interface SuperAdminSeedConfiguration {
   email: string;
   password: string;
