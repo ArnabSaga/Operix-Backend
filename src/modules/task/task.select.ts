@@ -1,0 +1,18 @@
+export const taskSelect = {
+  id: true,
+  referenceCode: true,
+  title: true,
+  description: true,
+  remarks: true,
+  priority: true,
+  status: true,
+  dueAt: true,
+  startedAt: true,
+  completedAt: true,
+  cancelledAt: true,
+  teamId: true,
+  categoryId: true,
+  createdById: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
