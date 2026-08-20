@@ -159,14 +159,27 @@ export class AdminService {
     adminId: string,
     dto: UpdateAdminStatusDto,
   ): Promise<SafeUserResponse> {
-    const admin = await this.getAdmin(adminId);
-
-    if (admin.status === dto.status) {
-      return admin;
-    }
-
     return runSerializableTransaction(this.prisma, async (tx) => {
-      if (dto.status !== UserStatus.ACTIVE) {
+      const admin = await tx.user.findFirst({
+        where: {
+          id: adminId,
+          role: UserRole.ADMIN,
+        },
+        select: adminSelect,
+      });
+
+      if (!admin) {
+        throw this.adminNotFound();
+      }
+
+      if (admin.status === dto.status) {
+        return admin;
+      }
+
+      if (
+        dto.status === UserStatus.INACTIVE ||
+        dto.status === UserStatus.SUSPENDED
+      ) {
         const ownedTeamCount = await tx.team.count({
           where: {
             adminId,
