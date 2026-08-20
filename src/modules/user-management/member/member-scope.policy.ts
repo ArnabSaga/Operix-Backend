@@ -14,8 +14,8 @@ export function buildMemberScopeWhere(
   return {
     role: UserRole.MEMBER,
     teamMembership: {
-      team: {
-        adminId: viewer.userId,
+      teamId: {
+        in: viewer.scope.type === 'ADMIN' ? viewer.scope.teamIds : [],
       },
     },
   };
