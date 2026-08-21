@@ -1,3 +1,12 @@
-import type { Prisma } from '../../../generated/prisma/client.js';
+import type { PrismaService } from '../../database/prisma.service.js';
 
-export type PrismaTransactionClient = Prisma.TransactionClient;
+export type PrismaTransactionClient = Omit<
+  PrismaService,
+  | '$connect'
+  | '$disconnect'
+  | '$on'
+  | '$transaction'
+  | '$use'
+  | '$extends'
+  | 'onModuleDestroy'
+>;
