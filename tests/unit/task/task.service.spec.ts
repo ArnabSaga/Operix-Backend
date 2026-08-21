@@ -29,6 +29,18 @@ const jestApi = import.meta.jest;
 
 const fixedDate = new Date('2026-08-20T10:00:00.000Z');
 
+function createTaskService(
+  prisma: PrismaService,
+  mailService = {
+    sendTaskAssignedEmail: jestApi.fn().mockResolvedValue(undefined),
+  },
+): TaskService {
+  return new TaskService(
+    prisma,
+    mailService as unknown as ConstructorParameters<typeof TaskService>[1],
+  );
+}
+
 function createViewer(role: UserRole): OperixViewer {
   return {
     userId:
@@ -163,7 +175,7 @@ describe('ListTaskQueryDto', () => {
 
 describe('TaskService', () => {
   it('rejects Super Admin task creation for V1', async () => {
-    const service = new TaskService({} as PrismaService);
+    const service = createTaskService({} as PrismaService);
 
     try {
       await service.createTask(createViewer(UserRole.SUPER_ADMIN), {
@@ -201,7 +213,7 @@ describe('TaskService', () => {
           callback(tx),
       ),
     };
-    const service = new TaskService(prisma as unknown as PrismaService);
+    const service = createTaskService(prisma as unknown as PrismaService);
 
     await expect(
       service.createTask(createViewer(UserRole.ADMIN), {
@@ -244,7 +256,7 @@ describe('TaskService', () => {
         findFirst: jestApi.fn().mockResolvedValue(null),
       },
     };
-    const service = new TaskService(prisma as unknown as PrismaService);
+    const service = createTaskService(prisma as unknown as PrismaService);
 
     try {
       await service.getTask(createViewer(UserRole.ADMIN), 'task-b');
@@ -268,7 +280,7 @@ describe('TaskService', () => {
         count: jestApi.fn().mockResolvedValue(1),
       },
     };
-    const service = new TaskService(prisma as unknown as PrismaService);
+    const service = createTaskService(prisma as unknown as PrismaService);
 
     await expect(
       service.listTasks(createViewer(UserRole.ADMIN), {
@@ -320,7 +332,7 @@ describe('TaskService', () => {
         findFirst: jestApi.fn().mockResolvedValue(overdueTask),
       },
     };
-    const service = new TaskService(prisma as unknown as PrismaService);
+    const service = createTaskService(prisma as unknown as PrismaService);
 
     await expect(
       service.getTask(createViewer(UserRole.ADMIN), 'task-a'),
@@ -349,7 +361,7 @@ describe('TaskService', () => {
         count: jestApi.fn().mockResolvedValue(1),
       },
     };
-    const service = new TaskService(prisma as unknown as PrismaService);
+    const service = createTaskService(prisma as unknown as PrismaService);
 
     await expect(
       service.getTaskHistory(createViewer(UserRole.ADMIN), 'task-a', {
@@ -406,7 +418,7 @@ describe('TaskService', () => {
         findFirst: jestApi.fn().mockResolvedValue(null),
       },
     };
-    const service = new TaskService(prisma as unknown as PrismaService);
+    const service = createTaskService(prisma as unknown as PrismaService);
 
     try {
       await service.getTaskHistory(createViewer(UserRole.ADMIN), 'task-b', {});
@@ -441,7 +453,7 @@ describe('TaskService', () => {
           callback(tx),
       ),
     };
-    const service = new TaskService(prisma as unknown as PrismaService);
+    const service = createTaskService(prisma as unknown as PrismaService);
 
     try {
       await service.assignTask(createViewer(UserRole.ADMIN), 'task-a', {
@@ -456,8 +468,11 @@ describe('TaskService', () => {
     }
   });
 
-  it('assigns a pending Task with status history, activity, and notification', async () => {
+  it('assigns a pending Task with status history, activity, notification, and post-commit email', async () => {
     const updatedTask = createTask({ status: TaskStatus.ASSIGNED });
+    const mailService = {
+      sendTaskAssignedEmail: jestApi.fn().mockResolvedValue(undefined),
+    };
     const tx = {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
@@ -472,7 +487,11 @@ describe('TaskService', () => {
         create: jestApi.fn().mockResolvedValue({ id: 'assignment-a' }),
       },
       user: {
-        findFirst: jestApi.fn().mockResolvedValue({ id: 'member-a' }),
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'member-a',
+          name: 'Member A',
+          email: 'member@example.com',
+        }),
       },
       taskStatusHistory: {
         create: jestApi.fn().mockResolvedValue({ id: 'history-a' }),
@@ -490,7 +509,10 @@ describe('TaskService', () => {
           callback(tx),
       ),
     };
-    const service = new TaskService(prisma as unknown as PrismaService);
+    const service = createTaskService(
+      prisma as unknown as PrismaService,
+      mailService,
+    );
 
     await expect(
       service.assignTask(createViewer(UserRole.ADMIN), 'task-a', {
@@ -527,6 +549,83 @@ describe('TaskService', () => {
         targetId: 'task-a',
       },
     });
+    expect(mailService.sendTaskAssignedEmail).toHaveBeenCalledWith({
+      memberId: 'member-a',
+      memberName: 'Member A',
+      memberEmail: 'member@example.com',
+      taskId: 'task-a',
+      referenceCode: updatedTask.referenceCode,
+      title: updatedTask.title,
+      priority: updatedTask.priority,
+      dueAt: updatedTask.dueAt,
+      assignmentNote: 'Please start today.',
+    });
+    expect(tx.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      }) as Record<string, unknown>,
+    );
+  });
+
+  it('does not map SMTP failure through assignment conflict handling', async () => {
+    const updatedTask = createTask({ status: TaskStatus.ASSIGNED });
+    const mailService = {
+      sendTaskAssignedEmail: jestApi
+        .fn()
+        .mockRejectedValue(new Error('SMTP unavailable')),
+    };
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-a',
+          status: TaskStatus.PENDING,
+          teamId: 'team-a',
+        }),
+        update: jestApi.fn().mockResolvedValue(updatedTask),
+      },
+      taskAssignment: {
+        findFirst: jestApi.fn().mockResolvedValue(null),
+        create: jestApi.fn().mockResolvedValue({ id: 'assignment-a' }),
+      },
+      user: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'member-a',
+          name: 'Member A',
+          email: 'member@example.com',
+        }),
+      },
+      taskStatusHistory: {
+        create: jestApi.fn().mockResolvedValue({ id: 'history-a' }),
+      },
+      activityLog: {
+        create: jestApi.fn().mockResolvedValue({ id: 'activity-a' }),
+      },
+      notification: {
+        create: jestApi.fn().mockResolvedValue({ id: 'notification-a' }),
+      },
+    };
+    const prisma = {
+      $transaction: jestApi.fn(
+        (callback: (transaction: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      ),
+    };
+    const service = createTaskService(
+      prisma as unknown as PrismaService,
+      mailService,
+    );
+
+    await expect(
+      service.assignTask(createViewer(UserRole.ADMIN), 'task-a', {
+        memberId: 'member-a',
+      }),
+    ).resolves.toEqual(updatedTask);
+
+    expect(mailService.sendTaskAssignedEmail).toHaveBeenCalledTimes(1);
   });
 
   it('starts an assigned Task for the current assignee', async () => {
@@ -555,7 +654,7 @@ describe('TaskService', () => {
           callback(tx),
       ),
     };
-    const service = new TaskService(prisma as unknown as PrismaService);
+    const service = createTaskService(prisma as unknown as PrismaService);
 
     await expect(
       service.startTask(createViewer(UserRole.MEMBER), 'task-a'),

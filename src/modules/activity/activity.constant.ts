@@ -1,0 +1,4 @@
+export const ACTIVITY_FILTER = {
+  ACTION_MAX_LENGTH: 100,
+  ENTITY_TYPE_MAX_LENGTH: 50,
+} as const;

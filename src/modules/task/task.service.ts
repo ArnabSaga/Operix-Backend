@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client.js';
 import {
   TaskPriority,
@@ -16,6 +16,8 @@ import type { PrismaTransactionClient } from '../../shared/database/transaction-
 import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
 import { AppException } from '../../shared/errors/app.exception.js';
 import { createNotification } from '../../shared/notification/notification-write.js';
+import { MailService } from '../../shared/mail/mail.service.js';
+import type { TaskAssignedEmailInput } from '../../shared/mail/mail.interface.js';
 import {
   createPaginationMeta,
   normalizePagination,
@@ -41,7 +43,12 @@ import { taskSelect } from './task.select.js';
 
 @Injectable()
 export class TaskService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(TaskService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService,
+  ) {}
 
   async createTask(
     viewer: OperixViewer,
@@ -206,105 +213,145 @@ export class TaskService {
   ): Promise<SafeTaskResponse> {
     this.assertRole(viewer, UserRole.ADMIN);
 
+    let assignmentResult: {
+      task: SafeTaskResponse;
+      mail: TaskAssignedEmailInput;
+    };
+
     try {
-      return await runSerializableTransaction(this.prisma, async (tx) => {
-        const task = await this.findAdminScopedTask(tx, viewer.userId, taskId);
-
-        if (task.status !== TaskStatus.PENDING) {
-          throw new AppException(
-            HttpStatus.CONFLICT,
-            TASK_ERROR_CODE.INVALID_TASK_TRANSITION,
-            'Task is not assignable in its current status.',
+      assignmentResult = await runSerializableTransaction(
+        this.prisma,
+        async (tx) => {
+          const task = await this.findAdminScopedTask(
+            tx,
+            viewer.userId,
+            taskId,
           );
-        }
 
-        const currentAssignment = await this.findCurrentAssignment(tx, taskId);
+          if (task.status !== TaskStatus.PENDING) {
+            throw new AppException(
+              HttpStatus.CONFLICT,
+              TASK_ERROR_CODE.INVALID_TASK_TRANSITION,
+              'Task is not assignable in its current status.',
+            );
+          }
 
-        if (currentAssignment) {
-          throw new AppException(
-            HttpStatus.CONFLICT,
-            TASK_ERROR_CODE.TASK_ALREADY_ASSIGNED,
-            'Task already has an active assignment.',
+          const currentAssignment = await this.findCurrentAssignment(
+            tx,
+            taskId,
           );
-        }
 
-        const member = await tx.user.findFirst({
-          where: {
-            id: dto.memberId,
-            role: UserRole.MEMBER,
-            status: UserStatus.ACTIVE,
-            teamMembership: {
-              teamId: task.teamId,
+          if (currentAssignment) {
+            throw new AppException(
+              HttpStatus.CONFLICT,
+              TASK_ERROR_CODE.TASK_ALREADY_ASSIGNED,
+              'Task already has an active assignment.',
+            );
+          }
+
+          const member = await tx.user.findFirst({
+            where: {
+              id: dto.memberId,
+              role: UserRole.MEMBER,
+              status: UserStatus.ACTIVE,
+              teamMembership: {
+                teamId: task.teamId,
+              },
             },
-          },
-          select: {
-            id: true,
-          },
-        });
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          });
 
-        if (!member) {
-          throw new AppException(
-            HttpStatus.CONFLICT,
-            TASK_ERROR_CODE.MEMBER_NOT_ELIGIBLE_FOR_TASK,
-            'Member is not eligible for this task.',
-          );
-        }
+          if (!member) {
+            throw new AppException(
+              HttpStatus.CONFLICT,
+              TASK_ERROR_CODE.MEMBER_NOT_ELIGIBLE_FOR_TASK,
+              'Member is not eligible for this task.',
+            );
+          }
 
-        await tx.taskAssignment.create({
-          data: {
-            taskId,
-            memberId: dto.memberId,
-            assignedById: viewer.userId,
-            note: dto.note ?? null,
-          },
-        });
+          await tx.taskAssignment.create({
+            data: {
+              taskId,
+              memberId: dto.memberId,
+              assignedById: viewer.userId,
+              note: dto.note ?? null,
+            },
+          });
 
-        const updated = await tx.task.update({
-          where: {
-            id: taskId,
-          },
-          data: {
-            status: TaskStatus.ASSIGNED,
-          },
-          select: taskSelect,
-        });
+          const updated = await tx.task.update({
+            where: {
+              id: taskId,
+            },
+            data: {
+              status: TaskStatus.ASSIGNED,
+            },
+            select: taskSelect,
+          });
 
-        await tx.taskStatusHistory.create({
-          data: {
-            taskId,
-            fromStatus: TaskStatus.PENDING,
-            toStatus: TaskStatus.ASSIGNED,
-            changedById: viewer.userId,
-            notes: 'Task assigned.',
-          },
-        });
+          await tx.taskStatusHistory.create({
+            data: {
+              taskId,
+              fromStatus: TaskStatus.PENDING,
+              toStatus: TaskStatus.ASSIGNED,
+              changedById: viewer.userId,
+              notes: 'Task assigned.',
+            },
+          });
 
-        await writeActivity(tx, {
-          actorId: viewer.userId,
-          action: TASK_ACTIVITY.TASK_ASSIGNED,
-          entityType: 'TASK',
-          entityId: taskId,
-          metadata: {
-            taskId,
-            memberId: dto.memberId,
-          },
-        });
+          await writeActivity(tx, {
+            actorId: viewer.userId,
+            action: TASK_ACTIVITY.TASK_ASSIGNED,
+            entityType: 'TASK',
+            entityId: taskId,
+            metadata: {
+              taskId,
+              memberId: dto.memberId,
+            },
+          });
 
-        await createNotification(tx, {
-          receiverId: dto.memberId,
-          actorId: viewer.userId,
-          type: TASK_NOTIFICATION.TASK_ASSIGNED,
-          title: 'New task assigned',
-          body: 'A new task has been assigned to you.',
-          targetType: 'TASK',
-          targetId: taskId,
-        });
+          await createNotification(tx, {
+            receiverId: dto.memberId,
+            actorId: viewer.userId,
+            type: TASK_NOTIFICATION.TASK_ASSIGNED,
+            title: 'New task assigned',
+            body: 'A new task has been assigned to you.',
+            targetType: 'TASK',
+            targetId: taskId,
+          });
 
-        return mapTaskResponse(updated, new Date());
-      });
+          return {
+            task: mapTaskResponse(updated, new Date()),
+            mail: {
+              memberId: member.id,
+              memberName: member.name,
+              memberEmail: member.email,
+              taskId: updated.id,
+              referenceCode: updated.referenceCode,
+              title: updated.title,
+              priority: updated.priority,
+              dueAt: updated.dueAt,
+              assignmentNote: dto.note ?? null,
+            },
+          };
+        },
+      );
     } catch (error) {
       throw mapAssignmentConflict(error);
     }
+
+    try {
+      await this.mailService.sendTaskAssignedEmail(assignmentResult.mail);
+    } catch (error) {
+      this.logger.warn(
+        `TASK_ASSIGNED email failed for task ${taskId}: ${getErrorMessage(error)}`,
+      );
+    }
+
+    return assignmentResult.task;
   }
 
   async startTask(
@@ -504,4 +551,8 @@ function mapAssignmentConflict(error: unknown): Error {
   }
 
   return error instanceof Error ? error : new Error('Unexpected error.');
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown SMTP error';
 }

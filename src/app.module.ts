@@ -5,8 +5,10 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration.js';
 import { validateEnvironment } from './config/env.validation.js';
 import { PrismaModule } from './database/prisma.module.js';
+import { ActivityModule } from './modules/activity/activity.module.js';
 import { OperixAuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { NotificationModule } from './modules/notification/notification.module.js';
 import { SubmissionModule } from './modules/submission/submission.module.js';
 import { TaskModule } from './modules/task/task.module.js';
 import { TeamModule } from './modules/team/team.module.js';
@@ -32,6 +34,8 @@ import { UserManagementModule } from './modules/user-management/user-management.
     UserManagementModule,
     TaskModule,
     SubmissionModule,
+    NotificationModule,
+    ActivityModule,
     HealthModule,
   ],
   providers: [

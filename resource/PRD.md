@@ -1295,16 +1295,22 @@ MVP channel:
 In-App Notification
 ```
 
+V1 email channel:
+
+```text
+TASK_ASSIGNED
+→ best-effort SMTP email to the assigned Member after the database transaction commits
+```
+
 Possible future channels:
 
 ```text
-Email
 Push Notification
 SMS
 WhatsApp
 ```
 
-External channels should only be added when confirmed.
+Additional external channels should only be added when confirmed.
 
 ---
 
