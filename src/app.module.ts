@@ -9,6 +9,7 @@ import { PrismaModule } from './database/prisma.module.js';
 import { ActivityModule } from './modules/activity/activity.module.js';
 import { OperixAuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { ManagementReportModule } from './modules/management-report/management-report.module.js';
 import { NotificationModule } from './modules/notification/notification.module.js';
 import { PerformanceModule } from './modules/performance/performance.module.js';
 import { SubmissionModule } from './modules/submission/submission.module.js';
@@ -46,6 +47,7 @@ const ENV_FILE_PATHS = [
     NotificationModule,
     ActivityModule,
     PerformanceModule,
+    ManagementReportModule,
     HealthModule,
   ],
   providers: [

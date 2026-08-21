@@ -8,6 +8,7 @@ model Team {
   admin   User         @relation("AdminTeams", fields: [adminId], references: [id], onDelete: Restrict)
   members TeamMember[]
   tasks   Task[]
+  managementReports ManagementReport[]
 
   @@index([adminId])
   @@map("team")

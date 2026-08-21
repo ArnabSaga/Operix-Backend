@@ -1398,6 +1398,26 @@ APPROVED
 
 Final report templates and cadence must be confirmed by the company.
 
+V1 implementation decision:
+
+```text
+ManagementReport
+→ current editable Admin working copy
+
+ManagementReportVersion
+→ immutable submitted snapshot
+
+ManagementReportReview
+→ immutable Super Admin decision for one submitted version
+```
+
+Every Management Report belongs to one Team and one historical Admin author.
+Admins may create drafts, edit drafts or revision-required reports, and submit
+versions. Super Admin may approve or request revision. `submittedAt` on the
+report means latest submission time; each version preserves its own submitted
+time. Attachments, fixed cadence, fixed report type templates, `REJECT`, report
+email, PDF, Excel, CSV, and system-generated report exports remain deferred.
+
 ---
 
 # 43. Excel Replacement Strategy

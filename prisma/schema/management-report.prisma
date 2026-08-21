@@ -1,0 +1,95 @@
+model ManagementReport {
+  id String @id @default(cuid())
+
+  adminId String
+  teamId  String
+
+  title String
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  operationalSummary String?
+
+  completedWorkSummary String?
+  pendingWorkSummary   String?
+  overdueWorkSummary   String?
+  performanceSummary   String?
+
+  keyIssues      String?
+  actionsTaken   String?
+  nextPeriodPlan String?
+  remarks        String?
+
+  status ManagementReportStatus @default(DRAFT)
+
+  submittedAt DateTime?
+  approvedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  admin User @relation("ManagementReportAuthor", fields: [adminId], references: [id], onDelete: Restrict)
+  team  Team @relation(fields: [teamId], references: [id], onDelete: Restrict)
+
+  versions ManagementReportVersion[]
+
+  @@index([adminId, status, updatedAt])
+  @@index([teamId, status, updatedAt])
+  @@index([status, submittedAt])
+  @@index([periodStart, periodEnd])
+  @@map("management_report")
+}
+
+model ManagementReportVersion {
+  id String @id @default(cuid())
+
+  reportId String
+  version  Int
+
+  title String
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  operationalSummary String
+
+  completedWorkSummary String?
+  pendingWorkSummary   String?
+  overdueWorkSummary   String?
+  performanceSummary   String?
+
+  keyIssues      String?
+  actionsTaken   String?
+  nextPeriodPlan String?
+  remarks        String?
+
+  submittedAt DateTime
+  createdAt   DateTime @default(now())
+
+  report ManagementReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  review ManagementReportReview?
+
+  @@unique([reportId, version])
+  @@index([reportId, submittedAt])
+  @@map("management_report_version")
+}
+
+model ManagementReportReview {
+  id String @id @default(cuid())
+
+  reportVersionId String @unique
+  reviewerId      String
+
+  action   ManagementReportReviewAction
+  feedback String?
+
+  reviewedAt DateTime
+  createdAt  DateTime @default(now())
+
+  reportVersion ManagementReportVersion @relation(fields: [reportVersionId], references: [id], onDelete: Restrict)
+  reviewer      User                    @relation("ManagementReportReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([reviewerId, reviewedAt])
+  @@map("management_report_review")
+}

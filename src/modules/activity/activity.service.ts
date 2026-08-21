@@ -58,7 +58,7 @@ export class ActivityService {
 
     if (viewer.role === UserRole.ADMIN) {
       const teamIds = viewer.scope.type === 'ADMIN' ? viewer.scope.teamIds : [];
-      const [memberRows, taskRows] = await Promise.all([
+      const [memberRows, taskRows, reportRows] = await Promise.all([
         this.prisma.teamMember.findMany({
           where: {
             teamId: {
@@ -79,9 +79,18 @@ export class ActivityService {
             id: true,
           },
         }),
+        this.prisma.managementReport.findMany({
+          where: {
+            adminId: viewer.userId,
+          },
+          select: {
+            id: true,
+          },
+        }),
       ]);
       const memberIds = memberRows.map((row) => row.memberId);
       const taskIds = taskRows.map((row) => row.id);
+      const reportIds = reportRows.map((row) => row.id);
 
       return {
         OR: [
@@ -106,6 +115,12 @@ export class ActivityService {
             entityType: 'TASK',
             entityId: {
               in: taskIds,
+            },
+          },
+          {
+            entityType: 'REPORT',
+            entityId: {
+              in: reportIds,
             },
           },
         ],

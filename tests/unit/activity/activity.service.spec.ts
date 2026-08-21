@@ -113,6 +113,9 @@ describe('ActivityService', () => {
       task: {
         findMany: jestApi.fn().mockResolvedValue([{ id: 'task-a' }]),
       },
+      managementReport: {
+        findMany: jestApi.fn().mockResolvedValue([{ id: 'report-a' }]),
+      },
       activityLog: {
         findMany: jestApi.fn().mockResolvedValue([]),
         count: jestApi.fn().mockResolvedValue(0),
@@ -151,6 +154,12 @@ describe('ActivityService', () => {
                   entityType: 'TASK',
                   entityId: {
                     in: ['task-a'],
+                  },
+                },
+                {
+                  entityType: 'REPORT',
+                  entityId: {
+                    in: ['report-a'],
                   },
                 },
               ],
