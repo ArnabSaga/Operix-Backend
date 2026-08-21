@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { fileURLToPath } from 'node:url';
 import configuration from './config/configuration.js';
 import { validateEnvironment } from './config/env.validation.js';
 import { PrismaModule } from './database/prisma.module.js';
@@ -9,16 +10,24 @@ import { ActivityModule } from './modules/activity/activity.module.js';
 import { OperixAuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { NotificationModule } from './modules/notification/notification.module.js';
+import { PerformanceModule } from './modules/performance/performance.module.js';
 import { SubmissionModule } from './modules/submission/submission.module.js';
 import { TaskModule } from './modules/task/task.module.js';
 import { TeamModule } from './modules/team/team.module.js';
 import { UserManagementModule } from './modules/user-management/user-management.module.js';
+
+const ENV_FILE_PATHS = [
+  '.env',
+  fileURLToPath(new URL('../.env', import.meta.url)),
+  fileURLToPath(new URL('../../.env', import.meta.url)),
+];
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
+      envFilePath: ENV_FILE_PATHS,
       load: [configuration],
       validate: validateEnvironment,
     }),
@@ -36,6 +45,7 @@ import { UserManagementModule } from './modules/user-management/user-management.
     SubmissionModule,
     NotificationModule,
     ActivityModule,
+    PerformanceModule,
     HealthModule,
   ],
   providers: [
