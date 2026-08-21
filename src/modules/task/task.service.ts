@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client.js';
 import {
   TaskPriority,
@@ -16,6 +16,8 @@ import type { PrismaTransactionClient } from '../../shared/database/transaction-
 import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
 import { AppException } from '../../shared/errors/app.exception.js';
 import { createNotification } from '../../shared/notification/notification-write.js';
+import { MailService } from '../../shared/mail/mail.service.js';
+import type { TaskAssignedEmailInput } from '../../shared/mail/mail.interface.js';
 import {
   createPaginationMeta,
   normalizePagination,
@@ -23,6 +25,7 @@ import {
 import type { PaginationInput } from '../../shared/pagination/pagination.interface.js';
 import type { AssignTaskDto } from './dto/assign-task.dto.js';
 import type { CreateTaskDto } from './dto/create-task.dto.js';
+import type { ListTaskQueryDto } from './dto/list-task-query.dto.js';
 import { buildTaskScopeWhere } from './policies/task-scope.policy.js';
 import {
   TASK_ACTIVITY,
@@ -30,14 +33,22 @@ import {
   TASK_NOTIFICATION,
 } from './task.constant.js';
 import type {
+  PaginatedTaskStatusHistoryResponse,
   PaginatedTaskResponse,
   SafeTaskResponse,
 } from './task.interface.js';
+import { mapTaskResponse } from './task.mapper.js';
+import { buildTaskListWhere, getTaskOrderBy } from './task-query.js';
 import { taskSelect } from './task.select.js';
 
 @Injectable()
 export class TaskService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(TaskService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService,
+  ) {}
 
   async createTask(
     viewer: OperixViewer,
@@ -87,22 +98,24 @@ export class TaskService {
         },
       });
 
-      return task;
+      return mapTaskResponse(task, new Date());
     });
   }
 
   async listTasks(
     viewer: OperixViewer,
-    pagination: PaginationInput,
+    query: ListTaskQueryDto,
   ): Promise<PaginatedTaskResponse> {
-    const normalized = normalizePagination(pagination);
-    const where = buildTaskScopeWhere(viewer);
+    const normalized = normalizePagination(query);
+    const now = new Date();
+    const where = buildTaskListWhere(viewer, query, now);
+    const orderBy = getTaskOrderBy(query.sort);
 
     const [data, total] = await Promise.all([
       this.prisma.task.findMany({
         where,
         select: taskSelect,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy,
         skip: normalized.skip,
         take: normalized.take,
       }),
@@ -110,7 +123,7 @@ export class TaskService {
     ]);
 
     return {
-      data,
+      data: data.map((task) => mapTaskResponse(task, now)),
       meta: createPaginationMeta({
         page: normalized.page,
         limit: normalized.limit,
@@ -135,7 +148,62 @@ export class TaskService {
       throw this.taskNotFound();
     }
 
-    return task;
+    return mapTaskResponse(task, new Date());
+  }
+
+  async getTaskHistory(
+    viewer: OperixViewer,
+    taskId: string,
+    pagination: PaginationInput,
+  ): Promise<PaginatedTaskStatusHistoryResponse> {
+    const task = await this.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        AND: [buildTaskScopeWhere(viewer)],
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!task) {
+      throw this.taskNotFound();
+    }
+
+    const normalized = normalizePagination(pagination);
+    const where = {
+      taskId,
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.taskStatusHistory.findMany({
+        where,
+        select: {
+          id: true,
+          taskId: true,
+          fromStatus: true,
+          toStatus: true,
+          changedById: true,
+          notes: true,
+          changedAt: true,
+        },
+        orderBy: [{ changedAt: 'desc' }, { id: 'desc' }],
+        skip: normalized.skip,
+        take: normalized.take,
+      }),
+      this.prisma.taskStatusHistory.count({
+        where,
+      }),
+    ]);
+
+    return {
+      data,
+      meta: createPaginationMeta({
+        page: normalized.page,
+        limit: normalized.limit,
+        total,
+      }),
+    };
   }
 
   async assignTask(
@@ -145,105 +213,145 @@ export class TaskService {
   ): Promise<SafeTaskResponse> {
     this.assertRole(viewer, UserRole.ADMIN);
 
+    let assignmentResult: {
+      task: SafeTaskResponse;
+      mail: TaskAssignedEmailInput;
+    };
+
     try {
-      return await runSerializableTransaction(this.prisma, async (tx) => {
-        const task = await this.findAdminScopedTask(tx, viewer.userId, taskId);
-
-        if (task.status !== TaskStatus.PENDING) {
-          throw new AppException(
-            HttpStatus.CONFLICT,
-            TASK_ERROR_CODE.INVALID_TASK_TRANSITION,
-            'Task is not assignable in its current status.',
+      assignmentResult = await runSerializableTransaction(
+        this.prisma,
+        async (tx) => {
+          const task = await this.findAdminScopedTask(
+            tx,
+            viewer.userId,
+            taskId,
           );
-        }
 
-        const currentAssignment = await this.findCurrentAssignment(tx, taskId);
+          if (task.status !== TaskStatus.PENDING) {
+            throw new AppException(
+              HttpStatus.CONFLICT,
+              TASK_ERROR_CODE.INVALID_TASK_TRANSITION,
+              'Task is not assignable in its current status.',
+            );
+          }
 
-        if (currentAssignment) {
-          throw new AppException(
-            HttpStatus.CONFLICT,
-            TASK_ERROR_CODE.TASK_ALREADY_ASSIGNED,
-            'Task already has an active assignment.',
+          const currentAssignment = await this.findCurrentAssignment(
+            tx,
+            taskId,
           );
-        }
 
-        const member = await tx.user.findFirst({
-          where: {
-            id: dto.memberId,
-            role: UserRole.MEMBER,
-            status: UserStatus.ACTIVE,
-            teamMembership: {
-              teamId: task.teamId,
+          if (currentAssignment) {
+            throw new AppException(
+              HttpStatus.CONFLICT,
+              TASK_ERROR_CODE.TASK_ALREADY_ASSIGNED,
+              'Task already has an active assignment.',
+            );
+          }
+
+          const member = await tx.user.findFirst({
+            where: {
+              id: dto.memberId,
+              role: UserRole.MEMBER,
+              status: UserStatus.ACTIVE,
+              teamMembership: {
+                teamId: task.teamId,
+              },
             },
-          },
-          select: {
-            id: true,
-          },
-        });
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          });
 
-        if (!member) {
-          throw new AppException(
-            HttpStatus.CONFLICT,
-            TASK_ERROR_CODE.MEMBER_NOT_ELIGIBLE_FOR_TASK,
-            'Member is not eligible for this task.',
-          );
-        }
+          if (!member) {
+            throw new AppException(
+              HttpStatus.CONFLICT,
+              TASK_ERROR_CODE.MEMBER_NOT_ELIGIBLE_FOR_TASK,
+              'Member is not eligible for this task.',
+            );
+          }
 
-        await tx.taskAssignment.create({
-          data: {
-            taskId,
-            memberId: dto.memberId,
-            assignedById: viewer.userId,
-            note: dto.note ?? null,
-          },
-        });
+          await tx.taskAssignment.create({
+            data: {
+              taskId,
+              memberId: dto.memberId,
+              assignedById: viewer.userId,
+              note: dto.note ?? null,
+            },
+          });
 
-        const updated = await tx.task.update({
-          where: {
-            id: taskId,
-          },
-          data: {
-            status: TaskStatus.ASSIGNED,
-          },
-          select: taskSelect,
-        });
+          const updated = await tx.task.update({
+            where: {
+              id: taskId,
+            },
+            data: {
+              status: TaskStatus.ASSIGNED,
+            },
+            select: taskSelect,
+          });
 
-        await tx.taskStatusHistory.create({
-          data: {
-            taskId,
-            fromStatus: TaskStatus.PENDING,
-            toStatus: TaskStatus.ASSIGNED,
-            changedById: viewer.userId,
-            notes: 'Task assigned.',
-          },
-        });
+          await tx.taskStatusHistory.create({
+            data: {
+              taskId,
+              fromStatus: TaskStatus.PENDING,
+              toStatus: TaskStatus.ASSIGNED,
+              changedById: viewer.userId,
+              notes: 'Task assigned.',
+            },
+          });
 
-        await writeActivity(tx, {
-          actorId: viewer.userId,
-          action: TASK_ACTIVITY.TASK_ASSIGNED,
-          entityType: 'TASK',
-          entityId: taskId,
-          metadata: {
-            taskId,
-            memberId: dto.memberId,
-          },
-        });
+          await writeActivity(tx, {
+            actorId: viewer.userId,
+            action: TASK_ACTIVITY.TASK_ASSIGNED,
+            entityType: 'TASK',
+            entityId: taskId,
+            metadata: {
+              taskId,
+              memberId: dto.memberId,
+            },
+          });
 
-        await createNotification(tx, {
-          receiverId: dto.memberId,
-          actorId: viewer.userId,
-          type: TASK_NOTIFICATION.TASK_ASSIGNED,
-          title: 'New task assigned',
-          body: 'A new task has been assigned to you.',
-          targetType: 'TASK',
-          targetId: taskId,
-        });
+          await createNotification(tx, {
+            receiverId: dto.memberId,
+            actorId: viewer.userId,
+            type: TASK_NOTIFICATION.TASK_ASSIGNED,
+            title: 'New task assigned',
+            body: 'A new task has been assigned to you.',
+            targetType: 'TASK',
+            targetId: taskId,
+          });
 
-        return updated;
-      });
+          return {
+            task: mapTaskResponse(updated, new Date()),
+            mail: {
+              memberId: member.id,
+              memberName: member.name,
+              memberEmail: member.email,
+              taskId: updated.id,
+              referenceCode: updated.referenceCode,
+              title: updated.title,
+              priority: updated.priority,
+              dueAt: updated.dueAt,
+              assignmentNote: dto.note ?? null,
+            },
+          };
+        },
+      );
     } catch (error) {
       throw mapAssignmentConflict(error);
     }
+
+    try {
+      await this.mailService.sendTaskAssignedEmail(assignmentResult.mail);
+    } catch (error) {
+      this.logger.warn(
+        `TASK_ASSIGNED email failed for task ${taskId}: ${getErrorMessage(error)}`,
+      );
+    }
+
+    return assignmentResult.task;
   }
 
   async startTask(
@@ -312,7 +420,7 @@ export class TaskService {
         },
       });
 
-      return updated;
+      return mapTaskResponse(updated, new Date());
     });
   }
 
@@ -443,4 +551,8 @@ function mapAssignmentConflict(error: unknown): Error {
   }
 
   return error instanceof Error ? error : new Error('Unexpected error.');
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown SMTP error';
 }

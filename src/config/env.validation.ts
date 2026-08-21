@@ -23,6 +23,12 @@ function validateUrl(value: string, key: string): void {
   }
 }
 
+function validateEmail(value: string, key: string): void {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    throw new Error(`${key} must be a valid email address`);
+  }
+}
+
 function parsePort(value: unknown): number {
   if (value === undefined) {
     return 5000;
@@ -32,6 +38,20 @@ function parsePort(value: unknown): number {
 
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error('PORT must be an integer between 1 and 65535');
+  }
+
+  return port;
+}
+
+function parseRequiredPort(value: unknown, key: string): number {
+  if (value === undefined || value === '') {
+    throw new Error(`${key} is required when SMTP_ENABLED is true`);
+  }
+
+  const port = Number(value);
+
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`${key} must be an integer between 1 and 65535`);
   }
 
   return port;
@@ -103,6 +123,8 @@ export function validateEnvironment(
     requiredString(environment, 'FRONTEND_URL'),
   );
 
+  const frontendAppUrl = requiredString(environment, 'FRONTEND_APP_URL');
+
   const betterAuthSecret = validateBetterAuthSecret(
     requiredString(environment, 'BETTER_AUTH_SECRET'),
   );
@@ -111,7 +133,54 @@ export function validateEnvironment(
 
   validateUrl(databaseUrl, 'DATABASE_URL');
 
+  validateUrl(frontendAppUrl, 'FRONTEND_APP_URL');
+
   validateUrl(betterAuthUrl, 'BETTER_AUTH_URL');
+
+  const smtpEnabled = parseBoolean(
+    environment.SMTP_ENABLED,
+    'SMTP_ENABLED',
+    false,
+  );
+  const smtpSecure = parseBoolean(
+    environment.SMTP_SECURE,
+    'SMTP_SECURE',
+    false,
+  );
+  const smtpPort = smtpEnabled
+    ? parseRequiredPort(environment.SMTP_PORT, 'SMTP_PORT')
+    : environment.SMTP_PORT === undefined || environment.SMTP_PORT === ''
+      ? null
+      : parseRequiredPort(environment.SMTP_PORT, 'SMTP_PORT');
+  const smtpHost = smtpEnabled
+    ? requiredString(environment, 'SMTP_HOST')
+    : typeof environment.SMTP_HOST === 'string'
+      ? environment.SMTP_HOST.trim()
+      : '';
+  const smtpUser = smtpEnabled
+    ? requiredString(environment, 'SMTP_USER')
+    : typeof environment.SMTP_USER === 'string'
+      ? environment.SMTP_USER.trim()
+      : '';
+  const smtpPass = smtpEnabled
+    ? requiredString(environment, 'SMTP_PASS')
+    : typeof environment.SMTP_PASS === 'string'
+      ? environment.SMTP_PASS
+      : '';
+  const smtpFromEmail = smtpEnabled
+    ? requiredString(environment, 'SMTP_FROM_EMAIL')
+    : typeof environment.SMTP_FROM_EMAIL === 'string'
+      ? environment.SMTP_FROM_EMAIL.trim()
+      : '';
+  const smtpFromName =
+    typeof environment.SMTP_FROM_NAME === 'string' &&
+    environment.SMTP_FROM_NAME.trim().length > 0
+      ? environment.SMTP_FROM_NAME.trim()
+      : 'Operix';
+
+  if (smtpEnabled) {
+    validateEmail(smtpFromEmail, 'SMTP_FROM_EMAIL');
+  }
 
   return {
     ...environment,
@@ -124,6 +193,8 @@ export function validateEnvironment(
 
     FRONTEND_URL: frontendUrl,
 
+    FRONTEND_APP_URL: frontendAppUrl,
+
     BETTER_AUTH_SECRET: betterAuthSecret,
 
     BETTER_AUTH_URL: betterAuthUrl,
@@ -133,5 +204,21 @@ export function validateEnvironment(
       'SWAGGER_ENABLED',
       true,
     ),
+
+    SMTP_ENABLED: smtpEnabled,
+
+    SMTP_HOST: smtpHost,
+
+    SMTP_PORT: smtpPort,
+
+    SMTP_SECURE: smtpSecure,
+
+    SMTP_USER: smtpUser,
+
+    SMTP_PASS: smtpPass,
+
+    SMTP_FROM_EMAIL: smtpFromEmail,
+
+    SMTP_FROM_NAME: smtpFromName,
   };
 }

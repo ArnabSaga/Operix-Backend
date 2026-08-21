@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../database/prisma.module.js';
+import { MailModule } from '../../shared/mail/mail.module.js';
 import { OperixAuthModule } from '../auth/auth.module.js';
 import { TaskController } from './task.controller.js';
 import { TaskService } from './task.service.js';
 
 @Module({
-  imports: [PrismaModule, OperixAuthModule],
+  imports: [PrismaModule, OperixAuthModule, MailModule],
   controllers: [TaskController],
   providers: [TaskService],
 })

@@ -30,6 +30,9 @@ model User {
   receivedNotifications Notification[] @relation("ReceivedNotifications")
   actedNotifications    Notification[] @relation("NotificationActor")
 
+  authoredManagementReports ManagementReport[]       @relation("ManagementReportAuthor")
+  managementReportReviews   ManagementReportReview[] @relation("ManagementReportReviewer")
+
   @@map("user")
 }
 

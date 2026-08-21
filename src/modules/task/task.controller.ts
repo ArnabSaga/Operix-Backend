@@ -18,6 +18,7 @@ import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import { PaginationQueryDto } from '../../shared/pagination/pagination.dto.js';
 import { AssignTaskDto } from './dto/assign-task.dto.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
+import { ListTaskQueryDto } from './dto/list-task-query.dto.js';
 import { TaskService } from './task.service.js';
 
 @ApiTags('tasks')
@@ -39,9 +40,19 @@ export class TaskController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
   listTasks(
     @CurrentViewer() viewer: OperixViewer,
-    @Query() query: PaginationQueryDto,
+    @Query() query: ListTaskQueryDto,
   ) {
     return this.taskService.listTasks(viewer, query);
+  }
+
+  @Get(':taskId/history')
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
+  getTaskHistory(
+    @CurrentViewer() viewer: OperixViewer,
+    @Param('taskId') taskId: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.taskService.getTaskHistory(viewer, taskId, query);
   }
 
   @Get(':taskId')

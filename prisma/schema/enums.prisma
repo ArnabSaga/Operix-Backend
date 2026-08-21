@@ -33,3 +33,16 @@ enum TaskReviewAction {
   APPROVE
   REQUEST_REVISION
 }
+
+enum ManagementReportStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  REVISION_REQUIRED
+  APPROVED
+}
+
+enum ManagementReportReviewAction {
+  APPROVE
+  REQUEST_REVISION
+}

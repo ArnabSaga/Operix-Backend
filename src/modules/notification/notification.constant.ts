@@ -1,0 +1,7 @@
+export const NOTIFICATION_ERROR_CODE = {
+  NOTIFICATION_NOT_FOUND: 'NOTIFICATION_NOT_FOUND',
+} as const;
+
+export const NOTIFICATION_FILTER = {
+  TYPE_MAX_LENGTH: 100,
+} as const;
