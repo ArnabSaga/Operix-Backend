@@ -11,8 +11,8 @@ export function buildTaskScopeWhere(
 
   if (viewer.role === UserRole.ADMIN) {
     return {
-      team: {
-        adminId: viewer.userId,
+      teamId: {
+        in: viewer.scope.type === 'ADMIN' ? viewer.scope.teamIds : [],
       },
     };
   }
@@ -21,6 +21,7 @@ export function buildTaskScopeWhere(
     assignments: {
       some: {
         memberId: viewer.userId,
+        unassignedAt: null,
       },
     },
   };

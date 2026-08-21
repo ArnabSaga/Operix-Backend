@@ -91,14 +91,15 @@ describe('task scope policy', () => {
   it('scopes Admin and Member task queries correctly', () => {
     expect(buildTaskScopeWhere(createViewer(UserRole.SUPER_ADMIN))).toEqual({});
     expect(buildTaskScopeWhere(createViewer(UserRole.ADMIN))).toEqual({
-      team: {
-        adminId: 'admin-a',
+      teamId: {
+        in: ['team-a'],
       },
     });
     expect(buildTaskScopeWhere(createViewer(UserRole.MEMBER))).toEqual({
       assignments: {
         some: {
           memberId: 'member-a',
+          unassignedAt: null,
         },
       },
     });
@@ -126,6 +127,9 @@ describe('TaskService', () => {
   it('creates a pending task with status history and activity', async () => {
     const task = createTask();
     const tx = {
+      team: {
+        findFirst: jestApi.fn().mockResolvedValue({ id: 'team-a' }),
+      },
       task: {
         create: jestApi.fn().mockResolvedValue(task),
       },
@@ -137,9 +141,6 @@ describe('TaskService', () => {
       },
     };
     const prisma = {
-      team: {
-        findFirst: jestApi.fn().mockResolvedValue({ id: 'team-a' }),
-      },
       $transaction: jestApi.fn(
         (callback: (transaction: typeof tx) => Promise<unknown>) =>
           callback(tx),
@@ -202,7 +203,7 @@ describe('TaskService', () => {
   });
 
   it('rejects assignment when the Member is not eligible for the Task Team', async () => {
-    const prisma = {
+    const tx = {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-a',
@@ -210,9 +211,18 @@ describe('TaskService', () => {
           teamId: 'team-a',
         }),
       },
+      taskAssignment: {
+        findFirst: jestApi.fn().mockResolvedValue(null),
+      },
       user: {
         findFirst: jestApi.fn().mockResolvedValue(null),
       },
+    };
+    const prisma = {
+      $transaction: jestApi.fn(
+        (callback: (transaction: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      ),
     };
     const service = new TaskService(prisma as unknown as PrismaService);
 
@@ -232,11 +242,20 @@ describe('TaskService', () => {
   it('assigns a pending Task with status history, activity, and notification', async () => {
     const updatedTask = createTask({ status: TaskStatus.ASSIGNED });
     const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-a',
+          status: TaskStatus.PENDING,
+          teamId: 'team-a',
+        }),
+        update: jestApi.fn().mockResolvedValue(updatedTask),
+      },
       taskAssignment: {
+        findFirst: jestApi.fn().mockResolvedValue(null),
         create: jestApi.fn().mockResolvedValue({ id: 'assignment-a' }),
       },
-      task: {
-        update: jestApi.fn().mockResolvedValue(updatedTask),
+      user: {
+        findFirst: jestApi.fn().mockResolvedValue({ id: 'member-a' }),
       },
       taskStatusHistory: {
         create: jestApi.fn().mockResolvedValue({ id: 'history-a' }),
@@ -249,19 +268,6 @@ describe('TaskService', () => {
       },
     };
     const prisma = {
-      task: {
-        findFirst: jestApi.fn().mockResolvedValue({
-          id: 'task-a',
-          status: TaskStatus.PENDING,
-          teamId: 'team-a',
-        }),
-      },
-      user: {
-        findFirst: jestApi.fn().mockResolvedValue({ id: 'member-a' }),
-      },
-      taskAssignment: {
-        findFirst: jestApi.fn().mockResolvedValue(null),
-      },
       $transaction: jestApi.fn(
         (callback: (transaction: typeof tx) => Promise<unknown>) =>
           callback(tx),
@@ -307,13 +313,16 @@ describe('TaskService', () => {
   });
 
   it('starts an assigned Task for the current assignee', async () => {
-    const assignedTask = createTask({ status: TaskStatus.ASSIGNED });
     const startedTask = createTask({
       status: TaskStatus.IN_PROGRESS,
       startedAt: fixedDate,
     });
     const tx = {
       task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-a',
+          status: TaskStatus.ASSIGNED,
+        }),
         update: jestApi.fn().mockResolvedValue(startedTask),
       },
       taskStatusHistory: {
@@ -324,15 +333,6 @@ describe('TaskService', () => {
       },
     };
     const prisma = {
-      task: {
-        findFirst: jestApi.fn().mockResolvedValue(assignedTask),
-      },
-      taskAssignment: {
-        findFirst: jestApi.fn().mockResolvedValue({
-          id: 'assignment-a',
-          memberId: 'member-a',
-        }),
-      },
       $transaction: jestApi.fn(
         (callback: (transaction: typeof tx) => Promise<unknown>) =>
           callback(tx),

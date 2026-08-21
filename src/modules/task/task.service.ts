@@ -11,6 +11,8 @@ import {
 import { PrismaService } from '../../database/prisma.service.js';
 import { writeActivity } from '../../shared/activity/activity-write.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { runSerializableTransaction } from '../../shared/database/serializable-transaction.js';
+import type { PrismaTransactionClient } from '../../shared/database/transaction-client.type.js';
 import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
 import { AppException } from '../../shared/errors/app.exception.js';
 import { createNotification } from '../../shared/notification/notification-write.js';
@@ -43,10 +45,10 @@ export class TaskService {
   ): Promise<SafeTaskResponse> {
     this.assertRole(viewer, UserRole.ADMIN);
 
-    await this.assertAdminOwnsTeam(viewer.userId, dto.teamId);
-    await this.assertCategoryExists(dto.categoryId);
+    return runSerializableTransaction(this.prisma, async (tx) => {
+      await this.assertAdminOwnsTeam(tx, viewer.userId, dto.teamId);
+      await this.assertCategoryExists(tx, dto.categoryId);
 
-    return this.prisma.$transaction(async (tx) => {
       const task = await tx.task.create({
         data: {
           referenceCode: generateTaskReferenceCode(),
@@ -143,50 +145,50 @@ export class TaskService {
   ): Promise<SafeTaskResponse> {
     this.assertRole(viewer, UserRole.ADMIN);
 
-    const task = await this.findAdminScopedTask(viewer.userId, taskId);
-
-    if (task.status !== TaskStatus.PENDING) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        TASK_ERROR_CODE.INVALID_TASK_TRANSITION,
-        'Task is not assignable in its current status.',
-      );
-    }
-
-    const member = await this.prisma.user.findFirst({
-      where: {
-        id: dto.memberId,
-        role: UserRole.MEMBER,
-        status: UserStatus.ACTIVE,
-        teamMembership: {
-          teamId: task.teamId,
-        },
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (!member) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        TASK_ERROR_CODE.MEMBER_NOT_ELIGIBLE_FOR_TASK,
-        'Member is not eligible for this task.',
-      );
-    }
-
-    const currentAssignment = await this.findCurrentAssignment(taskId);
-
-    if (currentAssignment) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        TASK_ERROR_CODE.TASK_ALREADY_ASSIGNED,
-        'Task already has an active assignment.',
-      );
-    }
-
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      return await runSerializableTransaction(this.prisma, async (tx) => {
+        const task = await this.findAdminScopedTask(tx, viewer.userId, taskId);
+
+        if (task.status !== TaskStatus.PENDING) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            TASK_ERROR_CODE.INVALID_TASK_TRANSITION,
+            'Task is not assignable in its current status.',
+          );
+        }
+
+        const currentAssignment = await this.findCurrentAssignment(tx, taskId);
+
+        if (currentAssignment) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            TASK_ERROR_CODE.TASK_ALREADY_ASSIGNED,
+            'Task already has an active assignment.',
+          );
+        }
+
+        const member = await tx.user.findFirst({
+          where: {
+            id: dto.memberId,
+            role: UserRole.MEMBER,
+            status: UserStatus.ACTIVE,
+            teamMembership: {
+              teamId: task.teamId,
+            },
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (!member) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            TASK_ERROR_CODE.MEMBER_NOT_ELIGIBLE_FOR_TASK,
+            'Member is not eligible for this task.',
+          );
+        }
+
         await tx.taskAssignment.create({
           data: {
             taskId,
@@ -250,27 +252,35 @@ export class TaskService {
   ): Promise<SafeTaskResponse> {
     this.assertRole(viewer, UserRole.MEMBER);
 
-    const task = await this.getTask(viewer, taskId);
+    return runSerializableTransaction(this.prisma, async (tx) => {
+      const task = await tx.task.findFirst({
+        where: {
+          id: taskId,
+          assignments: {
+            some: {
+              memberId: viewer.userId,
+              unassignedAt: null,
+            },
+          },
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
 
-    if (task.status !== TaskStatus.ASSIGNED) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        TASK_ERROR_CODE.INVALID_TASK_TRANSITION,
-        'Task is not startable in its current status.',
-      );
-    }
+      if (!task) {
+        throw this.taskNotFound();
+      }
 
-    const currentAssignment = await this.findCurrentAssignment(taskId);
+      if (task.status !== TaskStatus.ASSIGNED) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          TASK_ERROR_CODE.INVALID_TASK_TRANSITION,
+          'Task is not startable in its current status.',
+        );
+      }
 
-    if (currentAssignment?.memberId !== viewer.userId) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        TASK_ERROR_CODE.MEMBER_NOT_TASK_ASSIGNEE,
-        'You are not the current assignee for this task.',
-      );
-    }
-
-    return this.prisma.$transaction(async (tx) => {
       const updated = await tx.task.update({
         where: {
           id: taskId,
@@ -306,8 +316,12 @@ export class TaskService {
     });
   }
 
-  private async findAdminScopedTask(adminId: string, taskId: string) {
-    const task = await this.prisma.task.findFirst({
+  private async findAdminScopedTask(
+    tx: PrismaTransactionClient,
+    adminId: string,
+    taskId: string,
+  ) {
+    const task = await tx.task.findFirst({
       where: {
         id: taskId,
         team: {
@@ -329,10 +343,11 @@ export class TaskService {
   }
 
   private async assertAdminOwnsTeam(
+    tx: PrismaTransactionClient,
     adminId: string,
     teamId: string,
   ): Promise<void> {
-    const team = await this.prisma.team.findFirst({
+    const team = await tx.team.findFirst({
       where: {
         id: teamId,
         adminId,
@@ -347,12 +362,15 @@ export class TaskService {
     }
   }
 
-  private async assertCategoryExists(categoryId?: string): Promise<void> {
+  private async assertCategoryExists(
+    tx: PrismaTransactionClient,
+    categoryId?: string,
+  ): Promise<void> {
     if (!categoryId) {
       return;
     }
 
-    const category = await this.prisma.taskCategory.findUnique({
+    const category = await tx.taskCategory.findUnique({
       where: {
         id: categoryId,
       },
@@ -370,8 +388,11 @@ export class TaskService {
     }
   }
 
-  private async findCurrentAssignment(taskId: string) {
-    return this.prisma.taskAssignment.findFirst({
+  private async findCurrentAssignment(
+    tx: PrismaTransactionClient,
+    taskId: string,
+  ) {
+    return tx.taskAssignment.findFirst({
       where: {
         taskId,
         unassignedAt: null,
