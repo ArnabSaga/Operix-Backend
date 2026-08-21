@@ -46,8 +46,8 @@ describe('member scope policy', () => {
     expect(buildMemberScopeWhere(createViewer(UserRole.ADMIN))).toMatchObject({
       role: UserRole.MEMBER,
       teamMembership: {
-        team: {
-          adminId: 'viewer-a',
+        teamId: {
+          in: ['team-a'],
         },
       },
     });

@@ -60,14 +60,16 @@ describe('team scope policy', () => {
         },
       }),
     ).toEqual({
-      adminId: 'admin-a',
+      id: {
+        in: ['team-a'],
+      },
     });
   });
 });
 
 describe('TeamService', () => {
   it('rejects assigning an already assigned Member', async () => {
-    const prisma = {
+    const tx = {
       team: {
         findUnique: jestApi.fn().mockResolvedValue({
           id: 'team-a',
@@ -87,6 +89,12 @@ describe('TeamService', () => {
           },
         }),
       },
+    };
+    const prisma = {
+      $transaction: jestApi.fn(
+        (callback: (transaction: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      ),
     };
     const service = new TeamService(prisma as unknown as PrismaService);
 
@@ -115,17 +123,6 @@ describe('TeamService', () => {
         create: jestApi.fn().mockResolvedValue({ id: 'notification-a' }),
       },
       team: {
-        findUniqueOrThrow: jestApi.fn().mockResolvedValue({
-          id: 'team-a',
-          name: 'Team A',
-          adminId: 'admin-a',
-          createdAt: new Date('2026-01-01T00:00:00.000Z'),
-          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-        }),
-      },
-    };
-    const prisma = {
-      team: {
         findUnique: jestApi.fn().mockResolvedValue({
           id: 'team-a',
           adminId: 'admin-a',
@@ -133,6 +130,13 @@ describe('TeamService', () => {
             role: UserRole.ADMIN,
             status: UserStatus.ACTIVE,
           },
+        }),
+        findUniqueOrThrow: jestApi.fn().mockResolvedValue({
+          id: 'team-a',
+          name: 'Team A',
+          adminId: 'admin-a',
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
         }),
       },
       user: {
@@ -142,6 +146,8 @@ describe('TeamService', () => {
           teamMembership: null,
         }),
       },
+    };
+    const prisma = {
       $transaction: jestApi.fn(
         (callback: (transaction: typeof tx) => Promise<unknown>) =>
           callback(tx),
@@ -202,6 +208,14 @@ describe('TeamService', () => {
         create: jestApi.fn().mockResolvedValue({ id: 'notification-a' }),
       },
       team: {
+        findUnique: jestApi.fn().mockResolvedValue({
+          id: 'team-b',
+          adminId: 'admin-b',
+          admin: {
+            role: UserRole.ADMIN,
+            status: UserStatus.ACTIVE,
+          },
+        }),
         findUniqueOrThrow: jestApi.fn().mockResolvedValue({
           id: 'team-b',
           name: 'Team B',
@@ -210,8 +224,6 @@ describe('TeamService', () => {
           updatedAt: new Date('2026-01-01T00:00:00.000Z'),
         }),
       },
-    };
-    const prisma = {
       user: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'member-a',
@@ -224,16 +236,8 @@ describe('TeamService', () => {
           },
         }),
       },
-      team: {
-        findUnique: jestApi.fn().mockResolvedValue({
-          id: 'team-b',
-          adminId: 'admin-b',
-          admin: {
-            role: UserRole.ADMIN,
-            status: UserStatus.ACTIVE,
-          },
-        }),
-      },
+    };
+    const prisma = {
       $transaction: jestApi.fn(
         (callback: (transaction: typeof tx) => Promise<unknown>) =>
           callback(tx),
@@ -271,8 +275,6 @@ describe('TeamService', () => {
           .fn()
           .mockRejectedValue(createKnownRequestError('P2002')),
       },
-    };
-    const prisma = {
       team: {
         findUnique: jestApi.fn().mockResolvedValue({
           id: 'team-a',
@@ -290,6 +292,8 @@ describe('TeamService', () => {
           teamMembership: null,
         }),
       },
+    };
+    const prisma = {
       $transaction: jestApi.fn(
         (callback: (transaction: typeof tx) => Promise<unknown>) =>
           callback(tx),
@@ -317,8 +321,6 @@ describe('TeamService', () => {
           .fn()
           .mockRejectedValue(createKnownRequestError('P2025')),
       },
-    };
-    const prisma = {
       user: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'member-a',
@@ -341,6 +343,8 @@ describe('TeamService', () => {
           },
         }),
       },
+    };
+    const prisma = {
       $transaction: jestApi.fn(
         (callback: (transaction: typeof tx) => Promise<unknown>) =>
           callback(tx),

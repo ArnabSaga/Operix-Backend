@@ -179,23 +179,23 @@ export class MemberService {
     memberId: string,
     dto: UpdateMemberStatusDto,
   ): Promise<SafeUserResponse> {
-    const member = await this.prisma.user.findFirst({
-      where: {
-        id: memberId,
-        role: UserRole.MEMBER,
-      },
-      select: memberSelect,
-    });
-
-    if (!member) {
-      throw this.memberNotFound();
-    }
-
-    if (member.status === dto.status) {
-      return member;
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      const member = await tx.user.findFirst({
+        where: {
+          id: memberId,
+          role: UserRole.MEMBER,
+        },
+        select: memberSelect,
+      });
+
+      if (!member) {
+        throw this.memberNotFound();
+      }
+
+      if (member.status === dto.status) {
+        return member;
+      }
+
       const updated = await tx.user.update({
         where: { id: memberId },
         data: {

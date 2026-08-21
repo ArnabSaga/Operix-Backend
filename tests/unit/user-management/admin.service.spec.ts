@@ -86,16 +86,17 @@ describe('AdminService', () => {
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     };
     const prisma = {
-      user: {
-        findFirst: jestApi.fn().mockResolvedValue(admin),
-      },
       $transaction: jestApi.fn(
         (
           callback: (transaction: {
+            user: { findFirst: () => Promise<typeof admin> };
             team: { count: () => Promise<number> };
           }) => Promise<unknown>,
         ) =>
           callback({
+            user: {
+              findFirst: jestApi.fn().mockResolvedValue(admin),
+            },
             team: {
               count: jestApi.fn().mockResolvedValue(1),
             },

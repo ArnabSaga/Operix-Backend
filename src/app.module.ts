@@ -7,6 +7,8 @@ import { validateEnvironment } from './config/env.validation.js';
 import { PrismaModule } from './database/prisma.module.js';
 import { OperixAuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { SubmissionModule } from './modules/submission/submission.module.js';
+import { TaskModule } from './modules/task/task.module.js';
 import { TeamModule } from './modules/team/team.module.js';
 import { UserManagementModule } from './modules/user-management/user-management.module.js';
 
@@ -28,6 +30,8 @@ import { UserManagementModule } from './modules/user-management/user-management.
     OperixAuthModule,
     TeamModule,
     UserManagementModule,
+    TaskModule,
+    SubmissionModule,
     HealthModule,
   ],
   providers: [

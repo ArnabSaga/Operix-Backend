@@ -153,17 +153,27 @@ export class TeamService {
     teamId: string,
     dto: ReassignTeamAdminDto,
   ): Promise<SafeTeamResponse> {
-    const team = await this.getTeam(viewer, teamId);
-
-    if (team.adminId === dto.adminId) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        TEAM_ERROR_CODE.TEAM_ALREADY_ASSIGNED_TO_ADMIN,
-        'Team is already assigned to this Admin.',
-      );
-    }
-
     return runSerializableTransaction(this.prisma, async (tx) => {
+      const team = await tx.team.findFirst({
+        where: {
+          id: teamId,
+          ...buildTeamScopeWhere(viewer),
+        },
+        select: teamSelect,
+      });
+
+      if (!team) {
+        throw this.teamNotFound();
+      }
+
+      if (team.adminId === dto.adminId) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          TEAM_ERROR_CODE.TEAM_ALREADY_ASSIGNED_TO_ADMIN,
+          'Team is already assigned to this Admin.',
+        );
+      }
+
       await this.assertActiveAdmin(tx, dto.adminId);
 
       const updated = await tx.team.update({
@@ -207,47 +217,47 @@ export class TeamService {
     teamId: string,
     dto: AssignMemberDto,
   ): Promise<SafeTeamResponse> {
-    const team = await this.findTeamWithAdmin(teamId);
-    this.assertTeamHasActiveAdmin(team);
+    try {
+      return await runSerializableTransaction(this.prisma, async (tx) => {
+        const team = await this.findTeamWithAdmin(tx, teamId);
+        this.assertTeamHasActiveAdmin(team);
 
-    const member = await this.prisma.user.findFirst({
-      where: {
-        id: dto.memberId,
-        role: UserRole.MEMBER,
-      },
-      select: {
-        id: true,
-        status: true,
-        teamMembership: {
+        const member = await tx.user.findFirst({
+          where: {
+            id: dto.memberId,
+            role: UserRole.MEMBER,
+          },
           select: {
             id: true,
+            status: true,
+            teamMembership: {
+              select: {
+                id: true,
+              },
+            },
           },
-        },
-      },
-    });
+        });
 
-    if (!member) {
-      throw this.memberNotFound();
-    }
+        if (!member) {
+          throw this.memberNotFound();
+        }
 
-    if (member.status !== UserStatus.ACTIVE) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        TEAM_ERROR_CODE.TARGET_MEMBER_NOT_ACTIVE,
-        'Target Member is not active.',
-      );
-    }
+        if (member.status !== UserStatus.ACTIVE) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            TEAM_ERROR_CODE.TARGET_MEMBER_NOT_ACTIVE,
+            'Target Member is not active.',
+          );
+        }
 
-    if (member.teamMembership) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        TEAM_ERROR_CODE.MEMBER_ALREADY_ASSIGNED,
-        'Member is already assigned to a team.',
-      );
-    }
+        if (member.teamMembership) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            TEAM_ERROR_CODE.MEMBER_ALREADY_ASSIGNED,
+            'Member is already assigned to a team.',
+          );
+        }
 
-    try {
-      return await this.prisma.$transaction(async (tx) => {
         await tx.teamMember.create({
           data: {
             teamId,
@@ -296,54 +306,54 @@ export class TeamService {
     memberId: string,
     targetTeamId: string,
   ): Promise<SafeTeamResponse> {
-    const member = await this.prisma.user.findFirst({
-      where: {
-        id: memberId,
-        role: UserRole.MEMBER,
-      },
-      select: {
-        id: true,
-        teamMembership: {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const member = await tx.user.findFirst({
+          where: {
+            id: memberId,
+            role: UserRole.MEMBER,
+          },
           select: {
             id: true,
-            teamId: true,
-            team: {
+            teamMembership: {
               select: {
-                adminId: true,
+                id: true,
+                teamId: true,
+                team: {
+                  select: {
+                    adminId: true,
+                  },
+                },
               },
             },
           },
-        },
-      },
-    });
+        });
 
-    if (!member) {
-      throw this.memberNotFound();
-    }
+        if (!member) {
+          throw this.memberNotFound();
+        }
 
-    if (!member.teamMembership) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        TEAM_ERROR_CODE.MEMBER_NOT_ASSIGNED,
-        'Member is not assigned to a team.',
-      );
-    }
+        if (!member.teamMembership) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            TEAM_ERROR_CODE.MEMBER_NOT_ASSIGNED,
+            'Member is not assigned to a team.',
+          );
+        }
 
-    const currentMembership = member.teamMembership;
+        const currentMembership = member.teamMembership;
 
-    if (currentMembership.teamId === targetTeamId) {
-      throw new AppException(
-        HttpStatus.CONFLICT,
-        TEAM_ERROR_CODE.MEMBER_ALREADY_IN_TARGET_TEAM,
-        'Member is already assigned to the target team.',
-      );
-    }
+        const targetTeam = await this.findTeamWithAdmin(tx, targetTeamId);
+        this.assertTeamHasActiveAdmin(targetTeam);
 
-    const targetTeam = await this.findTeamWithAdmin(targetTeamId);
-    this.assertTeamHasActiveAdmin(targetTeam);
+        if (currentMembership.teamId === targetTeamId) {
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            TEAM_ERROR_CODE.MEMBER_ALREADY_IN_TARGET_TEAM,
+            'Member is already assigned to the target team.',
+          );
+        }
 
-    try {
-      return await this.prisma.$transaction(async (tx) => {
         await tx.teamMember.delete({
           where: {
             id: currentMembership.id,
@@ -423,8 +433,11 @@ export class TeamService {
     }
   }
 
-  private async findTeamWithAdmin(teamId: string) {
-    const team = await this.prisma.team.findUnique({
+  private async findTeamWithAdmin(
+    tx: Pick<Prisma.TransactionClient, 'team'>,
+    teamId: string,
+  ) {
+    const team = await tx.team.findUnique({
       where: {
         id: teamId,
       },

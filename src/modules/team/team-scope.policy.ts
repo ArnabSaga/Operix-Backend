@@ -10,6 +10,8 @@ export function buildTeamScopeWhere(
   }
 
   return {
-    adminId: viewer.userId,
+    id: {
+      in: viewer.scope.type === 'ADMIN' ? viewer.scope.teamIds : [],
+    },
   };
 }
