@@ -1,4 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
 import {
   TaskPriority,
   TaskStatus,
@@ -10,9 +12,16 @@ import {
   TASK_ACTIVITY,
   TASK_ERROR_CODE,
   TASK_NOTIFICATION,
+  TaskSort,
 } from '../../../src/modules/task/task.constant';
+import { ListTaskQueryDto } from '../../../src/modules/task/dto/list-task-query.dto';
 import { buildTaskScopeWhere } from '../../../src/modules/task/policies/task-scope.policy';
 import type { SafeTaskResponse } from '../../../src/modules/task/task.interface';
+import { isTaskOverdue } from '../../../src/modules/task/task.mapper';
+import {
+  buildTaskListWhere,
+  getTaskOrderBy,
+} from '../../../src/modules/task/task-query';
 import { TaskService } from '../../../src/modules/task/task.service';
 import type { OperixViewer } from '../../../src/shared/auth/viewer.interface';
 
@@ -66,6 +75,7 @@ function baseTask(): SafeTaskResponse {
     createdById: 'admin-a',
     createdAt: fixedDate,
     updatedAt: fixedDate,
+    isOverdue: false,
   };
 }
 
@@ -103,6 +113,51 @@ describe('task scope policy', () => {
         },
       },
     });
+  });
+});
+
+describe('ListTaskQueryDto', () => {
+  it('validates strict booleans and trims search text', () => {
+    const valid = plainToInstance(ListTaskQueryDto, {
+      overdue: 'true',
+      q: ' batch ',
+    });
+    const invalidBoolean = plainToInstance(ListTaskQueryDto, {
+      overdue: 'yes',
+    });
+    const emptySearch = plainToInstance(ListTaskQueryDto, {
+      q: '   ',
+    });
+    const longSearch = plainToInstance(ListTaskQueryDto, {
+      q: 'a'.repeat(101),
+    });
+
+    expect(validateSync(valid)).toHaveLength(0);
+    expect(valid.overdue).toBe(true);
+    expect(valid.q).toBe('batch');
+    expect(validateSync(invalidBoolean)).toHaveLength(1);
+    expect(validateSync(emptySearch)).toHaveLength(1);
+    expect(validateSync(longSearch)).toHaveLength(1);
+  });
+
+  it('validates fixed enum filters and non-empty IDs', () => {
+    const valid = plainToInstance(ListTaskQueryDto, {
+      status: TaskStatus.COMPLETED,
+      priority: TaskPriority.URGENT,
+      teamId: 'team-a',
+      assignedMemberId: 'member-a',
+      sort: TaskSort.DUE_AT_ASC,
+    });
+    const invalid = plainToInstance(ListTaskQueryDto, {
+      status: 'DONE',
+      priority: 'VERY_HIGH',
+      teamId: '',
+      assignedMemberId: '',
+      sort: 'DUE_SOON',
+    });
+
+    expect(validateSync(valid)).toHaveLength(0);
+    expect(validateSync(invalid)).toHaveLength(5);
   });
 });
 
@@ -153,7 +208,7 @@ describe('TaskService', () => {
         title: 'Prepare batch report',
         teamId: 'team-a',
       }),
-    ).resolves.toBe(task);
+    ).resolves.toEqual(task);
 
     expect(tx.task.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -194,6 +249,168 @@ describe('TaskService', () => {
     try {
       await service.getTask(createViewer(UserRole.ADMIN), 'task-b');
       throw new Error('Expected lookup to fail.');
+    } catch (error) {
+      expectAppException(error, {
+        status: HttpStatus.NOT_FOUND,
+        code: TASK_ERROR_CODE.TASK_NOT_FOUND,
+      });
+    }
+  });
+
+  it('lists tasks with filters and maps isOverdue', async () => {
+    const overdueTask = createTask({
+      dueAt: new Date('2026-08-19T10:00:00.000Z'),
+      status: TaskStatus.IN_PROGRESS,
+    });
+    const prisma = {
+      task: {
+        findMany: jestApi.fn().mockResolvedValue([overdueTask]),
+        count: jestApi.fn().mockResolvedValue(1),
+      },
+    };
+    const service = new TaskService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.listTasks(createViewer(UserRole.ADMIN), {
+        status: TaskStatus.IN_PROGRESS,
+        assignedMemberId: 'member-a',
+        overdue: true,
+        page: 1,
+        limit: 20,
+      }),
+    ).resolves.toEqual({
+      data: [
+        {
+          ...overdueTask,
+          isOverdue: true,
+        },
+      ],
+      meta: {
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+      },
+    });
+
+    expect(prisma.task.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.any(Array) as unknown[],
+        }) as Record<string, unknown>,
+        orderBy: [
+          {
+            createdAt: 'desc',
+          },
+          {
+            id: 'desc',
+          },
+        ],
+      }) as Record<string, unknown>,
+    );
+  });
+
+  it('returns task detail with isOverdue', async () => {
+    const overdueTask = createTask({
+      dueAt: new Date('2026-08-19T10:00:00.000Z'),
+      status: TaskStatus.SUBMITTED,
+    });
+    const prisma = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue(overdueTask),
+      },
+    };
+    const service = new TaskService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.getTask(createViewer(UserRole.ADMIN), 'task-a'),
+    ).resolves.toEqual({
+      ...overdueTask,
+      isOverdue: true,
+    });
+  });
+
+  it('returns paginated status history after scoped task lookup', async () => {
+    const history = {
+      id: 'history-a',
+      taskId: 'task-a',
+      fromStatus: TaskStatus.SUBMITTED,
+      toStatus: TaskStatus.UNDER_REVIEW,
+      changedById: 'admin-a',
+      notes: 'Task review started.',
+      changedAt: fixedDate,
+    };
+    const prisma = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({ id: 'task-a' }),
+      },
+      taskStatusHistory: {
+        findMany: jestApi.fn().mockResolvedValue([history]),
+        count: jestApi.fn().mockResolvedValue(1),
+      },
+    };
+    const service = new TaskService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.getTaskHistory(createViewer(UserRole.ADMIN), 'task-a', {
+        page: 1,
+        limit: 20,
+      }),
+    ).resolves.toEqual({
+      data: [history],
+      meta: {
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+      },
+    });
+
+    expect(prisma.task.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'task-a',
+        AND: [
+          {
+            teamId: {
+              in: ['team-a'],
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+      },
+    });
+    expect(prisma.taskStatusHistory.findMany).toHaveBeenCalledWith({
+      where: {
+        taskId: 'task-a',
+      },
+      select: {
+        id: true,
+        taskId: true,
+        fromStatus: true,
+        toStatus: true,
+        changedById: true,
+        notes: true,
+        changedAt: true,
+      },
+      orderBy: [{ changedAt: 'desc' }, { id: 'desc' }],
+      skip: 0,
+      take: 20,
+    });
+  });
+
+  it('returns task not found for out-of-scope history', async () => {
+    const prisma = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue(null),
+      },
+    };
+    const service = new TaskService(prisma as unknown as PrismaService);
+
+    try {
+      await service.getTaskHistory(createViewer(UserRole.ADMIN), 'task-b', {});
+      throw new Error('Expected history lookup to fail.');
     } catch (error) {
       expectAppException(error, {
         status: HttpStatus.NOT_FOUND,
@@ -280,7 +497,7 @@ describe('TaskService', () => {
         memberId: 'member-a',
         note: 'Please start today.',
       }),
-    ).resolves.toBe(updatedTask);
+    ).resolves.toEqual(updatedTask);
 
     expect(tx.taskAssignment.create).toHaveBeenCalledWith({
       data: {
@@ -342,7 +559,7 @@ describe('TaskService', () => {
 
     await expect(
       service.startTask(createViewer(UserRole.MEMBER), 'task-a'),
-    ).resolves.toBe(startedTask);
+    ).resolves.toEqual(startedTask);
 
     expect(tx.task.update).toHaveBeenCalledWith({
       where: {
@@ -363,5 +580,222 @@ describe('TaskService', () => {
         notes: 'Task started.',
       },
     });
+  });
+});
+
+describe('task query helpers', () => {
+  it('composes filters with viewer scope using AND', () => {
+    const where = buildTaskListWhere(
+      createViewer(UserRole.MEMBER),
+      {
+        status: TaskStatus.IN_PROGRESS,
+        priority: TaskPriority.URGENT,
+        assignedMemberId: undefined,
+        overdue: true,
+        q: 'batch',
+      },
+      fixedDate,
+    );
+
+    expect(where).toEqual({
+      AND: [
+        {
+          assignments: {
+            some: {
+              memberId: 'member-a',
+              unassignedAt: null,
+            },
+          },
+        },
+        {
+          status: TaskStatus.IN_PROGRESS,
+        },
+        {
+          priority: TaskPriority.URGENT,
+        },
+        {
+          dueAt: {
+            lt: fixedDate,
+          },
+          status: {
+            notIn: [TaskStatus.COMPLETED, TaskStatus.CANCELLED],
+          },
+        },
+        {
+          OR: [
+            {
+              referenceCode: {
+                contains: 'batch',
+                mode: 'insensitive',
+              },
+            },
+            {
+              title: {
+                contains: 'batch',
+                mode: 'insensitive',
+              },
+            },
+            {
+              description: {
+                contains: 'batch',
+                mode: 'insensitive',
+              },
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('blocks unauthorized query controls', () => {
+    expect(() =>
+      buildTaskListWhere(
+        createViewer(UserRole.ADMIN),
+        {
+          teamId: 'team-b',
+        },
+        fixedDate,
+      ),
+    ).toThrow();
+
+    expect(() =>
+      buildTaskListWhere(
+        createViewer(UserRole.MEMBER),
+        {
+          assignedMemberId: 'member-b',
+        },
+        fixedDate,
+      ),
+    ).toThrow();
+  });
+
+  it('uses current assignment for assignedMemberId and exact overdue false complement', () => {
+    const where = buildTaskListWhere(
+      createViewer(UserRole.ADMIN),
+      {
+        assignedMemberId: 'member-b',
+        overdue: false,
+      },
+      fixedDate,
+    );
+
+    expect(where).toEqual({
+      AND: [
+        {
+          teamId: {
+            in: ['team-a'],
+          },
+        },
+        {
+          assignments: {
+            some: {
+              memberId: 'member-b',
+              unassignedAt: null,
+            },
+          },
+        },
+        {
+          OR: [
+            {
+              dueAt: null,
+            },
+            {
+              dueAt: {
+                gte: fixedDate,
+              },
+            },
+            {
+              status: {
+                in: [TaskStatus.COMPLETED, TaskStatus.CANCELLED],
+              },
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('returns deterministic task orderings', () => {
+    expect(getTaskOrderBy()).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
+    expect(getTaskOrderBy(TaskSort.CREATED_AT_ASC)).toEqual([
+      { createdAt: 'asc' },
+      { id: 'asc' },
+    ]);
+    expect(getTaskOrderBy(TaskSort.DUE_AT_ASC)).toEqual([
+      { dueAt: { sort: 'asc', nulls: 'last' } },
+      { id: 'asc' },
+    ]);
+    expect(getTaskOrderBy(TaskSort.DUE_AT_DESC)).toEqual([
+      { dueAt: { sort: 'desc', nulls: 'last' } },
+      { id: 'desc' },
+    ]);
+    expect(getTaskOrderBy(TaskSort.PRIORITY_DESC)).toEqual([
+      { priority: 'desc' },
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ]);
+    expect(getTaskOrderBy(TaskSort.PRIORITY_ASC)).toEqual([
+      { priority: 'asc' },
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ]);
+  });
+});
+
+describe('task response mapper', () => {
+  it.each([
+    TaskStatus.PENDING,
+    TaskStatus.ASSIGNED,
+    TaskStatus.IN_PROGRESS,
+    TaskStatus.SUBMITTED,
+    TaskStatus.UNDER_REVIEW,
+    TaskStatus.REVISION_REQUIRED,
+    TaskStatus.RESUBMITTED,
+  ])('marks past due active status %s as overdue', (status) => {
+    expect(
+      isTaskOverdue(
+        {
+          dueAt: new Date('2026-08-19T10:00:00.000Z'),
+          status,
+        },
+        fixedDate,
+      ),
+    ).toBe(true);
+  });
+
+  it.each([TaskStatus.COMPLETED, TaskStatus.CANCELLED])(
+    'does not mark terminal status %s as overdue',
+    (status) => {
+      expect(
+        isTaskOverdue(
+          {
+            dueAt: new Date('2026-08-19T10:00:00.000Z'),
+            status,
+          },
+          fixedDate,
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it('does not mark future or null due dates as overdue', () => {
+    expect(
+      isTaskOverdue(
+        {
+          dueAt: new Date('2026-08-21T10:00:00.000Z'),
+          status: TaskStatus.IN_PROGRESS,
+        },
+        fixedDate,
+      ),
+    ).toBe(false);
+    expect(
+      isTaskOverdue(
+        {
+          dueAt: null,
+          status: TaskStatus.IN_PROGRESS,
+        },
+        fixedDate,
+      ),
+    ).toBe(false);
   });
 });

@@ -19,9 +19,26 @@ export type SafeTaskResponse = Pick<
   | 'createdById'
   | 'createdAt'
   | 'updatedAt'
->;
+> & {
+  isOverdue: boolean;
+};
 
 export interface PaginatedTaskResponse {
   data: SafeTaskResponse[];
+  meta: PaginationMeta;
+}
+
+export interface SafeTaskStatusHistoryResponse {
+  id: string;
+  taskId: string;
+  fromStatus: Task['status'] | null;
+  toStatus: Task['status'];
+  changedById: string;
+  notes: string | null;
+  changedAt: Date;
+}
+
+export interface PaginatedTaskStatusHistoryResponse {
+  data: SafeTaskStatusHistoryResponse[];
   meta: PaginationMeta;
 }

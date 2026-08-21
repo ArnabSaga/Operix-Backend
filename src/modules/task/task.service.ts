@@ -23,6 +23,7 @@ import {
 import type { PaginationInput } from '../../shared/pagination/pagination.interface.js';
 import type { AssignTaskDto } from './dto/assign-task.dto.js';
 import type { CreateTaskDto } from './dto/create-task.dto.js';
+import type { ListTaskQueryDto } from './dto/list-task-query.dto.js';
 import { buildTaskScopeWhere } from './policies/task-scope.policy.js';
 import {
   TASK_ACTIVITY,
@@ -30,9 +31,12 @@ import {
   TASK_NOTIFICATION,
 } from './task.constant.js';
 import type {
+  PaginatedTaskStatusHistoryResponse,
   PaginatedTaskResponse,
   SafeTaskResponse,
 } from './task.interface.js';
+import { mapTaskResponse } from './task.mapper.js';
+import { buildTaskListWhere, getTaskOrderBy } from './task-query.js';
 import { taskSelect } from './task.select.js';
 
 @Injectable()
@@ -87,22 +91,24 @@ export class TaskService {
         },
       });
 
-      return task;
+      return mapTaskResponse(task, new Date());
     });
   }
 
   async listTasks(
     viewer: OperixViewer,
-    pagination: PaginationInput,
+    query: ListTaskQueryDto,
   ): Promise<PaginatedTaskResponse> {
-    const normalized = normalizePagination(pagination);
-    const where = buildTaskScopeWhere(viewer);
+    const normalized = normalizePagination(query);
+    const now = new Date();
+    const where = buildTaskListWhere(viewer, query, now);
+    const orderBy = getTaskOrderBy(query.sort);
 
     const [data, total] = await Promise.all([
       this.prisma.task.findMany({
         where,
         select: taskSelect,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy,
         skip: normalized.skip,
         take: normalized.take,
       }),
@@ -110,7 +116,7 @@ export class TaskService {
     ]);
 
     return {
-      data,
+      data: data.map((task) => mapTaskResponse(task, now)),
       meta: createPaginationMeta({
         page: normalized.page,
         limit: normalized.limit,
@@ -135,7 +141,62 @@ export class TaskService {
       throw this.taskNotFound();
     }
 
-    return task;
+    return mapTaskResponse(task, new Date());
+  }
+
+  async getTaskHistory(
+    viewer: OperixViewer,
+    taskId: string,
+    pagination: PaginationInput,
+  ): Promise<PaginatedTaskStatusHistoryResponse> {
+    const task = await this.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        AND: [buildTaskScopeWhere(viewer)],
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!task) {
+      throw this.taskNotFound();
+    }
+
+    const normalized = normalizePagination(pagination);
+    const where = {
+      taskId,
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.taskStatusHistory.findMany({
+        where,
+        select: {
+          id: true,
+          taskId: true,
+          fromStatus: true,
+          toStatus: true,
+          changedById: true,
+          notes: true,
+          changedAt: true,
+        },
+        orderBy: [{ changedAt: 'desc' }, { id: 'desc' }],
+        skip: normalized.skip,
+        take: normalized.take,
+      }),
+      this.prisma.taskStatusHistory.count({
+        where,
+      }),
+    ]);
+
+    return {
+      data,
+      meta: createPaginationMeta({
+        page: normalized.page,
+        limit: normalized.limit,
+        total,
+      }),
+    };
   }
 
   async assignTask(
@@ -239,7 +300,7 @@ export class TaskService {
           targetId: taskId,
         });
 
-        return updated;
+        return mapTaskResponse(updated, new Date());
       });
     } catch (error) {
       throw mapAssignmentConflict(error);
@@ -312,7 +373,7 @@ export class TaskService {
         },
       });
 
-      return updated;
+      return mapTaskResponse(updated, new Date());
     });
   }
 
