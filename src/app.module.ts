@@ -13,6 +13,7 @@ import { ExportModule } from './modules/export/export.module.js';
 import { FileModule } from './modules/file/file.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { ImportModule } from './modules/import/import.module.js';
+import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { ManagementReportModule } from './modules/management-report/management-report.module.js';
 import { NotificationModule } from './modules/notification/notification.module.js';
 import { PerformanceModule } from './modules/performance/performance.module.js';
@@ -58,6 +59,7 @@ const ENV_FILE_PATHS = [
     DashboardModule,
     ImportModule,
     ExportModule,
+    InventoryModule,
     FileModule,
     HealthModule,
   ],

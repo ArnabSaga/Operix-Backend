@@ -9,6 +9,7 @@ model Team {
   members TeamMember[]
   tasks   Task[]
   managementReports ManagementReport[]
+  inventoryItems InventoryItem[] @relation("TeamInventoryItems")
 
   @@index([adminId])
   @@map("team")

@@ -46,3 +46,12 @@ enum ManagementReportReviewAction {
   APPROVE
   REQUEST_REVISION
 }
+
+enum InventoryTransactionType {
+  STOCK_IN
+  STOCK_OUT
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  ASSIGN
+  RETURN
+}

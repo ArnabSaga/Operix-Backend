@@ -33,6 +33,11 @@ model User {
   authoredManagementReports ManagementReport[]       @relation("ManagementReportAuthor")
   managementReportReviews   ManagementReportReview[] @relation("ManagementReportReviewer")
 
+  inventoryTransactions       InventoryTransaction[] @relation("InventoryTransactionActor")
+  inventoryTransactionsMember InventoryTransaction[] @relation("InventoryTransactionMember")
+  inventoryAssignments        InventoryAssignment[]  @relation("InventoryAssignments")
+  inventoryAssignmentsCreated InventoryAssignment[]  @relation("InventoryAssignmentsCreated")
+
   @@map("user")
 }
 

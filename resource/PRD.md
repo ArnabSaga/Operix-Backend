@@ -460,7 +460,7 @@ Notifications
 Real-Time Updates
 Excel Migration
 File Management
-Inventory — Conditional
+Inventory
 Settings
 ```
 
@@ -1532,42 +1532,54 @@ Users should not maintain a separate operational Excel file that conflicts with 
 
 ---
 
-# 46. Inventory Module — Conditional
+# 46. Inventory Module — Confirmed V1
 
-Inventory is not yet confirmed as a core workflow requirement.
+Inventory V1 is confirmed as a Team-scoped stock and returnable-resource module.
 
-The term "inventory" must be clarified from the organization's actual process.
-
-Potential inventory scope:
+Inventory V1 supports:
 
 ```text
-Product / Item Management
-Categories
-Stock Quantity
+Global Inventory Categories
+Team-scoped Inventory Items
+Available integer quantity
 Stock In
-Stock Out
-Stock Adjustment
-Inventory History
-Low-Stock Monitoring
-Inventory Reports
-Inventory-Related Tasks
-Asset Assignment
-Resource Assignment
+Consumable Stock Out
+Audited Stock Adjustment
+Optional Member attribution for consumable Stock Out
+Returnable Item Assignment to Members
+Partial and Full Return
+Immutable Inventory Transaction History
+Derived Low-Stock and Out-of-Stock state
+Scoped Inventory Summary
 ```
 
 ---
 
 # 47. Inventory Implementation Rule
 
-Inventory should only be implemented when the organization confirms:
+Inventory V1 must not add:
 
-- what is being inventoried;
-- whether quantity is required;
-- whether stock-in/out is required;
-- whether assets are assigned to Members;
-- whether warehouses/branches exist;
-- whether inventory relates to tasks;
-- whether batch/serial information exists.
+```text
+Warehouse / branch inventory
+Supplier
+Procurement
+Purchase order
+Sales / accounting
+Unit cost / valuation
+Batch / lot
+Expiry
+Serial number
+Barcode
+Depreciation
+Stock transfer
+Task linkage
+Inventory attachments
+Inventory Excel import/export
+CSV/PDF
+WebSocket inventory events
+SMTP inventory email
+Automatic replenishment
+```
 
 Advanced inventory features must not be invented without confirmation.
 
@@ -2266,7 +2278,7 @@ PDF Reporting where required
 
 ## Phase 6 — Inventory
 
-Only if confirmed as an actual organizational requirement.
+Confirmed V1 scope: Team-scoped stock, returnable assignment, returns, immutable ledger, and scoped summary.
 
 ## Phase 7 — Advanced Analytics
 
@@ -2452,7 +2464,7 @@ OPERIX
    │
    ├── Submissions / Reviews
    │
-   ├── Inventory — if required
+   ├── Inventory
    │
    ↓
 Activities
@@ -2548,7 +2560,7 @@ Real-Time
      ↓
 Excel Migration
      ↓
-Inventory — if confirmed
+Inventory
 ```
 
 The first production objective is to make the **core work lifecycle trustworthy**.
