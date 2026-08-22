@@ -26,6 +26,14 @@ export interface ApplicationConfiguration {
     fromEmail: string;
     fromName: string;
   };
+
+  fileStorage: {
+    enabled: boolean;
+    cloudinaryCloudName: string;
+    cloudinaryApiKey: string;
+    cloudinaryApiSecret: string;
+    cloudinaryFolder: string;
+  };
 }
 
 export default function configuration(): ApplicationConfiguration {
@@ -67,6 +75,14 @@ export default function configuration(): ApplicationConfiguration {
       pass: process.env.SMTP_PASS ?? '',
       fromEmail: process.env.SMTP_FROM_EMAIL ?? '',
       fromName: process.env.SMTP_FROM_NAME ?? 'Operix',
+    },
+
+    fileStorage: {
+      enabled: process.env.FILE_STORAGE_ENABLED === 'true',
+      cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME ?? '',
+      cloudinaryApiKey: process.env.CLOUDINARY_API_KEY ?? '',
+      cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
+      cloudinaryFolder: process.env.CLOUDINARY_FOLDER ?? 'operix',
     },
   };
 }

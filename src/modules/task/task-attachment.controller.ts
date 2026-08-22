@@ -1,10 +1,9 @@
 import {
-  Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
-  Query,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -23,18 +22,16 @@ import {
   MAX_ATTACHMENT_FILES,
   MAX_FILE_SIZE_BYTES,
 } from '../../shared/file-storage/file-storage.constant.js';
-import { PaginationQueryDto } from '../../shared/pagination/pagination.dto.js';
-import { CreateSubmissionDto } from './dto/create-submission.dto.js';
-import { SubmissionService } from './submission.service.js';
+import { TaskAttachmentService } from './task-attachment.service.js';
 
-@ApiTags('submissions')
-@Controller('tasks/:taskId/submissions')
+@ApiTags('task-attachments')
+@Controller('tasks/:taskId/attachments')
 @UseGuards(ViewerContextGuard, AccountStatusGuard, OperixRoleGuard)
-export class TaskSubmissionController {
-  constructor(private readonly submissionService: SubmissionService) {}
+export class TaskAttachmentController {
+  constructor(private readonly taskAttachmentService: TaskAttachmentService) {}
 
   @Post()
-  @RequireRoles(UserRole.MEMBER)
+  @RequireRoles(UserRole.ADMIN)
   @UseInterceptors(
     FilesInterceptor('files', MAX_ATTACHMENT_FILES, {
       storage: memoryStorage(),
@@ -44,22 +41,38 @@ export class TaskSubmissionController {
       },
     }),
   )
-  createSubmission(
+  uploadTaskAttachments(
     @CurrentViewer() viewer: OperixViewer,
     @Param('taskId') taskId: string,
-    @Body() dto: CreateSubmissionDto,
     @UploadedFiles() files: Express.Multer.File[] | undefined,
   ) {
-    return this.submissionService.createSubmission(viewer, taskId, dto, files);
+    return this.taskAttachmentService.uploadTaskAttachments(
+      viewer,
+      taskId,
+      files,
+    );
   }
 
   @Get()
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
-  listTaskSubmissions(
+  listTaskAttachments(
     @CurrentViewer() viewer: OperixViewer,
     @Param('taskId') taskId: string,
-    @Query() query: PaginationQueryDto,
   ) {
-    return this.submissionService.listTaskSubmissions(viewer, taskId, query);
+    return this.taskAttachmentService.listTaskAttachments(viewer, taskId);
+  }
+
+  @Delete(':attachmentId')
+  @RequireRoles(UserRole.ADMIN)
+  deleteTaskAttachment(
+    @CurrentViewer() viewer: OperixViewer,
+    @Param('taskId') taskId: string,
+    @Param('attachmentId') attachmentId: string,
+  ) {
+    return this.taskAttachmentService.deleteTaskAttachment(
+      viewer,
+      taskId,
+      attachmentId,
+    );
   }
 }

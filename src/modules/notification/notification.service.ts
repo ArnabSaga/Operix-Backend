@@ -50,6 +50,22 @@ export class NotificationService {
     };
   }
 
+  async listPreview(
+    viewer: OperixViewer,
+    limit: number,
+  ): Promise<SafeNotificationResponse[]> {
+    const notifications = await this.prisma.notification.findMany({
+      where: {
+        receiverId: viewer.userId,
+      },
+      select: notificationSelect,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+    });
+
+    return notifications.map(mapNotificationResponse);
+  }
+
   async getUnreadCount(
     viewer: OperixViewer,
   ): Promise<NotificationUnreadCountResponse> {

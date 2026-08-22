@@ -182,6 +182,32 @@ export function validateEnvironment(
     validateEmail(smtpFromEmail, 'SMTP_FROM_EMAIL');
   }
 
+  const fileStorageEnabled = parseBoolean(
+    environment.FILE_STORAGE_ENABLED,
+    'FILE_STORAGE_ENABLED',
+    false,
+  );
+  const cloudinaryCloudName = fileStorageEnabled
+    ? requiredString(environment, 'CLOUDINARY_CLOUD_NAME')
+    : typeof environment.CLOUDINARY_CLOUD_NAME === 'string'
+      ? environment.CLOUDINARY_CLOUD_NAME.trim()
+      : '';
+  const cloudinaryApiKey = fileStorageEnabled
+    ? requiredString(environment, 'CLOUDINARY_API_KEY')
+    : typeof environment.CLOUDINARY_API_KEY === 'string'
+      ? environment.CLOUDINARY_API_KEY.trim()
+      : '';
+  const cloudinaryApiSecret = fileStorageEnabled
+    ? requiredString(environment, 'CLOUDINARY_API_SECRET')
+    : typeof environment.CLOUDINARY_API_SECRET === 'string'
+      ? environment.CLOUDINARY_API_SECRET
+      : '';
+  const cloudinaryFolder =
+    typeof environment.CLOUDINARY_FOLDER === 'string' &&
+    environment.CLOUDINARY_FOLDER.trim().length > 0
+      ? environment.CLOUDINARY_FOLDER.trim()
+      : 'operix';
+
   return {
     ...environment,
 
@@ -220,5 +246,15 @@ export function validateEnvironment(
     SMTP_FROM_EMAIL: smtpFromEmail,
 
     SMTP_FROM_NAME: smtpFromName,
+
+    FILE_STORAGE_ENABLED: fileStorageEnabled,
+
+    CLOUDINARY_CLOUD_NAME: cloudinaryCloudName,
+
+    CLOUDINARY_API_KEY: cloudinaryApiKey,
+
+    CLOUDINARY_API_SECRET: cloudinaryApiSecret,
+
+    CLOUDINARY_FOLDER: cloudinaryFolder,
   };
 }
