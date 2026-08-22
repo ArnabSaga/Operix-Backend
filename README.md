@@ -2,9 +2,9 @@
 
 Backend API for **Operix**, the Pharmaceutical Workload and Operations Management Platform.
 
-Operix replaces Excel based operational workload tracking with a role scoped workflow system. The backend currently supports authentication and RBAC, Admin and Member management, Teams, Task lifecycle, submissions, reviews, Activity, Notifications, `TASK_ASSIGNED` SMTP email, Performance, Dashboard analytics, Admin submitted Management Reports, Task and Submission attachments, Excel import, and dynamic XLSX exports.
+Operix replaces Excel based operational workload tracking with a role scoped workflow system. The backend currently supports authentication and RBAC, Admin and Member management, Teams, Task lifecycle, submissions, reviews, Activity, Notifications, `TASK_ASSIGNED` SMTP email, Performance, Dashboard analytics, Admin submitted Management Reports, Task and Submission attachments, Excel import, dynamic XLSX exports, and Inventory V1.
 
-Inventory, real time transport, CSV, PDF, stored exports, scheduled exports, export email delivery, Management Report attachments, and advanced production hardening remain deferred.
+Inventory V1 covers Team scoped items, available quantity, stock movements, returnable Member assignment, partial and full returns, immutable ledger history, and scoped summary. Real time transport, CSV, PDF, stored exports, scheduled exports, export email delivery, Management Report attachments, Inventory Excel, Inventory attachments, warehouse/procurement/accounting inventory, and advanced production hardening remain deferred.
 
 ## Requirements
 
