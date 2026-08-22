@@ -8,5 +8,6 @@ import { NotificationService } from './notification.service.js';
   imports: [PrismaModule, OperixAuthModule],
   controllers: [NotificationController],
   providers: [NotificationService],
+  exports: [NotificationService],
 })
 export class NotificationModule {}

@@ -49,6 +49,20 @@ export class ActivityService {
     };
   }
 
+  async listPreview(
+    viewer: OperixViewer,
+    limit: number,
+  ): Promise<PaginatedActivityResponse['data']> {
+    const visibility = await this.buildVisibilityWhere(viewer);
+
+    return this.prisma.activityLog.findMany({
+      where: visibility,
+      select: activitySelect,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+    });
+  }
+
   private async buildVisibilityWhere(
     viewer: OperixViewer,
   ): Promise<Prisma.ActivityLogWhereInput> {

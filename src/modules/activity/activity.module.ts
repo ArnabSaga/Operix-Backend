@@ -8,5 +8,6 @@ import { ActivityService } from './activity.service.js';
   imports: [PrismaModule, OperixAuthModule],
   controllers: [ActivityController],
   providers: [ActivityService],
+  exports: [ActivityService],
 })
 export class ActivityModule {}
