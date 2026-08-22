@@ -116,6 +116,14 @@ describe('ActivityService', () => {
       managementReport: {
         findMany: jestApi.fn().mockResolvedValue([{ id: 'report-a' }]),
       },
+      inventoryItem: {
+        findMany: jestApi.fn().mockResolvedValue([{ id: 'inventory-item-a' }]),
+      },
+      inventoryAssignment: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'inventory-assignment-a' }]),
+      },
       activityLog: {
         findMany: jestApi.fn().mockResolvedValue([]),
         count: jestApi.fn().mockResolvedValue(0),
@@ -162,6 +170,18 @@ describe('ActivityService', () => {
                     in: ['report-a'],
                   },
                 },
+                {
+                  entityType: 'INVENTORY_ITEM',
+                  entityId: {
+                    in: ['inventory-item-a'],
+                  },
+                },
+                {
+                  entityType: 'INVENTORY_ASSIGNMENT',
+                  entityId: {
+                    in: ['inventory-assignment-a'],
+                  },
+                },
               ],
             },
             {
@@ -177,6 +197,11 @@ describe('ActivityService', () => {
     const prisma = {
       task: {
         findMany: jestApi.fn().mockResolvedValue([{ id: 'task-a' }]),
+      },
+      inventoryAssignment: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'inventory-assignment-a' }]),
       },
       activityLog: {
         findMany: jestApi.fn().mockResolvedValue([]),
@@ -206,6 +231,12 @@ describe('ActivityService', () => {
                     in: ['task-a'],
                   },
                 },
+                {
+                  entityType: 'INVENTORY_ASSIGNMENT',
+                  entityId: {
+                    in: ['inventory-assignment-a'],
+                  },
+                },
               ],
             },
           ],
@@ -217,6 +248,9 @@ describe('ActivityService', () => {
   it('rejects Member actorId filter and ambiguous date inputs', async () => {
     const prisma = {
       task: {
+        findMany: jestApi.fn().mockResolvedValue([]),
+      },
+      inventoryAssignment: {
         findMany: jestApi.fn().mockResolvedValue([]),
       },
     };

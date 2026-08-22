@@ -42,6 +42,7 @@ import type {
   MemberDashboardOverview,
   MemberDashboardWorkload,
   MemberWorkloadRow,
+  PaginatedMemberWorkload,
   ReportStatusCounts,
   SuperAdminDashboardOverview,
   SuperAdminDashboardWorkload,
@@ -128,6 +129,108 @@ export class DashboardService {
   ): Promise<DashboardTrendsResponse> {
     const now = new Date();
     const days = query.days ?? DashboardTrendDays.THIRTY;
+    const start = startOfUtcTrendWindow(days, now);
+    const tasks = await this.prisma.task.findMany({
+      where: {
+        AND: [
+          this.buildTaskScopeWhere(viewer),
+          {
+            completedAt: {
+              gte: start,
+              lte: now,
+            },
+          },
+        ],
+      },
+      select: {
+        completedAt: true,
+      },
+    });
+
+    return {
+      role: viewer.role,
+      completionTrend: buildCompletionTrend(tasks, days, now),
+      context: this.createContext(viewer, now),
+    };
+  }
+
+  async getWorkloadForExport(
+    viewer: OperixViewer,
+    now: Date,
+    takeMembers: number,
+  ): Promise<DashboardWorkloadResponse> {
+    if (viewer.role === UserRole.SUPER_ADMIN) {
+      const [teams, members] = await Promise.all([
+        this.loadTeamWorkloadRows({}, now),
+        this.loadAllMemberWorkloadRows(
+          {
+            role: UserRole.MEMBER,
+          },
+          now,
+          takeMembers,
+        ),
+      ]);
+
+      return {
+        role: viewer.role,
+        byTeam: teams,
+        byMember: members,
+        context: this.createContext(viewer, now),
+      };
+    }
+
+    if (viewer.role === UserRole.ADMIN) {
+      const teamIds = this.getAdminTeamIds(viewer);
+      const taskWhere = this.buildAdminTaskWhere(teamIds);
+      const [tasks, byMember] = await Promise.all([
+        this.loadTasksForMetrics(taskWhere),
+        this.loadAllMemberWorkloadRows(
+          {
+            role: UserRole.MEMBER,
+            teamMembership: {
+              teamId: {
+                in: teamIds,
+              },
+            },
+          },
+          now,
+          takeMembers,
+        ),
+      ]);
+      const performance = calculatePerformanceMetrics(tasks, []);
+      const workload = calculateWorkloadMetrics(tasks, now);
+
+      return {
+        role: viewer.role,
+        teamSummary: {
+          performance: {
+            totalTasks: performance.totalTasks,
+            eligibleTasks: performance.eligibleTasks,
+            completedTasks: performance.completedTasks,
+            cancelledTasks: performance.cancelledTasks,
+            completionRate: performance.completionRate,
+          },
+          workload,
+          reviewQueueTasks: tasks.filter((task) =>
+            TASK_REVIEW_QUEUE_STATUSES.has(task.status),
+          ).length,
+          revisionRequiredTasks: tasks.filter(
+            (task) => task.status === TaskStatus.REVISION_REQUIRED,
+          ).length,
+        },
+        byMember,
+        context: this.createContext(viewer, now),
+      };
+    }
+
+    return this.getMemberWorkload(viewer, now);
+  }
+
+  async getTrendsForExport(
+    viewer: OperixViewer,
+    days: DashboardTrendDays,
+    now: Date,
+  ): Promise<DashboardTrendsResponse> {
     const start = startOfUtcTrendWindow(days, now);
     const tasks = await this.prisma.task.findMany({
       where: {
@@ -473,6 +576,29 @@ export class DashboardService {
       meta: createPaginationMeta({
         page: normalized.page,
         limit: normalized.limit,
+        total: sorted.length,
+      }),
+    };
+  }
+
+  private async loadAllMemberWorkloadRows(
+    where: Prisma.UserWhereInput,
+    now: Date,
+    take: number,
+  ): Promise<PaginatedMemberWorkload> {
+    const members = await this.prisma.user.findMany({
+      where,
+      select: dashboardMemberSelect,
+      take,
+    });
+    const rows = await this.buildMemberWorkloadRows(members, now);
+    const sorted = rows.sort(compareMemberWorkloadRows);
+
+    return {
+      data: sorted,
+      meta: createPaginationMeta({
+        page: 1,
+        limit: sorted.length,
         total: sorted.length,
       }),
     };

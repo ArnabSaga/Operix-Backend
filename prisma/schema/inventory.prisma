@@ -1,0 +1,106 @@
+model InventoryCategory {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items InventoryItem[]
+
+  @@index([isActive])
+  @@map("inventory_category")
+}
+
+model InventoryItem {
+  id          String  @id @default(cuid())
+  sku         String
+  name        String
+  description String?
+
+  teamId     String
+  categoryId String?
+
+  quantity          Int @default(0)
+  lowStockThreshold Int?
+
+  isReturnable Boolean @default(false)
+  isActive     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team     Team               @relation("TeamInventoryItems", fields: [teamId], references: [id], onDelete: Restrict)
+  category InventoryCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  transactions InventoryTransaction[]
+  assignments  InventoryAssignment[]
+
+  @@unique([teamId, sku])
+  @@index([teamId, isActive])
+  @@index([categoryId])
+  @@index([name])
+  @@map("inventory_item")
+}
+
+model InventoryTransaction {
+  id String @id @default(cuid())
+
+  itemId String
+
+  type InventoryTransactionType
+
+  quantity          Int
+  previousQuantity  Int
+  resultingQuantity Int
+
+  actorId  String
+  memberId String?
+
+  assignmentId String?
+
+  reason String?
+  note   String?
+
+  createdAt DateTime @default(now())
+
+  item       InventoryItem        @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  actor      User                 @relation("InventoryTransactionActor", fields: [actorId], references: [id], onDelete: Restrict)
+  member     User?                @relation("InventoryTransactionMember", fields: [memberId], references: [id], onDelete: Restrict)
+  assignment InventoryAssignment? @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+
+  @@index([itemId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([memberId, createdAt])
+  @@index([type, createdAt])
+  @@index([assignmentId])
+  @@map("inventory_transaction")
+}
+
+model InventoryAssignment {
+  id String @id @default(cuid())
+
+  itemId       String
+  memberId     String
+  assignedById String
+
+  quantity         Int
+  returnedQuantity Int @default(0)
+
+  assignedAt DateTime  @default(now())
+  returnedAt DateTime?
+
+  note String?
+
+  item       InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  member     User          @relation("InventoryAssignments", fields: [memberId], references: [id], onDelete: Restrict)
+  assignedBy User          @relation("InventoryAssignmentsCreated", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  transactions InventoryTransaction[]
+
+  @@index([itemId, returnedAt])
+  @@index([memberId, returnedAt])
+  @@index([assignedById])
+  @@map("inventory_assignment")
+}

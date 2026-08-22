@@ -113,6 +113,43 @@ export class PerformanceService {
     };
   }
 
+  async getMemberPerformanceForExport(
+    viewer: OperixViewer,
+    query: Pick<ListMemberPerformanceQueryDto, 'teamId'>,
+    now: Date,
+    take: number,
+  ): Promise<MemberPerformanceSummary[]> {
+    this.assertMemberListRole(viewer);
+    this.assertTeamFilterAllowed(viewer, query.teamId);
+
+    const where = buildMemberListWhere(viewer, query.teamId);
+    const members = await this.prisma.user.findMany({
+      where,
+      select: performanceMemberSelect,
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      take,
+    });
+    const memberIds = members.map((member) => member.id);
+
+    if (memberIds.length === 0) {
+      return [];
+    }
+
+    const [tasksByMemberId, revisionsByMemberId] = await Promise.all([
+      this.loadCurrentAssignmentTasksByMemberId(memberIds),
+      this.loadRevisionsByMemberId(memberIds),
+    ]);
+
+    return members.map((member) =>
+      this.buildMemberSummary(
+        member,
+        tasksByMemberId.get(member.id) ?? [],
+        revisionsByMemberId.get(member.id) ?? [],
+        now,
+      ),
+    );
+  }
+
   async getMemberPerformance(
     viewer: OperixViewer,
     memberId: string,
@@ -153,6 +190,61 @@ export class PerformanceService {
     this.assertTeamPerformanceRole(viewer);
 
     const now = new Date();
+    const team = await this.prisma.team.findFirst({
+      where: {
+        id: teamId,
+        AND: [buildPerformanceTeamScopeWhere(viewer)],
+      },
+      select: performanceTeamSelect,
+    });
+
+    if (!team) {
+      throw teamNotFound();
+    }
+
+    const [memberCount, activeMemberCount, tasks, revisions] =
+      await Promise.all([
+        this.prisma.teamMember.count({
+          where: {
+            teamId,
+          },
+        }),
+        this.prisma.teamMember.count({
+          where: {
+            teamId,
+            member: {
+              status: UserStatus.ACTIVE,
+            },
+          },
+        }),
+        this.prisma.task.findMany({
+          where: {
+            teamId,
+          },
+          select: performanceTaskSelect,
+        }),
+        this.loadTeamRevisions(teamId),
+      ]);
+
+    return {
+      team: {
+        ...team,
+        memberCount,
+        activeMemberCount,
+      },
+      performance: calculatePerformanceMetrics(tasks, revisions),
+      workload: calculateWorkloadMetrics(tasks, now),
+      metricContext: createMetricContext(now),
+    };
+  }
+
+  async getTeamPerformanceForExport(
+    viewer: OperixViewer,
+    teamId: string,
+    now: Date,
+  ): Promise<TeamPerformanceResponse> {
+    this.assertTeamPerformanceRole(viewer);
+
     const team = await this.prisma.team.findFirst({
       where: {
         id: teamId,

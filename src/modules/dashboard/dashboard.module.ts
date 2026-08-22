@@ -10,5 +10,6 @@ import { DashboardService } from './dashboard.service.js';
   imports: [PrismaModule, OperixAuthModule, ActivityModule, NotificationModule],
   controllers: [DashboardController],
   providers: [DashboardService],
+  exports: [DashboardService],
 })
 export class DashboardModule {}

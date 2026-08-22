@@ -12,5 +12,6 @@ import { TaskService } from './task.service.js';
   imports: [PrismaModule, OperixAuthModule, MailModule, FileStorageModule],
   controllers: [TaskController, TaskAttachmentController],
   providers: [TaskService, TaskAttachmentService],
+  exports: [TaskService],
 })
 export class TaskModule {}

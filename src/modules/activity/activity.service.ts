@@ -72,7 +72,13 @@ export class ActivityService {
 
     if (viewer.role === UserRole.ADMIN) {
       const teamIds = viewer.scope.type === 'ADMIN' ? viewer.scope.teamIds : [];
-      const [memberRows, taskRows, reportRows] = await Promise.all([
+      const [
+        memberRows,
+        taskRows,
+        reportRows,
+        inventoryItemRows,
+        inventoryAssignmentRows,
+      ] = await Promise.all([
         this.prisma.teamMember.findMany({
           where: {
             teamId: {
@@ -101,10 +107,36 @@ export class ActivityService {
             id: true,
           },
         }),
+        this.prisma.inventoryItem.findMany({
+          where: {
+            teamId: {
+              in: teamIds,
+            },
+          },
+          select: {
+            id: true,
+          },
+        }),
+        this.prisma.inventoryAssignment.findMany({
+          where: {
+            item: {
+              teamId: {
+                in: teamIds,
+              },
+            },
+          },
+          select: {
+            id: true,
+          },
+        }),
       ]);
       const memberIds = memberRows.map((row) => row.memberId);
       const taskIds = taskRows.map((row) => row.id);
       const reportIds = reportRows.map((row) => row.id);
+      const inventoryItemIds = inventoryItemRows.map((row) => row.id);
+      const inventoryAssignmentIds = inventoryAssignmentRows.map(
+        (row) => row.id,
+      );
 
       return {
         OR: [
@@ -137,24 +169,47 @@ export class ActivityService {
               in: reportIds,
             },
           },
+          {
+            entityType: 'INVENTORY_ITEM',
+            entityId: {
+              in: inventoryItemIds,
+            },
+          },
+          {
+            entityType: 'INVENTORY_ASSIGNMENT',
+            entityId: {
+              in: inventoryAssignmentIds,
+            },
+          },
         ],
       };
     }
 
-    const taskRows = await this.prisma.task.findMany({
-      where: {
-        assignments: {
-          some: {
-            memberId: viewer.userId,
-            unassignedAt: null,
+    const [taskRows, inventoryAssignmentRows] = await Promise.all([
+      this.prisma.task.findMany({
+        where: {
+          assignments: {
+            some: {
+              memberId: viewer.userId,
+              unassignedAt: null,
+            },
           },
         },
-      },
-      select: {
-        id: true,
-      },
-    });
+        select: {
+          id: true,
+        },
+      }),
+      this.prisma.inventoryAssignment.findMany({
+        where: {
+          memberId: viewer.userId,
+        },
+        select: {
+          id: true,
+        },
+      }),
+    ]);
     const taskIds = taskRows.map((row) => row.id);
+    const inventoryAssignmentIds = inventoryAssignmentRows.map((row) => row.id);
 
     return {
       OR: [
@@ -169,6 +224,12 @@ export class ActivityService {
           entityType: 'TASK',
           entityId: {
             in: taskIds,
+          },
+        },
+        {
+          entityType: 'INVENTORY_ASSIGNMENT',
+          entityId: {
+            in: inventoryAssignmentIds,
           },
         },
       ],

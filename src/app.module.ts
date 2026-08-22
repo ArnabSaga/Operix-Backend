@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { fileURLToPath } from 'node:url';
@@ -9,8 +9,11 @@ import { PrismaModule } from './database/prisma.module.js';
 import { ActivityModule } from './modules/activity/activity.module.js';
 import { OperixAuthModule } from './modules/auth/auth.module.js';
 import { DashboardModule } from './modules/dashboard/dashboard.module.js';
+import { ExportModule } from './modules/export/export.module.js';
 import { FileModule } from './modules/file/file.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { ImportModule } from './modules/import/import.module.js';
+import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { ManagementReportModule } from './modules/management-report/management-report.module.js';
 import { NotificationModule } from './modules/notification/notification.module.js';
 import { PerformanceModule } from './modules/performance/performance.module.js';
@@ -34,12 +37,15 @@ const ENV_FILE_PATHS = [
       load: [configuration],
       validate: validateEnvironment,
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60_000,
-        limit: 100,
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          ttl: config.getOrThrow<number>('app.throttleTtlMs'),
+          limit: config.getOrThrow<number>('app.throttleLimit'),
+        },
+      ],
+    }),
     PrismaModule,
     OperixAuthModule,
     TeamModule,
@@ -51,6 +57,9 @@ const ENV_FILE_PATHS = [
     PerformanceModule,
     ManagementReportModule,
     DashboardModule,
+    ImportModule,
+    ExportModule,
+    InventoryModule,
     FileModule,
     HealthModule,
   ],

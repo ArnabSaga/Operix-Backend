@@ -5,6 +5,8 @@ export interface ApplicationConfiguration {
     frontendOrigins: string[];
     frontendAppUrl: string;
     swaggerEnabled: boolean;
+    throttleTtlMs: number;
+    throttleLimit: number;
   };
 
   database: {
@@ -50,7 +52,14 @@ export default function configuration(): ApplicationConfiguration {
 
       frontendAppUrl: process.env.FRONTEND_APP_URL ?? '',
 
-      swaggerEnabled: process.env.SWAGGER_ENABLED !== 'false',
+      swaggerEnabled: resolveSwaggerEnabled(
+        process.env.NODE_ENV ?? 'development',
+        process.env.SWAGGER_ENABLED,
+      ),
+
+      throttleTtlMs: Number(process.env.THROTTLE_TTL_MS ?? 60_000),
+
+      throttleLimit: Number(process.env.THROTTLE_LIMIT ?? 100),
     },
 
     database: {
@@ -85,4 +94,15 @@ export default function configuration(): ApplicationConfiguration {
       cloudinaryFolder: process.env.CLOUDINARY_FOLDER ?? 'operix',
     },
   };
+}
+
+function resolveSwaggerEnabled(
+  nodeEnvironment: string,
+  value: string | undefined,
+): boolean {
+  if (value === undefined) {
+    return nodeEnvironment !== 'production';
+  }
+
+  return value === 'true';
 }

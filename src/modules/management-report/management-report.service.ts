@@ -131,6 +131,23 @@ export class ManagementReportService {
     };
   }
 
+  async getManagementReportsForExport(
+    viewer: OperixViewer,
+    query: Omit<ListManagementReportQueryDto, 'page' | 'limit'>,
+    take: number,
+  ): Promise<SafeManagementReportResponse[]> {
+    this.assertReadRole(viewer);
+    const where = this.buildListWhere(viewer, query);
+    const reports = await this.prisma.managementReport.findMany({
+      where,
+      select: managementReportSelect,
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      take,
+    });
+
+    return reports.map((report) => mapManagementReportResponse(report));
+  }
+
   async getReport(
     viewer: OperixViewer,
     reportId: string,

@@ -460,7 +460,7 @@ Notifications
 Real-Time Updates
 Excel Migration
 File Management
-Inventory — Conditional
+Inventory
 Settings
 ```
 
@@ -1435,7 +1435,12 @@ Admins may create drafts, edit drafts or revision-required reports, and submit
 versions. Super Admin may approve or request revision. `submittedAt` on the
 report means latest submission time; each version preserves its own submitted
 time. Attachments, fixed cadence, fixed report type templates, `REJECT`, report
-email, PDF, Excel, CSV, and system-generated report exports remain deferred.
+email, PDF, CSV, stored exports, scheduled exports, and emailed report delivery
+remain deferred.
+
+Read only system generated XLSX export of authorized Management Report data is
+supported. This export does not replace or change the Admin submitted
+Management Report workflow.
 
 ---
 
@@ -1468,6 +1473,22 @@ Verify
       ↓
 Platform Database
 ```
+
+V1 Excel migration currently supports:
+
+```text
+Historical terminal Task import
+Existing Member designation enrichment
+System generated XLSX exports
+```
+
+Member Excel import is deliberately not bulk account administration. It validates `employeeId`, `email`, and current Team context, then updates only `User.designation` for existing `MEMBER` accounts.
+
+Member Excel import must not create accounts, provision Better Auth, change identity fields, change roles or statuses, transfer Teams, create Notifications, or send email.
+
+V1 XLSX exports are read only generated workbooks for Tasks, Performance, Dashboard workload/trends, and Management Reports. Exports must use Operix authorization, scoped reads, and canonical calculators. Excel displays Operix results; Excel formulas must not become business truth.
+
+CSV, PDF, stored exports, scheduled exports, and email delivery of exports remain deferred.
 
 ---
 
@@ -1511,42 +1532,54 @@ Users should not maintain a separate operational Excel file that conflicts with 
 
 ---
 
-# 46. Inventory Module — Conditional
+# 46. Inventory Module — Confirmed V1
 
-Inventory is not yet confirmed as a core workflow requirement.
+Inventory V1 is confirmed as a Team-scoped stock and returnable-resource module.
 
-The term "inventory" must be clarified from the organization's actual process.
-
-Potential inventory scope:
+Inventory V1 supports:
 
 ```text
-Product / Item Management
-Categories
-Stock Quantity
+Global Inventory Categories
+Team-scoped Inventory Items
+Available integer quantity
 Stock In
-Stock Out
-Stock Adjustment
-Inventory History
-Low-Stock Monitoring
-Inventory Reports
-Inventory-Related Tasks
-Asset Assignment
-Resource Assignment
+Consumable Stock Out
+Audited Stock Adjustment
+Optional Member attribution for consumable Stock Out
+Returnable Item Assignment to Members
+Partial and Full Return
+Immutable Inventory Transaction History
+Derived Low-Stock and Out-of-Stock state
+Scoped Inventory Summary
 ```
 
 ---
 
 # 47. Inventory Implementation Rule
 
-Inventory should only be implemented when the organization confirms:
+Inventory V1 must not add:
 
-- what is being inventoried;
-- whether quantity is required;
-- whether stock-in/out is required;
-- whether assets are assigned to Members;
-- whether warehouses/branches exist;
-- whether inventory relates to tasks;
-- whether batch/serial information exists.
+```text
+Warehouse / branch inventory
+Supplier
+Procurement
+Purchase order
+Sales / accounting
+Unit cost / valuation
+Batch / lot
+Expiry
+Serial number
+Barcode
+Depreciation
+Stock transfer
+Task linkage
+Inventory attachments
+Inventory Excel import/export
+CSV/PDF
+WebSocket inventory events
+SMTP inventory email
+Automatic replenishment
+```
 
 Advanced inventory features must not be invented without confirmation.
 
@@ -2245,7 +2278,7 @@ PDF Reporting where required
 
 ## Phase 6 — Inventory
 
-Only if confirmed as an actual organizational requirement.
+Confirmed V1 scope: Team-scoped stock, returnable assignment, returns, immutable ledger, and scoped summary.
 
 ## Phase 7 — Advanced Analytics
 
@@ -2431,7 +2464,7 @@ OPERIX
    │
    ├── Submissions / Reviews
    │
-   ├── Inventory — if required
+   ├── Inventory
    │
    ↓
 Activities
@@ -2527,7 +2560,7 @@ Real-Time
      ↓
 Excel Migration
      ↓
-Inventory — if confirmed
+Inventory
 ```
 
 The first production objective is to make the **core work lifecycle trustworthy**.
