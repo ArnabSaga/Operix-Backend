@@ -121,6 +121,39 @@ function firstMockArg<TArgument>(mock: unknown): TArgument {
   return (mock as MockCallReader<TArgument>).mock.calls[0]![0];
 }
 
+function existingHistoricalTask(overrides = {}) {
+  const createdAt = new Date('2026-08-18T08:00:00Z');
+  const assignedAt = new Date('2026-08-18T09:00:00Z');
+  const startedAt = new Date('2026-08-18T10:00:00Z');
+  const completedAt = new Date('2026-08-20T10:00:00Z');
+
+  return {
+    id: 'task-a',
+    referenceCode: 'TASK-001',
+    title: 'Completed Historical Task',
+    description: null,
+    remarks: null,
+    priority: 'MEDIUM',
+    status: 'COMPLETED',
+    teamId: 'team-a',
+    createdById: 'admin-a',
+    createdAt,
+    startedAt,
+    dueAt: null,
+    completedAt,
+    cancelledAt: null,
+    assignments: [
+      {
+        memberId: 'member-a',
+        assignedById: 'admin-a',
+        assignedAt,
+        unassignedAt: null,
+      },
+    ],
+    ...overrides,
+  };
+}
+
 describe('ImportService', () => {
   it('requires Super Admin for previews', async () => {
     const { service } = createService();
@@ -274,7 +307,9 @@ describe('ImportService', () => {
           .mockResolvedValueOnce([{ id: 'member-a', employeeId: 'EMP-001' }])
           .mockResolvedValueOnce([
             { id: 'admin-a', email: 'admin@example.com' },
-          ]),
+          ])
+          .mockResolvedValueOnce([{ id: 'member-a', role: 'MEMBER' }])
+          .mockResolvedValueOnce([{ id: 'admin-a' }]),
       },
       team: {
         findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
@@ -348,6 +383,82 @@ describe('ImportService', () => {
     );
   });
 
+  it('enforces terminal timestamp exclusivity for historical Tasks', async () => {
+    const file = workbookFile('Tasks', [
+      [
+        'Task Reference',
+        'Title',
+        'Status',
+        'Team ID',
+        'Member Employee ID',
+        'Created By Email',
+        'Assigned By Email',
+        'Created At',
+        'Assigned At',
+        'Completed At',
+        'Cancelled At',
+      ],
+      [
+        'TASK-001',
+        'Completed With Cancelled',
+        'COMPLETED',
+        'team-a',
+        'EMP-001',
+        'admin@example.com',
+        'admin@example.com',
+        '2026-08-19T08:00:00Z',
+        '2026-08-19T09:00:00Z',
+        '2026-08-20T10:00:00Z',
+        '2026-08-21T10:00:00Z',
+      ],
+      [
+        'TASK-002',
+        'Cancelled Without Cancelled',
+        'CANCELLED',
+        'team-a',
+        'EMP-001',
+        'admin@example.com',
+        'admin@example.com',
+        '2026-08-19T08:00:00Z',
+        '2026-08-19T09:00:00Z',
+        '',
+        '',
+      ],
+      [
+        'TASK-003',
+        'Cancelled With Completed',
+        'CANCELLED',
+        'team-a',
+        'EMP-001',
+        'admin@example.com',
+        'admin@example.com',
+        '2026-08-19T08:00:00Z',
+        '2026-08-19T09:00:00Z',
+        '2026-08-20T10:00:00Z',
+        '2026-08-21T10:00:00Z',
+      ],
+    ]);
+    const { service } = createService();
+
+    const preview = await service.preview(
+      viewer(),
+      IMPORT_TYPE.HISTORICAL_TASK,
+      file,
+    );
+
+    expect(preview.summary).toMatchObject({
+      candidateRows: 0,
+      invalidRows: 3,
+    });
+    expect(preview.issues.map((issue) => issue.message)).toEqual(
+      expect.arrayContaining([
+        'COMPLETED historical Tasks must not include cancelledAt.',
+        'CANCELLED historical Tasks require cancelledAt.',
+        'CANCELLED historical Tasks must not include completedAt.',
+      ]),
+    );
+  });
+
   it('blocks historical Task execution when analysis has invalid rows', async () => {
     const file = workbookFile('Tasks', [
       [
@@ -377,13 +488,13 @@ describe('ImportService', () => {
 
     await service
       .importHistoricalTasks(viewer(), file)
-      .catch((error: unknown) =>
+      .catch((error: unknown) => {
         expectAppException(
           error,
           HttpStatus.CONFLICT,
           'IMPORT_EXECUTION_BLOCKED',
-        ),
-      );
+        );
+      });
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.task.createManyAndReturn).not.toHaveBeenCalled();
@@ -442,16 +553,42 @@ describe('ImportService', () => {
           .mockResolvedValueOnce([{ id: 'member-a', employeeId: 'EMP-001' }])
           .mockResolvedValueOnce([
             { id: 'admin-a', email: 'admin@example.com' },
-          ]),
+          ])
+          .mockResolvedValueOnce([{ id: 'member-a', role: 'MEMBER' }])
+          .mockResolvedValueOnce([{ id: 'admin-a' }]),
       },
       team: {
-        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+        findMany: jestApi
+          .fn()
+          .mockResolvedValueOnce([{ id: 'team-a' }])
+          .mockResolvedValueOnce([{ id: 'team-a' }]),
       },
       task: {
         findMany: jestApi
           .fn()
           .mockResolvedValueOnce([])
-          .mockResolvedValueOnce([]),
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([
+            existingHistoricalTask(),
+            existingHistoricalTask({
+              id: 'task-b',
+              referenceCode: 'TASK-002',
+              title: 'Cancelled Historical Task',
+              status: 'CANCELLED',
+              createdAt: new Date('2026-08-17T08:00:00Z'),
+              startedAt: null,
+              completedAt: null,
+              cancelledAt: new Date('2026-08-19T10:00:00Z'),
+              assignments: [
+                {
+                  memberId: 'member-a',
+                  assignedById: 'admin-a',
+                  assignedAt: new Date('2026-08-17T09:00:00Z'),
+                  unassignedAt: null,
+                },
+              ],
+            }),
+          ]),
         createManyAndReturn: jestApi.fn().mockResolvedValue([
           { id: 'task-a', referenceCode: 'TASK-001' },
           { id: 'task-b', referenceCode: 'TASK-002' },
@@ -567,6 +704,139 @@ describe('ImportService', () => {
       },
     });
     expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+
+  it('blocks execution when a transaction-time Team reference disappears', async () => {
+    const file = workbookFile('Tasks', [
+      [
+        'Task Reference',
+        'Title',
+        'Status',
+        'Team ID',
+        'Member Employee ID',
+        'Created By Email',
+        'Assigned By Email',
+        'Created At',
+        'Assigned At',
+        'Completed At',
+      ],
+      [
+        'TASK-001',
+        'Completed Historical Task',
+        'COMPLETED',
+        'team-a',
+        'EMP-001',
+        'admin@example.com',
+        'admin@example.com',
+        '2026-08-18T08:00:00Z',
+        '2026-08-18T09:00:00Z',
+        '2026-08-20T10:00:00Z',
+      ],
+    ]);
+    const { service, prisma } = createService({
+      user: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValueOnce([{ id: 'member-a', employeeId: 'EMP-001' }])
+          .mockResolvedValueOnce([
+            { id: 'admin-a', email: 'admin@example.com' },
+          ])
+          .mockResolvedValueOnce([{ id: 'member-a', role: 'MEMBER' }])
+          .mockResolvedValueOnce([{ id: 'admin-a' }]),
+      },
+      team: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValueOnce([{ id: 'team-a' }])
+          .mockResolvedValueOnce([]),
+      },
+      task: {
+        findMany: jestApi.fn().mockResolvedValueOnce([]),
+        createManyAndReturn: jestApi.fn(),
+      },
+    });
+
+    await service
+      .importHistoricalTasks(viewer(), file)
+      .catch((error: unknown) => {
+        expectAppException(
+          error,
+          HttpStatus.CONFLICT,
+          'IMPORT_EXECUTION_BLOCKED',
+        );
+      });
+
+    expect(prisma.task.createManyAndReturn).not.toHaveBeenCalled();
+    expect(prisma.activityLog.create).not.toHaveBeenCalled();
+  });
+
+  it('treats transaction-time identical Task as no-op with no Activity', async () => {
+    const createdAt = new Date('2026-08-18T08:00:00Z');
+    const assignedAt = new Date('2026-08-18T09:00:00Z');
+    const startedAt = new Date('2026-08-18T10:00:00Z');
+    const completedAt = new Date('2026-08-20T10:00:00Z');
+    const file = workbookFile('Tasks', [
+      [
+        'Task Reference',
+        'Title',
+        'Status',
+        'Team ID',
+        'Member Employee ID',
+        'Created By Email',
+        'Assigned By Email',
+        'Created At',
+        'Assigned At',
+        'Started At',
+        'Completed At',
+      ],
+      [
+        'TASK-001',
+        'Completed Historical Task',
+        'COMPLETED',
+        'team-a',
+        'EMP-001',
+        'admin@example.com',
+        'admin@example.com',
+        createdAt.toISOString(),
+        assignedAt.toISOString(),
+        startedAt.toISOString(),
+        completedAt.toISOString(),
+      ],
+    ]);
+    const { service, prisma } = createService({
+      user: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValueOnce([{ id: 'member-a', employeeId: 'EMP-001' }])
+          .mockResolvedValueOnce([
+            { id: 'admin-a', email: 'admin@example.com' },
+          ])
+          .mockResolvedValueOnce([{ id: 'member-a', role: 'MEMBER' }])
+          .mockResolvedValueOnce([{ id: 'admin-a' }]),
+      },
+      team: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValueOnce([{ id: 'team-a' }])
+          .mockResolvedValueOnce([{ id: 'team-a' }]),
+      },
+      task: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([existingHistoricalTask()]),
+        createManyAndReturn: jestApi.fn(),
+      },
+    });
+
+    const result = await service.importHistoricalTasks(viewer(), file);
+
+    expect(result.summary).toMatchObject({
+      importedRows: 0,
+      alreadyPresentRows: 1,
+    });
+    expect(prisma.task.createManyAndReturn).not.toHaveBeenCalled();
+    expect(prisma.activityLog.create).not.toHaveBeenCalled();
   });
 
   it('reruns exact historical import as no op with no Activity', async () => {

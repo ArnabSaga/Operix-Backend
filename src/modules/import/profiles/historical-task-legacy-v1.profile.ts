@@ -398,6 +398,48 @@ function parseHistoricalTaskRow(
     );
   }
 
+  if (mappedStatus === TaskStatus.COMPLETED && dates.cancelledAt) {
+    issues.push(
+      buildIssue({
+        sheet,
+        row: row.row,
+        field: 'cancelledAt',
+        sourceValue: dates.cancelledAt.toISOString(),
+        normalizedValue: dates.cancelledAt.toISOString(),
+        code: IMPORT_ROW_ISSUE_CODE.IMPORT_CONFLICT,
+        message: 'COMPLETED historical Tasks must not include cancelledAt.',
+      }),
+    );
+  }
+
+  if (mappedStatus === TaskStatus.CANCELLED && !dates.cancelledAt) {
+    issues.push(
+      buildIssue({
+        sheet,
+        row: row.row,
+        field: 'cancelledAt',
+        sourceValue: null,
+        normalizedValue: null,
+        code: IMPORT_ROW_ISSUE_CODE.REQUIRED_VALUE_MISSING,
+        message: 'CANCELLED historical Tasks require cancelledAt.',
+      }),
+    );
+  }
+
+  if (mappedStatus === TaskStatus.CANCELLED && dates.completedAt) {
+    issues.push(
+      buildIssue({
+        sheet,
+        row: row.row,
+        field: 'completedAt',
+        sourceValue: dates.completedAt.toISOString(),
+        normalizedValue: dates.completedAt.toISOString(),
+        code: IMPORT_ROW_ISSUE_CODE.IMPORT_CONFLICT,
+        message: 'CANCELLED historical Tasks must not include completedAt.',
+      }),
+    );
+  }
+
   if (!dates.createdAt) {
     issues.push(
       buildIssue({

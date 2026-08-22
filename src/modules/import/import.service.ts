@@ -260,6 +260,8 @@ export class ImportService {
     const canonicalRows = rows
       .map((row) => row.canonical)
       .filter(isHistoricalTaskCanonical);
+    await this.assertHistoricalReferencesStillValid(tx, canonicalRows);
+
     const existing = await this.findHistoricalTasksByReference(
       tx,
       canonicalRows.map((row) => row.referenceCode),
@@ -372,11 +374,23 @@ export class ImportService {
           'Historical terminal state imported from legacy Excel. Intermediate legacy workflow transitions were not reconstructed.',
       })),
     });
+    const verifiedTasks = await this.findHistoricalTasksByReference(
+      tx,
+      rowsToCreate.map((row) => row.referenceCode),
+    );
+    const verifiedTasksByReference = new Map(
+      verifiedTasks.map((task) => [task.referenceCode, task]),
+    );
+    const unverifiedTask = rowsToCreate.find((row) => {
+      const task = verifiedTasksByReference.get(row.referenceCode);
+      return !task || !historicalTaskMatches(task, row);
+    });
 
     if (
       createdTasks.length !== rowsToCreate.length ||
       assignmentResult.count !== rowsToCreate.length ||
-      historyResult.count !== rowsToCreate.length
+      historyResult.count !== rowsToCreate.length ||
+      unverifiedTask
     ) {
       throw new AppException(
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -407,6 +421,98 @@ export class ImportService {
       assignmentsCreated: assignmentResult.count,
       historyRowsCreated: historyResult.count,
     };
+  }
+
+  private async assertHistoricalReferencesStillValid(
+    tx: Pick<PrismaTransactionClient, 'team' | 'user'>,
+    rows: HistoricalTaskCanonical[],
+  ): Promise<void> {
+    if (rows.length === 0) {
+      return;
+    }
+
+    const teamIds = unique(rows.map((row) => row.teamId));
+    const assigneeIds = unique(rows.map((row) => row.memberId));
+    const actorIds = unique(
+      rows.flatMap((row) => [row.createdById, row.assignedById]),
+    );
+    const [teams, assignees, actors] = await Promise.all([
+      tx.team.findMany({
+        where: {
+          id: {
+            in: teamIds,
+          },
+        },
+        select: {
+          id: true,
+        },
+      }),
+      tx.user.findMany({
+        where: {
+          id: {
+            in: assigneeIds,
+          },
+        },
+        select: {
+          id: true,
+          role: true,
+        },
+      }),
+      tx.user.findMany({
+        where: {
+          id: {
+            in: actorIds,
+          },
+        },
+        select: {
+          id: true,
+        },
+      }),
+    ]);
+    const existingTeamIds = new Set(teams.map((team) => team.id));
+    const assigneesById = new Map(
+      assignees.map((assignee) => [assignee.id, assignee]),
+    );
+    const existingActorIds = new Set(actors.map((actor) => actor.id));
+
+    for (const row of rows) {
+      if (!existingTeamIds.has(row.teamId)) {
+        throw this.importExecutionReferenceChanged(
+          row,
+          'teamId',
+          row.teamId,
+          'Referenced Team no longer exists.',
+        );
+      }
+
+      const assignee = assigneesById.get(row.memberId);
+      if (assignee?.role !== UserRole.MEMBER) {
+        throw this.importExecutionReferenceChanged(
+          row,
+          'memberId',
+          row.memberId,
+          'Historical assignee no longer exists as a Member.',
+        );
+      }
+
+      if (!existingActorIds.has(row.createdById)) {
+        throw this.importExecutionReferenceChanged(
+          row,
+          'createdById',
+          row.createdById,
+          'Historical creator no longer exists.',
+        );
+      }
+
+      if (!existingActorIds.has(row.assignedById)) {
+        throw this.importExecutionReferenceChanged(
+          row,
+          'assignedById',
+          row.assignedById,
+          'Historical assigner no longer exists.',
+        );
+      }
+    }
   }
 
   private async findHistoricalTasksByReference(
@@ -455,6 +561,32 @@ export class ImportService {
       warningCount: preview.summary.warningCount,
       durationMs,
     });
+  }
+
+  private importExecutionReferenceChanged(
+    row: HistoricalTaskCanonical,
+    field: string,
+    value: string,
+    message: string,
+  ): AppException {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      IMPORT_ERROR_CODE.IMPORT_EXECUTION_BLOCKED,
+      'Historical Task import is blocked because a referenced record changed during execution.',
+      {
+        issues: [
+          buildIssue({
+            sheet: 'Tasks',
+            row: row.sourceRow,
+            field,
+            sourceValue: value,
+            normalizedValue: value,
+            code: IMPORT_ROW_ISSUE_CODE.IMPORT_CONFLICT,
+            message,
+          }),
+        ],
+      },
+    );
   }
 }
 
@@ -569,4 +701,8 @@ function isUniqueReferenceConflict(error: unknown): boolean {
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === 'P2002'
   );
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.length > 0))];
 }

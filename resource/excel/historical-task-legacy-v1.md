@@ -14,7 +14,7 @@ Header row: 1
 Header order: ANY_ORDER
 Normalized header set: task reference, title, status, team id, member employee id, created by email, assigned by email, description, remarks, priority, created at, assigned at, started at, due at, completed at, cancelled at
 Required columns: Task Reference, Title, Status, Team ID, Member Employee ID, Created By Email, Assigned By Email
-Execution required values: Created At, Assigned At
+Execution required values: Created At, Assigned At, plus terminal-state timestamp requirements
 Optional columns: Description, Remarks, Priority, Created At, Assigned At, Started At, Due At, Completed At, Cancelled At
 Known lookup sheets: none
 Blocking structural issues: missing or duplicate required columns, semantic header collisions
@@ -56,6 +56,8 @@ Task Reference
 → Task.referenceCode
 ```
 
+The source Task Reference uses only the normalization approved by this profile. The resulting canonical `referenceCode` is persisted unchanged and is the rerun identity key. Do not generate replacement references, lowercase, case-fold, or otherwise transform the source reference beyond profile normalization.
+
 Row number helps error reporting, but it is not durable identity because rows can move between workbook versions.
 
 Do not invent composite deduplication rules unless analysis proves the combination is actually unique.
@@ -93,9 +95,30 @@ review Notification
 
 Historical dates must be preserved where available. Missing dates remain missing.
 
+Executable terminal timestamp rules:
+
+```text
+COMPLETED
+→ completedAt required
+→ cancelledAt must be null
+
+CANCELLED
+→ cancelledAt required
+→ completedAt must be null
+
+Both
+→ createdAt required
+→ assignedAt required
+
+startedAt
+dueAt
+→ optional
+→ never fabricated
+```
+
 ## Chronology discovery
 
-Do not freeze chronology rules before checking real data.
+Do not silently repair chronology problems in legacy data.
 
 Catalog actual timestamp combinations, then decide future validation rules. Potential checks may include:
 
@@ -108,10 +131,10 @@ dueAt before completedAt
 → valid late completion
 
 CANCELLED
-→ completedAt normally null
+→ cancelledAt required and completedAt null
 
 COMPLETED
-→ completedAt required
+→ completedAt required and cancelledAt null
 ```
 
 If legacy data violates modern workflow chronology, document the pattern. Do not silently repair it.
@@ -168,6 +191,8 @@ completedAt
 cancelledAt
 ```
 
+Date comparison uses canonical instants, not Excel display strings.
+
 ## Source column mapping
 
 | Source column | Example | Operix target | Required | Rule | Status |
@@ -186,8 +211,8 @@ cancelledAt
 | Assigned At | 2026-08-01T11:00:00Z | historical assignment timestamp | Yes for execution | valid date; no fabrication | APPROVED |
 | Started At | 2026-08-01T12:00:00Z | `Task.startedAt` | No | valid date if supplied; no fabrication | APPROVED |
 | Due At | 2026-08-10T18:00:00Z | `Task.dueAt` | No | valid date if supplied; may be before completedAt | APPROVED |
-| Completed At | 2026-08-12T18:00:00Z | `Task.completedAt` | Conditional | required when status is `COMPLETED` | APPROVED |
-| Cancelled At | 2026-08-12T18:00:00Z | `Task.cancelledAt` | Conditional | optional for `CANCELLED` preview | APPROVED |
+| Completed At | 2026-08-12T18:00:00Z | `Task.completedAt` | Conditional | required when status is `COMPLETED`; must be blank when status is `CANCELLED` | APPROVED |
+| Cancelled At | 2026-08-12T18:00:00Z | `Task.cancelledAt` | Conditional | required when status is `CANCELLED`; must be blank when status is `COMPLETED` | APPROVED |
 
 ## Reconciliation discovery
 
@@ -237,7 +262,7 @@ ALREADY_PRESENT
 
 create no duplicate Tasks. If every considered row is already present or ignored, execution returns success with `importedRows = 0` and creates no Activity.
 
-Candidate rows are written in one serializable transaction. The transaction rechecks existing Tasks by `referenceCode`.
+Candidate rows are written in one serializable transaction. The transaction rechecks existing Tasks by canonical `referenceCode`, Teams by `teamId`, assignees by `userId` and `role = MEMBER`, creators by `userId`, and assigners by `userId`. Inactive and suspended historical assignees remain valid. Team names and User display names do not affect transaction rechecks.
 
 ```text
 candidate still absent
@@ -253,12 +278,29 @@ candidate now different
 → IMPORT_EXECUTION_BLOCKED
 ```
 
+Created historical terminal Tasks keep a current assignment relationship:
+
+```text
+TaskAssignment.unassignedAt = null
+```
+
+This is intentional because Operix V1 performance attribution uses the current `TaskAssignment` relation. It does not mean the imported terminal Task is operationally active.
+
 The history marker is intentionally honest:
 
 ```text
 fromStatus = null
 toStatus = imported final status
+changedAt = import execution time
 notes = historical import, intermediate legacy transitions not reconstructed
+```
+
+`changedAt` means Operix recorded the historical terminal state during import. It must not be replaced with `completedAt` or `cancelledAt`.
+
+Verification before commit enforces:
+
+```text
+tasksCreated = assignmentsCreated = historyRowsCreated = importedRows
 ```
 
 Execution does not create:
