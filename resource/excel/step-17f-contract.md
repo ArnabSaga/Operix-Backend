@@ -1,6 +1,6 @@
 # Step 17F — Excel Exports Contract
 
-Status: Implemented V1 XLSX system generated exports.
+Status: Complete. Step 17G hardening and documentation closure is complete.
 
 Step 17F is a read only export slice. Operix remains the source of truth. Excel workbooks are generated views of authorized Operix data.
 

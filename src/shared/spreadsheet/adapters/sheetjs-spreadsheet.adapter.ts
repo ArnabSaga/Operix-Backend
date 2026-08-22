@@ -44,7 +44,9 @@ export class SheetJsSpreadsheetAdapter implements SpreadsheetAdapter {
     const output = utils.book_new();
 
     for (const sheet of workbook.sheets) {
-      const rows = sheet.rows.map((row) => row.map((cell) => cell.value));
+      const rows = sheet.rows.map((row) =>
+        row.map((cell) => toSheetJsWriteValue(cell.value)),
+      );
       const worksheet = utils.aoa_to_sheet(rows);
       utils.book_append_sheet(output, worksheet, sheet.name);
     }
@@ -54,6 +56,14 @@ export class SheetJsSpreadsheetAdapter implements SpreadsheetAdapter {
       bookType: 'xlsx',
     }) as Buffer;
   }
+}
+
+function toSheetJsWriteValue(value: unknown): unknown {
+  if (value instanceof Date) {
+    return new Date(value.getTime() + value.getTimezoneOffset() * 60_000);
+  }
+
+  return value;
 }
 
 function mapSheet(

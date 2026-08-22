@@ -20,6 +20,8 @@ function createConfig(
       frontendOrigins: ['http://localhost:3001'],
       frontendAppUrl: 'http://localhost:3001',
       swaggerEnabled: false,
+      throttleTtlMs: 60_000,
+      throttleLimit: 100,
     },
     database: {
       url: 'postgresql://postgres:postgres@localhost:5432/operix',

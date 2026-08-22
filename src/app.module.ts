@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { fileURLToPath } from 'node:url';
@@ -36,12 +36,15 @@ const ENV_FILE_PATHS = [
       load: [configuration],
       validate: validateEnvironment,
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60_000,
-        limit: 100,
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          ttl: config.getOrThrow<number>('app.throttleTtlMs'),
+          limit: config.getOrThrow<number>('app.throttleLimit'),
+        },
+      ],
+    }),
     PrismaModule,
     OperixAuthModule,
     TeamModule,

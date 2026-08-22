@@ -1,6 +1,6 @@
 # Step 17B / 17C Contract
 
-Status: Step 17B / 17C complete; Step 17D historical Task import complete
+Status: Step 17B / 17C complete; Step 17D, Step 17E, Step 17F, and Step 17G complete
 
 This document captures the approved implementation contract for spreadsheet infrastructure and stateless import preview / error reporting.
 
@@ -11,7 +11,7 @@ Step 16 — Files + Attachments
 ✅ COMPLETE
 
 Step 17 — Excel Import / Export
-🟡 IN PROGRESS
+✅ COMPLETE
 
 Step 17A — Excel Intake + Mapping Discovery
 ✅ COMPLETE
@@ -26,18 +26,18 @@ Step 17D — Historical Task Import
 ✅ COMPLETE
 
 Step 17E — Member Data Import
-🟡 NEXT
+✅ COMPLETE
 
 Step 17F — Excel Exports
-⛔ BLOCKED
+✅ COMPLETE
 
 Step 17G — Hardening + Documentation
-⛔ BLOCKED
+✅ COMPLETE
 ```
 
 ## Step 17B / 17C boundary
 
-Do not add:
+At Step 17B / 17C time, do not add:
 
 ```text
 src/modules/export/
@@ -53,7 +53,17 @@ SMTP
 
 unless a path already exists for an unrelated reason.
 
-Step 17D is the narrow business write exception. It may write `Task`, `TaskAssignment`, `TaskStatusHistory`, and one safe batch `ActivityLog` only for created historical terminal Task rows.
+Later approved slices added the narrow business write exceptions:
+
+```text
+Step 17D
+→ terminal historical Task import
+
+Step 17E
+→ existing Member designation enrichment
+```
+
+Step 17F added read only XLSX exports.
 
 ## Spreadsheet library decision
 
@@ -178,7 +188,7 @@ with zero business writes.
 
 Exact reruns are no op. If no Task is created, no Activity is created.
 
-Step 17E and Step 17F remain separate later slices.
+Step 17E and Step 17F are now complete. Step 17G closed the Excel subsystem.
 
 For larger future import profiles, the technical strategy remains profile dependent:
 

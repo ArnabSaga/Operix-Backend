@@ -20,6 +20,8 @@ describe('validateEnvironment', () => {
       NODE_ENV: 'test',
       PORT: 3000,
       SWAGGER_ENABLED: false,
+      THROTTLE_TTL_MS: 60_000,
+      THROTTLE_LIMIT: 100,
     });
   });
 
@@ -103,5 +105,52 @@ describe('validateEnvironment', () => {
         SMTP_FROM_EMAIL: 'bad-email',
       }),
     ).toThrow('SMTP_FROM_EMAIL must be a valid email address');
+  });
+
+  it('defaults Swagger off in production when omitted', () => {
+    const result = validateEnvironment({
+      ...validEnvironment,
+      NODE_ENV: 'production',
+      SWAGGER_ENABLED: undefined,
+    });
+
+    expect(result).toMatchObject({
+      SWAGGER_ENABLED: false,
+    });
+  });
+
+  it('allows explicit Swagger configuration to override the production default', () => {
+    const result = validateEnvironment({
+      ...validEnvironment,
+      NODE_ENV: 'production',
+      SWAGGER_ENABLED: 'true',
+    });
+
+    expect(result).toMatchObject({
+      SWAGGER_ENABLED: true,
+    });
+  });
+
+  it('validates throttle settings as positive integers in milliseconds', () => {
+    const result = validateEnvironment({
+      ...validEnvironment,
+      THROTTLE_TTL_MS: '120000',
+      THROTTLE_LIMIT: '250',
+    });
+
+    expect(result).toMatchObject({
+      THROTTLE_TTL_MS: 120_000,
+      THROTTLE_LIMIT: 250,
+    });
+  });
+
+  it('rejects invalid throttle settings', () => {
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, THROTTLE_TTL_MS: '0' }),
+    ).toThrow('THROTTLE_TTL_MS must be a positive integer');
+
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, THROTTLE_LIMIT: 'nope' }),
+    ).toThrow('THROTTLE_LIMIT must be a positive integer');
   });
 });

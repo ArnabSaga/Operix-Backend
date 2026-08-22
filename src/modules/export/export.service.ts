@@ -233,7 +233,9 @@ export class ExportService {
         dataset,
         sheetCount: workbook.sheets.length,
         viewerRole: viewer.role,
-        error,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage:
+          error instanceof Error ? safeLogMessage(error.message) : 'Unknown',
       });
 
       throw new AppException(
@@ -269,6 +271,10 @@ export class ExportService {
       effectiveFilters,
     };
   }
+}
+
+function safeLogMessage(message: string): string {
+  return message.length > 200 ? `${message.slice(0, 200)}...` : message;
 }
 
 function filters(

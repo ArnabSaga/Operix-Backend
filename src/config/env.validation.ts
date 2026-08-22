@@ -43,6 +43,24 @@ function parsePort(value: unknown): number {
   return port;
 }
 
+function parsePositiveInteger(
+  value: unknown,
+  key: string,
+  defaultValue: number,
+): number {
+  if (value === undefined || value === '') {
+    return defaultValue;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`${key} must be a positive integer`);
+  }
+
+  return parsed;
+}
+
 function parseRequiredPort(value: unknown, key: string): number {
   if (value === undefined || value === '') {
     throw new Error(`${key} is required when SMTP_ENABLED is true`);
@@ -207,6 +225,21 @@ export function validateEnvironment(
     environment.CLOUDINARY_FOLDER.trim().length > 0
       ? environment.CLOUDINARY_FOLDER.trim()
       : 'operix';
+  const swaggerEnabled = parseBoolean(
+    environment.SWAGGER_ENABLED,
+    'SWAGGER_ENABLED',
+    nodeEnvironment !== 'production',
+  );
+  const throttleTtlMs = parsePositiveInteger(
+    environment.THROTTLE_TTL_MS,
+    'THROTTLE_TTL_MS',
+    60_000,
+  );
+  const throttleLimit = parsePositiveInteger(
+    environment.THROTTLE_LIMIT,
+    'THROTTLE_LIMIT',
+    100,
+  );
 
   return {
     ...environment,
@@ -225,11 +258,11 @@ export function validateEnvironment(
 
     BETTER_AUTH_URL: betterAuthUrl,
 
-    SWAGGER_ENABLED: parseBoolean(
-      environment.SWAGGER_ENABLED,
-      'SWAGGER_ENABLED',
-      true,
-    ),
+    SWAGGER_ENABLED: swaggerEnabled,
+
+    THROTTLE_TTL_MS: throttleTtlMs,
+
+    THROTTLE_LIMIT: throttleLimit,
 
     SMTP_ENABLED: smtpEnabled,
 

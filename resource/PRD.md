@@ -1435,7 +1435,12 @@ Admins may create drafts, edit drafts or revision-required reports, and submit
 versions. Super Admin may approve or request revision. `submittedAt` on the
 report means latest submission time; each version preserves its own submitted
 time. Attachments, fixed cadence, fixed report type templates, `REJECT`, report
-email, PDF, Excel, CSV, and system-generated report exports remain deferred.
+email, PDF, CSV, stored exports, scheduled exports, and emailed report delivery
+remain deferred.
+
+Read only system generated XLSX export of authorized Management Report data is
+supported. This export does not replace or change the Admin submitted
+Management Report workflow.
 
 ---
 
