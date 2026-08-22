@@ -11,6 +11,7 @@ import { OperixAuthModule } from './modules/auth/auth.module.js';
 import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { FileModule } from './modules/file/file.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { ImportModule } from './modules/import/import.module.js';
 import { ManagementReportModule } from './modules/management-report/management-report.module.js';
 import { NotificationModule } from './modules/notification/notification.module.js';
 import { PerformanceModule } from './modules/performance/performance.module.js';
@@ -51,6 +52,7 @@ const ENV_FILE_PATHS = [
     PerformanceModule,
     ManagementReportModule,
     DashboardModule,
+    ImportModule,
     FileModule,
     HealthModule,
   ],

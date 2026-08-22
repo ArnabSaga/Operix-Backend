@@ -1,0 +1,19 @@
+export const SPREADSHEET_ADAPTER = Symbol('SPREADSHEET_ADAPTER');
+
+export const SPREADSHEET_MIME_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+export const SPREADSHEET_EXTENSION = '.xlsx';
+
+export const SPREADSHEET_LIMIT = {
+  MAX_IMPORT_WORKBOOK_SIZE_BYTES: 20 * 1024 * 1024,
+  MAX_IMPORT_SHEETS: 20,
+  MAX_IMPORT_ROWS_PER_SHEET: 10_000,
+  MAX_IMPORT_COLUMNS_PER_SHEET: 100,
+  MAX_IMPORT_TOTAL_CELLS: 250_000,
+  MAX_IMPORT_MERGES: 5_000,
+  MAX_PREVIEW_ISSUES: 500,
+  MAX_PREVIEW_VALUE_LENGTH: 250,
+} as const;
+
+export const DANGEROUS_SPREADSHEET_TEXT_PATTERN = /^\s*[=+\-@]/;
