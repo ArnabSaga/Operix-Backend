@@ -1,8 +1,8 @@
 # HISTORICAL_TASK_LEGACY_V1 Mapping Profile
 
-Status: Approved sanitized V1 profile for Step 17B / 17C preview implementation
+Status: Approved sanitized V1 profile for Step 17D historical Task import execution
 
-This profile previews terminal historical Task candidates only. It performs no database writes.
+This profile previews and executes terminal historical Task candidates only. Preview and error report remain read only. Execution writes only historical terminal Task snapshots, assignments, status history markers, and one safe batch Activity when rows are created.
 
 ## Recognition fingerprint
 
@@ -14,6 +14,7 @@ Header row: 1
 Header order: ANY_ORDER
 Normalized header set: task reference, title, status, team id, member employee id, created by email, assigned by email, description, remarks, priority, created at, assigned at, started at, due at, completed at, cancelled at
 Required columns: Task Reference, Title, Status, Team ID, Member Employee ID, Created By Email, Assigned By Email
+Execution required values: Created At, Assigned At
 Optional columns: Description, Remarks, Priority, Created At, Assigned At, Started At, Due At, Completed At, Cancelled At
 Known lookup sheets: none
 Blocking structural issues: missing or duplicate required columns, semantic header collisions
@@ -156,6 +157,7 @@ remarks
 priority
 status
 teamId
+createdBy
 assignee
 assignedBy
 createdAt
@@ -180,8 +182,8 @@ cancelledAt
 | Description | Details | `Task.description` | No | trimmed optional | APPROVED |
 | Remarks | Notes | `Task.remarks` | No | trimmed optional | APPROVED |
 | Priority | HIGH | `Task.priority` | No | `LOW`, `MEDIUM`, `HIGH`, `URGENT`; blank defaults to `MEDIUM` | APPROVED |
-| Created At | 2026-08-01T10:00:00Z | `Task.createdAt` | No | valid date if supplied; no fabrication | APPROVED |
-| Assigned At | 2026-08-01T11:00:00Z | historical assignment timestamp | No | valid date if supplied; no fabrication | APPROVED |
+| Created At | 2026-08-01T10:00:00Z | `Task.createdAt` | Yes for execution | valid date; no fabrication | APPROVED |
+| Assigned At | 2026-08-01T11:00:00Z | historical assignment timestamp | Yes for execution | valid date; no fabrication | APPROVED |
 | Started At | 2026-08-01T12:00:00Z | `Task.startedAt` | No | valid date if supplied; no fabrication | APPROVED |
 | Due At | 2026-08-10T18:00:00Z | `Task.dueAt` | No | valid date if supplied; may be before completedAt | APPROVED |
 | Completed At | 2026-08-12T18:00:00Z | `Task.completedAt` | Conditional | required when status is `COMPLETED` | APPROVED |
@@ -203,3 +205,67 @@ vs Operix totals by Team
 ```
 
 Imported historical Tasks immediately affect ALL_TIME performance, dashboard totals, Team metrics, and Member metrics. Reconciliation must make that impact intentional.
+
+## Step 17D execution semantics
+
+```text
+POST /api/v1/imports/historical-tasks
+```
+
+Execution reruns the full Step 17C analysis and never trusts a previous preview.
+
+Blocking rows:
+
+```text
+INVALID
+CONFLICT
+```
+
+return:
+
+```text
+409 IMPORT_EXECUTION_BLOCKED
+```
+
+with bounded preview style diagnostics and zero business writes.
+
+Rows already present:
+
+```text
+ALREADY_PRESENT
+```
+
+create no duplicate Tasks. If every considered row is already present or ignored, execution returns success with `importedRows = 0` and creates no Activity.
+
+Candidate rows are written in one serializable transaction. The transaction rechecks existing Tasks by `referenceCode`.
+
+```text
+candidate still absent
+→ create historical terminal Task
+→ create one current TaskAssignment
+→ create one TaskStatusHistory marker
+
+candidate now identical
+→ no op
+
+candidate now different
+→ rollback
+→ IMPORT_EXECUTION_BLOCKED
+```
+
+The history marker is intentionally honest:
+
+```text
+fromStatus = null
+toStatus = imported final status
+notes = historical import, intermediate legacy transitions not reconstructed
+```
+
+Execution does not create:
+
+```text
+TaskSubmission
+TaskReview
+Notification
+SMTP email
+```

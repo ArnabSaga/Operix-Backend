@@ -1,6 +1,6 @@
-# Step 17B / 17C Contract Draft
+# Step 17B / 17C Contract
 
-Status: Approved for Step 17B / 17C implementation
+Status: Step 17B / 17C complete; Step 17D historical Task import complete
 
 This document captures the approved implementation contract for spreadsheet infrastructure and stateless import preview / error reporting.
 
@@ -17,16 +17,16 @@ Step 17A — Excel Intake + Mapping Discovery
 ✅ COMPLETE
 
 Step 17B — Spreadsheet Infrastructure
-🟢 IMPLEMENT NOW
+✅ COMPLETE
 
 Step 17C — Import Preview + Error Reporting
-🟢 IMPLEMENT NOW
+✅ COMPLETE
 
 Step 17D — Historical Task Import
-⛔ BLOCKED
+✅ COMPLETE
 
 Step 17E — Member Data Import
-⛔ BLOCKED
+🟡 NEXT
 
 Step 17F — Excel Exports
 ⛔ BLOCKED
@@ -47,12 +47,13 @@ migrations
 export routes
 business import execution
 ImportBatch
-ActivityLog
 Notification
 SMTP
 ```
 
 unless a path already exists for an unrelated reason.
+
+Step 17D is the narrow business write exception. It may write `Task`, `TaskAssignment`, `TaskStatusHistory`, and one safe batch `ActivityLog` only for created historical terminal Task rows.
 
 ## Spreadsheet library decision
 
@@ -152,13 +153,34 @@ Error reports are stateless and rerun the preview pipeline from the workbook.
 
 ## Import execution guarantee
 
-Freeze the business guarantee:
+Frozen business guarantee:
 
 ```text
 No silent partial success
 ```
 
-Do not freeze the technical strategy yet:
+Step 17D historical Task import uses one serializable transaction for executable candidate rows. It reruns the full analysis pipeline and never trusts a previous preview.
+
+Blocked rows:
+
+```text
+INVALID
+CONFLICT
+```
+
+return:
+
+```text
+409 IMPORT_EXECUTION_BLOCKED
+```
+
+with zero business writes.
+
+Exact reruns are no op. If no Task is created, no Activity is created.
+
+Step 17E and Step 17F remain separate later slices.
+
+For larger future import profiles, the technical strategy remains profile dependent:
 
 ```text
 single atomic transaction

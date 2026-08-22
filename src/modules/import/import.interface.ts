@@ -60,7 +60,34 @@ export interface ImportPreviewResult extends ImportPreviewResponse {
   allIssues: ImportPreviewIssue[];
 }
 
-export interface ImportRowResult {
+export interface ImportAnalyzedRow<
+  TCanonical = unknown,
+  TResolved = unknown,
+  TBaseline = unknown,
+> {
+  sourceRow?: number;
   disposition: ImportRowDisposition;
+  canonical?: TCanonical | null;
+  resolved?: TResolved | null;
+  baseline?: TBaseline | null;
   issues: ImportPreviewIssue[];
+}
+
+export type ImportRowResult = ImportAnalyzedRow;
+
+export interface HistoricalTaskImportResponse {
+  importType: ImportType;
+  mappingProfile: ImportProfileId;
+  summary: {
+    sourceRowCount: number;
+    consideredRows: number;
+    ignoredRows: number;
+    importedRows: number;
+    alreadyPresentRows: number;
+  };
+  verification: {
+    tasksCreated: number;
+    assignmentsCreated: number;
+    historyRowsCreated: number;
+  };
 }

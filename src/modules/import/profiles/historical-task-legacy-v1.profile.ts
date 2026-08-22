@@ -12,7 +12,10 @@ import {
   IMPORT_TYPE,
 } from '../import.constant.js';
 import { buildIssue } from '../import-diagnostics.js';
-import type { ImportRowResult } from '../import.interface.js';
+import type {
+  ImportAnalyzedRow,
+  ImportRowResult,
+} from '../import.interface.js';
 import type {
   ImportProfile,
   ImportProfileContext,
@@ -71,25 +74,78 @@ const IMPORT_OWNED_FIELDS = [
   'cancelledAt',
 ];
 
-interface HistoricalTaskCandidate {
+export interface HistoricalTaskCandidate {
   row: number;
   referenceCode: string;
   title: string;
   description: string | null;
   remarks: string | null;
-  status: TaskStatus;
+  status: (typeof TaskStatus)['COMPLETED'] | (typeof TaskStatus)['CANCELLED'];
   priority: TaskPriority;
   teamId: string;
   memberEmployeeId: string;
   createdByEmail: string;
   assignedByEmail: string;
-  createdAt: Date | null;
-  assignedAt: Date | null;
+  createdAt: Date;
+  assignedAt: Date;
   startedAt: Date | null;
   dueAt: Date | null;
   completedAt: Date | null;
   cancelledAt: Date | null;
 }
+
+export interface HistoricalTaskCanonical {
+  sourceRow: number;
+  referenceCode: string;
+  title: string;
+  description: string | null;
+  remarks: string | null;
+  priority: TaskPriority;
+  status: (typeof TaskStatus)['COMPLETED'] | (typeof TaskStatus)['CANCELLED'];
+  teamId: string;
+  createdById: string;
+  memberId: string;
+  assignedById: string;
+  createdAt: Date;
+  assignedAt: Date;
+  startedAt: Date | null;
+  dueAt: Date | null;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+}
+
+export interface HistoricalTaskExisting {
+  id: string;
+  referenceCode: string;
+  title: string;
+  description: string | null;
+  remarks: string | null;
+  priority: TaskPriority;
+  status: TaskStatus;
+  teamId: string;
+  createdById: string;
+  createdAt: Date;
+  startedAt: Date | null;
+  dueAt: Date | null;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+  assignments: {
+    memberId: string;
+    assignedById: string;
+    assignedAt: Date;
+    unassignedAt: Date | null;
+  }[];
+}
+
+export type HistoricalTaskAnalyzedRow = ImportAnalyzedRow<
+  HistoricalTaskCanonical,
+  {
+    memberId: string;
+    createdById: string;
+    assignedById: string;
+  },
+  HistoricalTaskExisting
+>;
 
 export class HistoricalTaskLegacyV1Profile implements ImportProfile {
   readonly id = IMPORT_PROFILE_ID.HISTORICAL_TASK_LEGACY_V1;
@@ -128,7 +184,7 @@ export class HistoricalTaskLegacyV1Profile implements ImportProfile {
   async preview(
     workbook: SpreadsheetWorkbook,
     context: ImportProfileContext,
-  ): Promise<ImportRowResult[]> {
+  ): Promise<HistoricalTaskAnalyzedRow[]> {
     const sheet = findSheet(workbook, SHEET_NAME);
 
     if (!sheet) {
@@ -137,12 +193,13 @@ export class HistoricalTaskLegacyV1Profile implements ImportProfile {
 
     const headerMap = buildHeaderMap(sheet, HEADER_ROW);
     const candidates: HistoricalTaskCandidate[] = [];
-    const initialResults: ImportRowResult[] = [];
+    const initialResults: HistoricalTaskAnalyzedRow[] = [];
     const sourceReferenceCounts = new Map<string, number>();
 
     for (const row of getDataRows(sheet, HEADER_ROW)) {
       if (isBlankRow(row)) {
         initialResults.push({
+          sourceRow: row.row,
           disposition: IMPORT_DISPOSITION.IGNORED_ROW,
           issues: [
             warning({
@@ -163,6 +220,7 @@ export class HistoricalTaskLegacyV1Profile implements ImportProfile {
 
       if (parsed.issues.length > 0 || !parsed.candidate) {
         initialResults.push({
+          sourceRow: row.row,
           disposition: IMPORT_DISPOSITION.INVALID,
           issues: parsed.issues,
         });
@@ -175,7 +233,9 @@ export class HistoricalTaskLegacyV1Profile implements ImportProfile {
       );
       candidates.push(parsed.candidate);
       initialResults.push({
+        sourceRow: parsed.candidate.row,
         disposition: IMPORT_DISPOSITION.CANDIDATE,
+        canonical: null,
         issues: [],
       });
     }
@@ -197,6 +257,7 @@ export class HistoricalTaskLegacyV1Profile implements ImportProfile {
 
       if ((sourceReferenceCounts.get(candidate.referenceCode) ?? 0) > 1) {
         return {
+          sourceRow: candidate.row,
           disposition: IMPORT_DISPOSITION.CONFLICT,
           issues: [
             buildIssue({
@@ -337,7 +398,40 @@ function parseHistoricalTaskRow(
     );
   }
 
-  if (issues.length > 0 || !mappedStatus) {
+  if (!dates.createdAt) {
+    issues.push(
+      buildIssue({
+        sheet,
+        row: row.row,
+        field: 'createdAt',
+        sourceValue: null,
+        normalizedValue: null,
+        code: IMPORT_ROW_ISSUE_CODE.HISTORICAL_CREATED_AT_REQUIRED,
+        message: 'Historical Tasks require createdAt before execution.',
+      }),
+    );
+  }
+
+  if (!dates.assignedAt) {
+    issues.push(
+      buildIssue({
+        sheet,
+        row: row.row,
+        field: 'assignedAt',
+        sourceValue: null,
+        normalizedValue: null,
+        code: IMPORT_ROW_ISSUE_CODE.HISTORICAL_ASSIGNED_AT_REQUIRED,
+        message: 'Historical Tasks require assignedAt before execution.',
+      }),
+    );
+  }
+
+  if (
+    issues.length > 0 ||
+    !mappedStatus ||
+    !dates.createdAt ||
+    !dates.assignedAt
+  ) {
     return {
       candidate: null,
       issues,
@@ -358,6 +452,8 @@ function parseHistoricalTaskRow(
       createdByEmail: createdByEmail.value.toLowerCase(),
       assignedByEmail: assignedByEmail.value.toLowerCase(),
       ...dates,
+      createdAt: dates.createdAt,
+      assignedAt: dates.assignedAt,
     },
     issues: [],
   };
@@ -384,6 +480,7 @@ async function resolveHistoricalReferences(
         },
       },
       select: {
+        id: true,
         referenceCode: true,
         title: true,
         description: true,
@@ -391,10 +488,27 @@ async function resolveHistoricalReferences(
         priority: true,
         status: true,
         teamId: true,
+        createdById: true,
         createdAt: true,
+        startedAt: true,
         dueAt: true,
         completedAt: true,
         cancelledAt: true,
+        assignments: {
+          where: {
+            unassignedAt: null,
+          },
+          select: {
+            memberId: true,
+            assignedById: true,
+            assignedAt: true,
+            unassignedAt: true,
+          },
+          orderBy: {
+            assignedAt: 'desc',
+          },
+          take: 2,
+        },
       },
     }),
     context.prisma.team.findMany({
@@ -449,7 +563,7 @@ async function resolveHistoricalReferences(
 function evaluateHistoricalTask(
   candidate: HistoricalTaskCandidate,
   resolved: Awaited<ReturnType<typeof resolveHistoricalReferences>>,
-): ImportRowResult {
+): HistoricalTaskAnalyzedRow {
   const issues = [];
 
   if (!resolved.teamIds.has(candidate.teamId)) {
@@ -493,29 +607,77 @@ function evaluateHistoricalTask(
 
   if (issues.length > 0) {
     return {
+      sourceRow: candidate.row,
       disposition: IMPORT_DISPOSITION.INVALID,
       issues,
     };
   }
 
   const existing = resolved.tasksByReference.get(candidate.referenceCode);
+  const member = resolved.membersByEmployeeId.get(candidate.memberEmployeeId);
+  const creator = resolved.actorsByEmail.get(candidate.createdByEmail);
+  const assigner = resolved.actorsByEmail.get(candidate.assignedByEmail);
+
+  if (!member || !creator || !assigner) {
+    return {
+      sourceRow: candidate.row,
+      disposition: IMPORT_DISPOSITION.INVALID,
+      issues,
+    };
+  }
+
+  const canonical: HistoricalTaskCanonical = {
+    sourceRow: candidate.row,
+    referenceCode: candidate.referenceCode,
+    title: candidate.title,
+    description: candidate.description,
+    remarks: candidate.remarks,
+    priority: candidate.priority,
+    status: candidate.status,
+    teamId: candidate.teamId,
+    createdById: creator.id,
+    memberId: member.id,
+    assignedById: assigner.id,
+    createdAt: candidate.createdAt,
+    assignedAt: candidate.assignedAt,
+    startedAt: candidate.startedAt,
+    dueAt: candidate.dueAt,
+    completedAt: candidate.completedAt,
+    cancelledAt: candidate.cancelledAt,
+  };
+  const resolvedIds = {
+    memberId: member.id,
+    createdById: creator.id,
+    assignedById: assigner.id,
+  };
 
   if (!existing) {
     return {
+      sourceRow: candidate.row,
       disposition: IMPORT_DISPOSITION.CANDIDATE,
+      canonical,
+      resolved: resolvedIds,
       issues: [],
     };
   }
 
-  if (historicalTaskMatches(existing, candidate)) {
+  if (historicalTaskMatches(existing, canonical)) {
     return {
+      sourceRow: candidate.row,
       disposition: IMPORT_DISPOSITION.ALREADY_PRESENT,
+      canonical,
+      resolved: resolvedIds,
+      baseline: existing,
       issues: [],
     };
   }
 
   return {
+    sourceRow: candidate.row,
     disposition: IMPORT_DISPOSITION.CONFLICT,
+    canonical,
+    resolved: resolvedIds,
+    baseline: existing,
     issues: [
       issue(
         candidate,
@@ -527,14 +689,12 @@ function evaluateHistoricalTask(
   };
 }
 
-function historicalTaskMatches(
-  existing: Awaited<
-    ReturnType<typeof resolveHistoricalReferences>
-  >['tasksByReference'] extends Map<string, infer T>
-    ? T
-    : never,
-  candidate: HistoricalTaskCandidate,
+export function historicalTaskMatches(
+  existing: HistoricalTaskExisting,
+  candidate: HistoricalTaskCanonical,
 ): boolean {
+  const currentAssignment = existing.assignments[0] ?? null;
+
   return (
     existing.title === candidate.title &&
     (existing.description ?? '') === (candidate.description ?? '') &&
@@ -542,14 +702,23 @@ function historicalTaskMatches(
     existing.priority === candidate.priority &&
     existing.status === candidate.status &&
     existing.teamId === candidate.teamId &&
+    existing.createdById === candidate.createdById &&
+    currentAssignment !== null &&
+    currentAssignment.memberId === candidate.memberId &&
+    currentAssignment.assignedById === candidate.assignedById &&
+    sameTime(currentAssignment.assignedAt, candidate.assignedAt) &&
+    currentAssignment.unassignedAt === null &&
     sameTime(existing.createdAt, candidate.createdAt) &&
+    sameTime(existing.startedAt, candidate.startedAt) &&
     sameTime(existing.dueAt, candidate.dueAt) &&
     sameTime(existing.completedAt, candidate.completedAt) &&
     sameTime(existing.cancelledAt, candidate.cancelledAt)
   );
 }
 
-function parseTerminalStatus(value: string): TaskStatus | null {
+function parseTerminalStatus(
+  value: string,
+): (typeof TaskStatus)['COMPLETED'] | (typeof TaskStatus)['CANCELLED'] | null {
   const normalized = value.trim().toUpperCase();
 
   if (normalized === TaskStatus.COMPLETED) return TaskStatus.COMPLETED;

@@ -1,5 +1,8 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import { runSerializableTransaction } from '../../shared/database/serializable-transaction.js';
+import type { PrismaTransactionClient } from '../../shared/database/transaction-client.type.js';
 import { AppException } from '../../shared/errors/app.exception.js';
 import {
   validateImportWorkbook,
@@ -11,14 +14,28 @@ import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import { UserRole } from '../../../generated/prisma/enums.js';
 import { assertWorkbookWithinResourceLimits } from './analyzers/workbook-analyzer.js';
 import { ProfileRecognizer } from './analyzers/profile-recognizer.js';
-import { IMPORT_DISPOSITION } from './import.constant.js';
-import { sortIssues } from './import-diagnostics.js';
+import {
+  IMPORT_DISPOSITION,
+  IMPORT_ERROR_CODE,
+  IMPORT_PROFILE_ID,
+  IMPORT_ROW_ISSUE_CODE,
+  IMPORT_TYPE,
+} from './import.constant.js';
+import { buildIssue, sortIssues } from './import-diagnostics.js';
 import type {
+  HistoricalTaskImportResponse,
+  ImportAnalyzedRow,
   ImportPreviewResponse,
   ImportPreviewResult,
   ImportType,
 } from './import.interface.js';
 import { ImportErrorReportService } from './import-error-report.service.js';
+import type {
+  HistoricalTaskAnalyzedRow,
+  HistoricalTaskCanonical,
+  HistoricalTaskExisting,
+} from './profiles/historical-task-legacy-v1.profile.js';
+import { historicalTaskMatches } from './profiles/historical-task-legacy-v1.profile.js';
 
 @Injectable()
 export class ImportService {
@@ -55,10 +72,120 @@ export class ImportService {
     };
   }
 
+  async importHistoricalTasks(
+    viewer: OperixViewer,
+    file: Express.Multer.File | undefined,
+  ): Promise<HistoricalTaskImportResponse> {
+    this.assertSuperAdmin(viewer);
+
+    const analysis = await this.buildAnalysis(
+      IMPORT_TYPE.HISTORICAL_TASK,
+      file,
+    );
+
+    if (
+      analysis.preview.mappingProfile !==
+      IMPORT_PROFILE_ID.HISTORICAL_TASK_LEGACY_V1
+    ) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        IMPORT_ERROR_CODE.IMPORT_PROFILE_NOT_FOUND,
+        'Workbook does not match the historical Task import profile.',
+      );
+    }
+
+    if (
+      analysis.preview.summary.invalidRows > 0 ||
+      analysis.preview.summary.conflictRows > 0
+    ) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        IMPORT_ERROR_CODE.IMPORT_EXECUTION_BLOCKED,
+        'Historical Task import is blocked by invalid or conflicting rows.',
+        publicPreview(analysis.preview),
+      );
+    }
+
+    const candidateRows = analysis.rows.filter(
+      (row): row is HistoricalTaskAnalyzedRow =>
+        row.disposition === IMPORT_DISPOSITION.CANDIDATE &&
+        isHistoricalTaskCanonical(row.canonical),
+    );
+
+    if (candidateRows.length === 0) {
+      return {
+        importType: IMPORT_TYPE.HISTORICAL_TASK,
+        mappingProfile: IMPORT_PROFILE_ID.HISTORICAL_TASK_LEGACY_V1,
+        summary: {
+          sourceRowCount: analysis.preview.summary.sourceRowCount,
+          consideredRows: analysis.preview.summary.consideredRows,
+          ignoredRows: analysis.preview.summary.ignoredRows,
+          importedRows: 0,
+          alreadyPresentRows: analysis.preview.summary.alreadyPresentRows,
+        },
+        verification: {
+          tasksCreated: 0,
+          assignmentsCreated: 0,
+          historyRowsCreated: 0,
+        },
+      };
+    }
+
+    let execution: Awaited<
+      ReturnType<ImportService['executeHistoricalTaskCandidates']>
+    >;
+
+    try {
+      execution = await runSerializableTransaction(this.prisma, async (tx) =>
+        this.executeHistoricalTaskCandidates(tx, viewer, candidateRows),
+      );
+    } catch (error) {
+      if (isUniqueReferenceConflict(error)) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          IMPORT_ERROR_CODE.IMPORT_EXECUTION_BLOCKED,
+          'Historical Task import is blocked because the database changed during execution.',
+        );
+      }
+
+      throw error;
+    }
+
+    return {
+      importType: IMPORT_TYPE.HISTORICAL_TASK,
+      mappingProfile: IMPORT_PROFILE_ID.HISTORICAL_TASK_LEGACY_V1,
+      summary: {
+        sourceRowCount: analysis.preview.summary.sourceRowCount,
+        consideredRows: analysis.preview.summary.consideredRows,
+        ignoredRows: analysis.preview.summary.ignoredRows,
+        importedRows: execution.importedRows,
+        alreadyPresentRows:
+          analysis.preview.summary.alreadyPresentRows +
+          execution.concurrentAlreadyPresentRows,
+      },
+      verification: {
+        tasksCreated: execution.tasksCreated,
+        assignmentsCreated: execution.assignmentsCreated,
+        historyRowsCreated: execution.historyRowsCreated,
+      },
+    };
+  }
+
   private async buildPreview(
     expectedType: ImportType,
     file: Express.Multer.File | undefined,
   ): Promise<ImportPreviewResult> {
+    const analysis = await this.buildAnalysis(expectedType, file);
+    return analysis.preview;
+  }
+
+  private async buildAnalysis(
+    expectedType: ImportType,
+    file: Express.Multer.File | undefined,
+  ): Promise<{
+    preview: ImportPreviewResult;
+    rows: ImportAnalyzedRow[];
+  }> {
     const startedAt = Date.now();
     const validated = await validateImportWorkbook(file);
     let workbook;
@@ -113,7 +240,191 @@ export class ImportService {
 
     this.logPreview(validated, result, Date.now() - startedAt);
 
-    return result;
+    return {
+      preview: result,
+      rows: rowResults,
+    };
+  }
+
+  private async executeHistoricalTaskCandidates(
+    tx: PrismaTransactionClient,
+    viewer: OperixViewer,
+    rows: HistoricalTaskAnalyzedRow[],
+  ): Promise<{
+    importedRows: number;
+    concurrentAlreadyPresentRows: number;
+    tasksCreated: number;
+    assignmentsCreated: number;
+    historyRowsCreated: number;
+  }> {
+    const canonicalRows = rows
+      .map((row) => row.canonical)
+      .filter(isHistoricalTaskCanonical);
+    const existing = await this.findHistoricalTasksByReference(
+      tx,
+      canonicalRows.map((row) => row.referenceCode),
+    );
+    const existingByReference = new Map(
+      existing.map((task) => [task.referenceCode, task]),
+    );
+    const rowsToCreate: HistoricalTaskCanonical[] = [];
+    let concurrentAlreadyPresentRows = 0;
+
+    for (const canonical of canonicalRows) {
+      const current = existingByReference.get(canonical.referenceCode);
+
+      if (!current) {
+        rowsToCreate.push(canonical);
+        continue;
+      }
+
+      if (historicalTaskMatches(current, canonical)) {
+        concurrentAlreadyPresentRows += 1;
+        continue;
+      }
+
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        IMPORT_ERROR_CODE.IMPORT_EXECUTION_BLOCKED,
+        'Historical Task import is blocked because the database changed after preview.',
+        {
+          issues: [
+            buildIssue({
+              sheet: 'Tasks',
+              row: canonical.sourceRow,
+              field: 'referenceCode',
+              sourceValue: canonical.referenceCode,
+              normalizedValue: canonical.referenceCode,
+              code: IMPORT_ROW_ISSUE_CODE.IMPORT_CONFLICT,
+              message:
+                'A Task with this reference now exists with different imported canonical fields.',
+            }),
+          ],
+        },
+      );
+    }
+
+    if (rowsToCreate.length === 0) {
+      return {
+        importedRows: 0,
+        concurrentAlreadyPresentRows,
+        tasksCreated: 0,
+        assignmentsCreated: 0,
+        historyRowsCreated: 0,
+      };
+    }
+
+    const importedAt = new Date();
+    const createdTasks = await tx.task.createManyAndReturn({
+      data: rowsToCreate.map((row) => ({
+        referenceCode: row.referenceCode,
+        title: row.title,
+        description: row.description,
+        remarks: row.remarks,
+        priority: row.priority,
+        status: row.status,
+        dueAt: row.dueAt,
+        startedAt: row.startedAt,
+        completedAt: row.completedAt,
+        cancelledAt: row.cancelledAt,
+        teamId: row.teamId,
+        createdById: row.createdById,
+        createdAt: row.createdAt,
+      })),
+      select: {
+        id: true,
+        referenceCode: true,
+      },
+    });
+    const createdTaskIdsByReference = new Map(
+      createdTasks.map((task) => [task.referenceCode, task.id]),
+    );
+    const missingCreatedTask = rowsToCreate.find(
+      (row) => !createdTaskIdsByReference.has(row.referenceCode),
+    );
+
+    if (missingCreatedTask) {
+      throw new AppException(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        IMPORT_ERROR_CODE.IMPORT_VERIFICATION_FAILED,
+        'Historical Task import verification failed.',
+      );
+    }
+
+    const assignmentResult = await tx.taskAssignment.createMany({
+      data: rowsToCreate.map((row) => ({
+        taskId: createdTaskIdsByReference.get(row.referenceCode)!,
+        memberId: row.memberId,
+        assignedById: row.assignedById,
+        assignedAt: row.assignedAt,
+        unassignedAt: null,
+        note: 'Imported from historical Excel migration.',
+      })),
+    });
+    const historyResult = await tx.taskStatusHistory.createMany({
+      data: rowsToCreate.map((row) => ({
+        taskId: createdTaskIdsByReference.get(row.referenceCode)!,
+        fromStatus: null,
+        toStatus: row.status,
+        changedById: viewer.userId,
+        changedAt: importedAt,
+        notes:
+          'Historical terminal state imported from legacy Excel. Intermediate legacy workflow transitions were not reconstructed.',
+      })),
+    });
+
+    if (
+      createdTasks.length !== rowsToCreate.length ||
+      assignmentResult.count !== rowsToCreate.length ||
+      historyResult.count !== rowsToCreate.length
+    ) {
+      throw new AppException(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        IMPORT_ERROR_CODE.IMPORT_VERIFICATION_FAILED,
+        'Historical Task import verification failed.',
+      );
+    }
+
+    await tx.activityLog.create({
+      data: {
+        actorId: viewer.userId,
+        action: 'HISTORICAL_TASKS_IMPORTED',
+        entityType: 'IMPORT',
+        entityId: null,
+        metadata: {
+          mappingProfile: IMPORT_PROFILE_ID.HISTORICAL_TASK_LEGACY_V1,
+          sourceRows: rowsToCreate.length,
+          importedRows: rowsToCreate.length,
+          alreadyPresentRows: concurrentAlreadyPresentRows,
+        },
+      },
+    });
+
+    return {
+      importedRows: rowsToCreate.length,
+      concurrentAlreadyPresentRows,
+      tasksCreated: createdTasks.length,
+      assignmentsCreated: assignmentResult.count,
+      historyRowsCreated: historyResult.count,
+    };
+  }
+
+  private async findHistoricalTasksByReference(
+    tx: Pick<PrismaTransactionClient, 'task'>,
+    referenceCodes: string[],
+  ): Promise<HistoricalTaskExisting[]> {
+    if (referenceCodes.length === 0) {
+      return [];
+    }
+
+    return tx.task.findMany({
+      where: {
+        referenceCode: {
+          in: referenceCodes,
+        },
+      },
+      select: HISTORICAL_TASK_EXISTING_SELECT,
+    });
   }
 
   private assertSuperAdmin(viewer: OperixViewer): void {
@@ -146,6 +457,38 @@ export class ImportService {
     });
   }
 }
+
+const HISTORICAL_TASK_EXISTING_SELECT = {
+  id: true,
+  referenceCode: true,
+  title: true,
+  description: true,
+  remarks: true,
+  priority: true,
+  status: true,
+  teamId: true,
+  createdById: true,
+  createdAt: true,
+  startedAt: true,
+  dueAt: true,
+  completedAt: true,
+  cancelledAt: true,
+  assignments: {
+    where: {
+      unassignedAt: null,
+    },
+    select: {
+      memberId: true,
+      assignedById: true,
+      assignedAt: true,
+      unassignedAt: true,
+    },
+    orderBy: {
+      assignedAt: 'desc',
+    },
+    take: 2,
+  },
+} satisfies Prisma.TaskSelect;
 
 function summarizeRows(
   rows: { disposition: string; issues: { severity: string }[] }[],
@@ -207,4 +550,23 @@ function buildErrorReportFilename(importType: ImportType): string {
   const date = new Date().toISOString().slice(0, 10);
   const slug = importType === 'MEMBER' ? 'member' : 'historical-task';
   return `operix-${slug}-import-errors-${date}.xlsx`;
+}
+
+function isHistoricalTaskCanonical(
+  value: unknown,
+): value is HistoricalTaskCanonical {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'referenceCode' in value &&
+    'memberId' in value &&
+    'assignedAt' in value
+  );
+}
+
+function isUniqueReferenceConflict(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
 }

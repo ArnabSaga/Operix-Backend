@@ -87,6 +87,16 @@ export class ImportController {
     );
   }
 
+  @Post('historical-tasks')
+  @RequireRoles(UserRole.SUPER_ADMIN)
+  @UseInterceptors(IMPORT_FILE_INTERCEPTOR)
+  importHistoricalTasks(
+    @CurrentViewer() viewer: OperixViewer,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    return this.importService.importHistoricalTasks(viewer, file);
+  }
+
   @Post('historical-tasks/error-report')
   @RequireRoles(UserRole.SUPER_ADMIN)
   @UseInterceptors(IMPORT_FILE_INTERCEPTOR)
