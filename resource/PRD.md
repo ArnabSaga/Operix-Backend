@@ -714,7 +714,26 @@ Supporting Files
 Submitted At
 ```
 
-Supported file types and maximum sizes must be confirmed before implementation.
+V1 supports Task and Submission attachments for:
+
+```text
+PDF
+JPEG
+PNG
+WebP
+DOCX
+XLSX
+PPTX
+```
+
+V1 limits:
+
+```text
+max file size = 10 MiB
+max files = 5 per Task or Submission version
+```
+
+Files are stored through authenticated Cloudinary storage and downloaded through Operix authorization. Public file URLs, report attachments, direct browser upload, antivirus scanning, OCR, previews, and thumbnails remain deferred.
 
 ---
 
@@ -2354,9 +2373,12 @@ Operix will be considered successful when:
 
 ## Files
 
-- Which file types are permitted?
-- Maximum file size?
-- Maximum file count?
+- [x] V1 Task/Submission file types: PDF, JPEG, PNG, WebP, DOCX, XLSX, PPTX
+- [x] V1 maximum file size: 10 MiB
+- [x] V1 maximum file count: 5 files per Task or Submission version
+- [ ] Management Report attachments
+- [ ] Antivirus / malware scanning
+- [ ] OCR / previews / thumbnails
 
 ## Real-Time
 

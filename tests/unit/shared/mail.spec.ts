@@ -39,6 +39,13 @@ function createConfig(
       fromName: 'Operix',
       ...smtpOverrides,
     },
+    fileStorage: {
+      enabled: false,
+      cloudinaryCloudName: '',
+      cloudinaryApiKey: '',
+      cloudinaryApiSecret: '',
+      cloudinaryFolder: 'operix',
+    },
   };
 
   return new ConfigService(configuration);

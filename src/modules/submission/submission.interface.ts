@@ -1,7 +1,8 @@
 import type { TaskSubmission } from '../../../generated/prisma/client.js';
+import type { SafeAttachmentResponse } from '../file/file.interface.js';
 import type { PaginationMeta } from '../../shared/pagination/pagination.interface.js';
 
-export type SafeSubmissionResponse = Pick<
+export type SafeSubmissionBaseResponse = Pick<
   TaskSubmission,
   | 'id'
   | 'taskId'
@@ -12,6 +13,9 @@ export type SafeSubmissionResponse = Pick<
   | 'createdAt'
 >;
 
+export interface SafeSubmissionResponse extends SafeSubmissionBaseResponse {
+  attachments?: SafeAttachmentResponse[];
+}
 export interface PaginatedSubmissionResponse {
   data: SafeSubmissionResponse[];
   meta: PaginationMeta;

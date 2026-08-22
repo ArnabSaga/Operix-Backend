@@ -65,10 +65,46 @@ function readCode(response: unknown, status: number): string {
   return statusCodes[status] ?? 'HTTP_ERROR';
 }
 
+function isMulterError(
+  value: unknown,
+): value is { code: string; message: string } {
+  return (
+    isRecord(value) &&
+    value.name === 'MulterError' &&
+    typeof value.code === 'string'
+  );
+}
+
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
+
+    if (isMulterError(exception)) {
+      const status =
+        exception.code === 'LIMIT_FILE_SIZE'
+          ? HttpStatus.PAYLOAD_TOO_LARGE
+          : HttpStatus.BAD_REQUEST;
+      const code =
+        exception.code === 'LIMIT_FILE_SIZE'
+          ? 'FILE_TOO_LARGE'
+          : exception.code === 'LIMIT_FILE_COUNT'
+            ? 'TOO_MANY_FILES'
+            : 'VALIDATION_ERROR';
+
+      response.status(status).json({
+        success: false,
+        message:
+          exception.code === 'LIMIT_FILE_SIZE'
+            ? 'File is too large.'
+            : exception.code === 'LIMIT_FILE_COUNT'
+              ? 'Too many files were uploaded.'
+              : 'Invalid multipart upload.',
+        code,
+        details: null,
+      });
+      return;
+    }
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
