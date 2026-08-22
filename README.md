@@ -1,444 +1,583 @@
 <div align="center">
 
-# 🏥 Operix — Pharmaceutical Workload & Operations Management Platform
+# Operix
 
-### _Enterprise Backend API for Workflow Automation, Role Isolation, Auditability & Operational Analytics_
+### Pharmaceutical Workload and Operations Management Platform
 
-[![Node.js](https://img.shields.io/badge/Node.js-v22.12+-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
-[![NestJS](https://img.shields.io/badge/NestJS-v11.0.1-E0234E?style=for-the-badge&logo=nestjs&logoColor=white)](https://nestjs.com/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Strict_v5.7-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-v16+-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Prisma](https://img.shields.io/badge/Prisma_ORM-v7.9.1-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io/)
-[![Better Auth](https://img.shields.io/badge/Better_Auth-v1.6.29-000000?style=for-the-badge&logo=auth0&logoColor=white)](https://better-auth.com/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+**A production grade NestJS backend for replacing spreadsheet driven operations with secure workflows, audit trails, analytics, file evidence, Excel migration, and Team scoped inventory.**
 
-[**Live Demo API**](http://localhost:5000/api/v1/health) • [**Swagger API Docs**](http://localhost:5000/api/docs) • [**Architecture Specs**](./context/architecture.md) • [**Progress Tracker**](./context/progress-tracker.md)
+<br />
+
+[![Node.js](https://img.shields.io/badge/Node.js-22.12%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?style=for-the-badge&logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%2B-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Prisma](https://img.shields.io/badge/Prisma-7.9.1-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io/)
+[![Status](https://img.shields.io/badge/Status-Backend%20V1%20Core-0F766E?style=for-the-badge)](#)
+
+<br />
+
+[API Health](http://localhost:5000/api/v1/health) · [Swagger Docs](http://localhost:5000/api/docs) · [Architecture](./context/architecture.md) · [Progress Tracker](./context/progress-tracker.md)
+
+</div>
 
 <!-- ---
 
-</div>
-
-## 🖼️ Project Preview & Architecture
-
-```text
-                  ┌──────────────────────────────────────────────────────────┐
-                  │                 Operix Enterprise Backend                │
-                  └────────────────────────────┬─────────────────────────────┘
-                                               │
-       ┌───────────────────────┬───────────────┴───────────────┬───────────────────────┐
-       ▼                       ▼                               ▼                       ▼
- 🔐 Better Auth        ⚡ State Machine                📊 Analytics Engine     📦 Inventory Ledger
-Session & Roles      Task Lifecycle Engine           Performance & Workload    Stock & Equipment
- (SUPER_ADMIN,       PENDING → ASSIGNED →             `completionRate`         STOCK_IN/OUT/ADJUST
-  ADMIN, MEMBER)     SUBMITTED → COMPLETED           `onTimeRate`              Assignment Checkout
-```
+## Project Preview
 
 <div align="center">
 
-![Operix Architecture Overview](./public/preview.png)
-_Figure 1: High-level architectural data flow across Security, Workflow Engine, Analytics, and Audit Subsystems._
+![Operix project preview](./public/preview.png)
 
-![Operix Dashboard Analytics](./public/dashboard-preview.png)
-_Figure 2: Real-time operational dashboard analytics preview demonstrating workload distribution and completion trends._
+_Preview placeholder for the Operix operational dashboard and workflow surface._
+
+![Operix dashboard preview](./public/dashboard-preview.png)
+
+_Preview placeholder for workload, performance, inventory, and reporting analytics._
 
 </div>
 
+> Screenshots are placeholders. Add real UI captures when the frontend is connected.
+
 --- -->
 
-## 📌 Project Overview
+## Project Overview
 
-**Operix** is a domain-driven, production-grade enterprise backend designed to transform fragmented, Excel-based pharmaceutical operational tracking into a centralized, audit-verifiable workflow management system.
+**Operix** is a backend platform for pharmaceutical workload and operations management. It replaces fragmented Excel trackers with a centralized, role scoped system where operational work moves through defined workflows, every important action is audited, and analytics are derived from real business data.
 
-In high-compliance pharmaceutical operations, tracking staff workloads, batch reconciliations, and review cycles using disconnected spreadsheets leads to missing audit trails, unverified completion states, and operational bottlenecks. **Operix** enforces strict role isolation, immutable state transitions, and real-time analytical visibility over every operational task.
+The platform is designed for organizations that need more than basic task CRUD. It supports Admin and Member responsibility boundaries, task assignment and submission review, immutable activity history, management report approval, file evidence, Excel migration, dynamic XLSX exports, and Inventory V1.
 
-### Permanent Core Principle
-
-$$\text{Work} \longrightarrow \text{Activity} \longrightarrow \text{Data} \longrightarrow \text{Analytics} \longrightarrow \text{Decision}$$
-
-- **Target Industry:** Pharmaceutical Workload & Operations Management
-- **Primary Objective:** Replace manual Excel logs with automated state-machine workflows
-- **Security Paradigm:** Session-based authentication with strict role-based access control (RBAC)
-- **Data Integrity Guarantee:** Atomic transactions with DB-level check constraints and partial unique indexes
-
----
-
-## 💎 Core Value & Engineering Highlights
-
-What makes **Operix** significantly more robust than generic CRUD platforms:
-
-1. **Deterministic Task State Machine:** Enforces valid status transitions (`PENDING` $\to$ `ASSIGNED` $\to$ `IN_PROGRESS` $\to$ `SUBMITTED` $\to$ `UNDER_REVIEW` $\to$ `COMPLETED`). Invalid or out-of-order state mutations are strictly rejected.
-2. **Multi-Version Submissions & Review History:** When work is returned for revision (`REVISION_REQUIRED`), submitted content is saved in versioned snapshots (`v1, v2...`), ensuring prior work is never overwritten.
-3. **Database-Engine Enforced Active Assignments:** Utilizes PostgreSQL partial unique indexes (`WHERE "unassignedAt" IS NULL`) to guarantee that a task has at most _one active assignee_ at any microsecond.
-4. **Optimistic Concurrency & Retry-Enabled Serializable Transactions:** Critical multi-table operations execute within `executeSerializableTransaction` loops, automatically retrying upon PostgreSQL serialization conflicts (`40001`).
-5. **Isolated Excel Migration Engine:** Import and Export subsystems run on SheetJS Community Edition with formula-injection sanitization guards and magic-byte content validation (`file-type`).
-6. **Non-Corrupting Side Effects:** Real-time event notifications and SMTP emails execute _after_ the core database transaction commits. Real-time or transport failures will never corrupt or roll back a successful database transaction.
-
----
-
-## 🛠️ Technology Stack
-
-| Domain                   | Technology                           | Description / Decision Rationale                                                                |
-| ------------------------ | ------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| **Runtime & Core**       | **Node.js v22.12+** + **NestJS v11** | Modern ESM-first execution environment paired with NestJS dependency injection architecture.    |
-| **Language**             | **TypeScript v5.7**                  | Strict type checking (`noImplicitAny`, `strictNullChecks`, `exactOptionalPropertyTypes`).       |
-| **Database**             | **PostgreSQL v16+**                  | Relational data store supporting check constraints, partial indexes, and JSONB metadata.        |
-| **ORM**                  | **Prisma v7.9.1**                    | Multi-file schema partitioning (`prisma/schema/*.prisma`) with `@prisma/adapter-pg` driver.     |
-| **Authentication**       | **Better Auth v1.6.29**              | Session-based authentication engine, password hashing, and cookie session management.           |
-| **File Storage**         | **Cloudinary** / **Local Disk**      | Dual-mode file storage adapter with magic-byte verification (`file-type`) and size validation.  |
-| **Email Delivery**       | **Nodemailer v9**                    | Best-effort post-transaction SMTP email dispatching with responsive HTML templates.             |
-| **Spreadsheet Engine**   | **SheetJS (xlsx v0.20.3)**           | Multi-format reader/writer (`.xlsx`, `.csv`, `.tsv`, `.ods`) with formula injection protection. |
-| **Security & Utilities** | **Helmet** + **Throttler**           | Security headers, CORS origin enforcement, and 100 req/min rate limiting.                       |
-
----
-
-## 📐 System Architecture & Request Lifecycle
+At its core, Operix follows one product principle:
 
 ```text
- Client Request (HTTP / REST)
-          │
-          ▼
-   ┌──────────────┐
-   │ Helmet Guard │  ➔ Security headers & CORS validation
-   └──────┬───────┘
-          │
-          ▼
-┌──────────────────┐
-│ Throttler Guard  │  ➔ Rate limiting (100 req / min)
-└─────────┬────────┘
-          │
-          ▼
- ┌─────────────────┐
- │ Auth Middleware │  ➔ Better Auth session token verification
- └────────┬────────┘
-          │
-          ▼
- ┌─────────────────┐
- │  App Guards     │  ➔ ViewerContextGuard (Scope), AccountStatusGuard, OperixRoleGuard (RBAC)
- └────────┬────────┘
-          │
-          ▼
- ┌─────────────────┐
- │   Controllers   │  ➔ DTO Validation (class-validator) & Payload Mapping
- └────────┬────────┘
-          │
-          ▼
- ┌─────────────────┐
- │    Services     │  ➔ Business logic, State Machine transitions, Serializable Transactions
- └────────┬────────┘
-          │
-          ▼
- ┌─────────────────┐
- │   Prisma ORM    │  ➔ `@prisma/adapter-pg` ➔ PostgreSQL Database
- └────────┬────────┘
-          │
-          ├───────────────────────────────────────────┐
-          ▼                                           ▼
- ┌─────────────────┐                        ┌──────────────────┐
- │ Activity Logger │ ➔ AuditLog DB Entry    │  Nodemailer SMTP │ ➔ Post-commit Email Dispatch
- └─────────────────┘                        └──────────────────┘
-```
-
-### Canonical Roles & Scoping
-
-- **`SUPER_ADMIN` (Chief / Organization Admin):** Organization-wide visibility across all teams, members, tasks, audit logs, and management reports.
-- **`ADMIN` (Team Admin / Operational Manager):** Scoped visibility restricted to members and tasks within their assigned/managed teams (`teamId IN viewer.scope.teamIds`).
-- **`MEMBER` (Staff Executer):** Restricted to viewing assigned tasks, submitting work revisions, viewing own notifications, and checking personal performance analytics.
-
----
-
-## 📡 API Endpoints & Data Flow
-
-All API routes are prefixed with `/api/v1`.
-
-### 1. Authentication & Viewer Context
-
-| Method | Route                        | Description                                            | Access Control |
-| ------ | ---------------------------- | ------------------------------------------------------ | -------------- |
-| `POST` | `/api/v1/auth/sign-in/email` | Authenticate user with credentials & establish session | Public         |
-| `POST` | `/api/v1/auth/sign-out`      | Terminate active user session                          | Authenticated  |
-| `GET`  | `/api/v1/auth/me`            | Fetch active session & viewer context payload          | Authenticated  |
-
-### 2. User & Team Management
-
-| Method | Route                             | Description                         | Access Control         |
-| ------ | --------------------------------- | ----------------------------------- | ---------------------- |
-| `POST` | `/api/v1/admins`                  | Provision new `ADMIN` account       | `SUPER_ADMIN`          |
-| `GET`  | `/api/v1/admins`                  | List all `ADMIN` accounts           | `SUPER_ADMIN`          |
-| `POST` | `/api/v1/members`                 | Provision new `MEMBER` account      | `SUPER_ADMIN`, `ADMIN` |
-| `GET`  | `/api/v1/members`                 | List `MEMBER` accounts within scope | Scoped                 |
-| `POST` | `/api/v1/teams`                   | Create new operational team         | `SUPER_ADMIN`          |
-| `GET`  | `/api/v1/teams`                   | List operational teams              | Scoped                 |
-| `POST` | `/api/v1/teams/:id/assign-member` | Assign or transfer Member to team   | `SUPER_ADMIN`, `ADMIN` |
-
-### 3. Task Management & Workflow State Machine
-
-| Method | Route                       | Description                                                           | Access Control         |
-| ------ | --------------------------- | --------------------------------------------------------------------- | ---------------------- |
-| `POST` | `/api/v1/tasks`             | Create task with auto-generated reference code (`TSK-YYYYMMDD-XXXX`)  | `SUPER_ADMIN`, `ADMIN` |
-| `GET`  | `/api/v1/tasks`             | List tasks with filters (`status`, `priority`, `search`, `isOverdue`) | Scoped                 |
-| `GET`  | `/api/v1/tasks/:id`         | Get task detail payload with calculated `isOverdue` flag              | Scoped                 |
-| `POST` | `/api/v1/tasks/:id/assign`  | Assign/reassign task to Member (logs `TaskAssignment`)                | `SUPER_ADMIN`, `ADMIN` |
-| `POST` | `/api/v1/tasks/:id/start`   | Transition status `ASSIGNED` $\to$ `IN_PROGRESS`                      | Assigned Member        |
-| `POST` | `/api/v1/tasks/:id/cancel`  | Cancel task (`CANCELLED`)                                             | `SUPER_ADMIN`, `ADMIN` |
-| `GET`  | `/api/v1/tasks/:id/history` | Paginated task status change timeline (`TaskStatusHistory`)           | Scoped                 |
-
-### 4. Submissions & Administrative Reviews
-
-| Method | Route                               | Description                                                         | Access Control         |
-| ------ | ----------------------------------- | ------------------------------------------------------------------- | ---------------------- |
-| `POST` | `/api/v1/tasks/:taskId/submissions` | Submit task work (`SUBMITTED`/`RESUBMITTED`), version `v1, v2...`   | Assigned Member        |
-| `GET`  | `/api/v1/submissions/:id`           | Get submission detail with file attachments & review history        | Scoped                 |
-| `POST` | `/api/v1/submissions/:id/reviews`   | Review submission (`APPROVE` $\to$ `COMPLETED`, `REQUEST_REVISION`) | `SUPER_ADMIN`, `ADMIN` |
-
-### 5. Analytics, Reports & Operations
-
-| Method | Route                         | Description                                                      | Access Control          |
-| ------ | ----------------------------- | ---------------------------------------------------------------- | ----------------------- |
-| `GET`  | `/api/v1/dashboard/summary`   | Real-time operational dashboard counters                         | Scoped                  |
-| `GET`  | `/api/v1/dashboard/workload`  | Team and member workload balance metrics                         | Scoped                  |
-| `GET`  | `/api/v1/dashboard/trends`    | Time-series task completion trend analytics                      | Scoped                  |
-| `GET`  | `/api/v1/performance/members` | Operational performance metrics (`completionRate`, `onTimeRate`) | Scoped                  |
-| `POST` | `/api/v1/management-reports`  | Create & submit Admin management reports to Super Admin          | `ADMIN` / `SUPER_ADMIN` |
-| `GET`  | `/api/v1/inventory/items`     | Operational tool & equipment stock ledger                        | Scoped                  |
-| `GET`  | `/api/v1/exports/tasks`       | Export task dataset (`xlsx`, `csv`, `tsv`, `ods`)                | Scoped                  |
-| `POST` | `/api/v1/imports/inspect`     | Dry-run inspect legacy Excel workbooks                           | `SUPER_ADMIN`, `ADMIN`  |
-
-### Standard Error Response Shape
-
-All errors return a predictable JSON payload:
-
-```json
-{
-  "success": false,
-  "message": "Task already has an active assignment.",
-  "code": "TASK_ALREADY_ASSIGNED",
-  "details": null
-}
+Work → Activity → Data → Analytics → Decision
 ```
 
 ---
 
-## ✨ Key Platform Features
+## Why This Project Matters
 
-### 🛡️ Security & Role Isolation
+Spreadsheet based operational tracking is flexible, but it is difficult to govern. Ownership becomes unclear, revisions overwrite history, reports drift from source data, and leadership loses confidence in the numbers.
 
-- **Session-Based Better Auth:** Secure HttpOnly session tokens with password hashing via Argon2/Bcrypt.
-- **Strict Account Status Enforcement:** Suspended or inactive accounts are blocked instantly by `AccountStatusGuard`.
+Operix turns that workflow into a backend system with:
 
-### 🔄 Deterministic Task Engine
+- strict role isolation across `SUPER_ADMIN`, `ADMIN`, and `MEMBER`;
+- deterministic Task and Management Report workflows;
+- immutable submission, review, Activity, and Inventory ledgers;
+- derived dashboards and performance metrics from the database source of truth;
+- controlled Excel import and export without making Excel a parallel database.
 
-- **Atomic State Transitions:** Guards state order and records every change in `TaskStatusHistory`.
-- **Derived Overdue Flag:** Calculates `isOverdue` dynamically (`dueAt < now AND status NOT IN ('COMPLETED', 'CANCELLED')`) without duplicating database state.
-
-### 📝 Multi-Version Submissions
-
-- **Immutable Revision Snapshots:** Preserves historical submissions (`v1`, `v2`, `v3`) and feedback notes when revision is required.
-
-### 📊 Performance Analytics Engine
-
-- **Calculated Metrics:** Dynamic calculation of `completionRate`, `onTimeRate`, `revisionRate`, `averageCompletionMinutes`, and `overallScore`.
-
-### 📈 Multi-Format Spreadsheet Engine
-
-- **SheetJS Integration:** Import legacy workbooks (`member-legacy-v1`, `historical-task-legacy-v1`) with row-level error reports, and export datasets in `.xlsx`, `.csv`, `.tsv`, and `.ods`.
-
-### 📦 Operational Inventory Ledger
-
-- **Stock Movement & Equipment Assignment:** Track stock movements (`STOCK_IN`, `STOCK_OUT`, `ADJUSTMENT`) and assignable equipment checkout/return cycles.
+It is intentionally built as a serious backend product, not a demo dashboard. The interesting engineering work lives in scoped authorization, transactional workflow integrity, idempotent import behavior, safe file handling, and analytics consistency.
 
 ---
 
-## 💻 Installation & Local Setup
+## Tech Stack
+
+| Layer          | Technology                          | Role in the system                                                                |
+| -------------- | ----------------------------------- | --------------------------------------------------------------------------------- |
+| Runtime        | Node.js 22.12 plus ESM              | Modern JavaScript runtime for the NestJS API                                      |
+| Framework      | NestJS 11                           | Modular backend architecture, dependency injection, guards, controllers, services |
+| Language       | TypeScript strict mode              | Strong compile time safety across DTOs, services, and Prisma types                |
+| Database       | PostgreSQL                          | Relational source of truth, constraints, indexes, transactional integrity         |
+| ORM            | Prisma 7                            | Multi file schema, generated typed client, migrations                             |
+| Authentication | Better Auth                         | Session based authentication with Operix viewer context                           |
+| Authorization  | Custom guards and scope policies    | Role isolation and Team scoped access control                                     |
+| Files          | Cloudinary plus storage abstraction | Authenticated Task and Submission attachments                                     |
+| Excel          | SheetJS CE 0.20.3                   | XLSX import preview, error reporting, controlled imports, dynamic exports         |
+| Email          | Nodemailer                          | Best effort Task assignment SMTP email                                            |
+| Security       | Helmet, CORS, Nest throttler        | HTTP hardening, trusted origins, rate limiting                                    |
+| Testing        | Jest, Supertest                     | Unit and integration test runners                                                 |
+| Tooling        | ESLint, Prettier, Prisma CLI        | Quality gates and schema verification                                             |
+
+---
+
+## Architecture and Internal Workflow
+
+Operix is a decoupled backend API. The frontend consumes REST endpoints under `/api/v1`, while the backend owns authentication, authorization, business workflow, database writes, and derived analytics.
+
+```text
+Client
+  ↓
+NestJS HTTP Layer
+  ↓
+ViewerContextGuard
+  ↓
+AccountStatusGuard
+  ↓
+OperixRoleGuard
+  ↓
+Controller DTO validation
+  ↓
+Service business logic
+  ↓
+Serializable transaction when needed
+  ↓
+Prisma
+  ↓
+PostgreSQL
+```
+
+### Request Lifecycle
+
+| Layer       | Responsibility                                                             |
+| ----------- | -------------------------------------------------------------------------- |
+| Client      | Sends authenticated REST requests to `/api/v1`                             |
+| Guards      | Resolve viewer identity, enforce account status, enforce role requirements |
+| Controllers | Stay thin, validate DTOs, pass `OperixViewer` to services                  |
+| Services    | Own scope checks, business rules, transactions, Activity, Notifications    |
+| Prisma      | Performs typed database reads and writes                                   |
+| PostgreSQL  | Stores operational truth and enforces critical constraints                 |
+
+### Core Modules
+
+```text
+Auth → Viewer Context → Team Scope
+  ↓
+Users and Teams
+  ↓
+Tasks → Submissions → Reviews → Activity
+  ↓
+Performance and Dashboard Analytics
+  ↓
+Management Reports
+  ↓
+Files and Attachments
+  ↓
+Excel Import / Export
+  ↓
+Inventory Ledger
+```
+
+---
+
+## API Endpoints and Data Flow
+
+All routes are prefixed with:
+
+```text
+/api/v1
+```
+
+### Health and Auth
+
+| Method | Route                              | Purpose                                      |
+| ------ | ---------------------------------- | -------------------------------------------- |
+| `GET`  | `/health`                          | Health check                                 |
+| `GET`  | `/auth/me`                         | Resolve active Operix viewer context         |
+| `POST` | Better Auth routes under `/auth/*` | Sign in, sign out, and auth provider actions |
+
+### User and Team Management
+
+| Method  | Route                    | Purpose                          |
+| ------- | ------------------------ | -------------------------------- |
+| `POST`  | `/admins`                | Create Admin account             |
+| `GET`   | `/admins`                | List Admins                      |
+| `GET`   | `/admins/:adminId`       | Get Admin detail                 |
+| `PATCH` | `/admins/:adminId`       | Update Admin                     |
+| `POST`  | `/members`               | Create Member account            |
+| `GET`   | `/members`               | List Members in authorized scope |
+| `GET`   | `/members/:memberId`     | Get Member detail                |
+| `PATCH` | `/members/:memberId`     | Update Member                    |
+| `POST`  | `/teams`                 | Create Team                      |
+| `GET`   | `/teams`                 | List Teams                       |
+| `GET`   | `/teams/:teamId`         | Get Team detail                  |
+| `PATCH` | `/teams/:teamId`         | Update Team                      |
+| `POST`  | `/teams/:teamId/members` | Assign Member to Team            |
+
+### Task, Submission, Review, and Attachments
+
+| Method   | Route                                      | Purpose                          |
+| -------- | ------------------------------------------ | -------------------------------- |
+| `POST`   | `/tasks`                                   | Create Task                      |
+| `GET`    | `/tasks`                                   | List scoped Tasks with filters   |
+| `GET`    | `/tasks/:taskId`                           | Get Task detail                  |
+| `GET`    | `/tasks/:taskId/history`                   | Get Task status history          |
+| `POST`   | `/tasks/:taskId/assignments`               | Assign Task to Member            |
+| `POST`   | `/tasks/:taskId/start`                     | Member starts assigned Task      |
+| `POST`   | `/tasks/:taskId/submissions`               | Submit or resubmit Task work     |
+| `GET`    | `/submissions/:submissionId`               | Get Submission detail            |
+| `POST`   | `/submissions/:submissionId/reviews`       | Admin reviews Submission         |
+| `POST`   | `/tasks/:taskId/attachments`               | Upload Task attachments          |
+| `GET`    | `/tasks/:taskId/attachments`               | List Task attachments            |
+| `DELETE` | `/tasks/:taskId/attachments/:attachmentId` | Delete pending Task attachment   |
+| `GET`    | `/submissions/:submissionId/attachments`   | List Submission attachments      |
+| `GET`    | `/files/:fileId/download`                  | Authorized proxied file download |
+
+### Activity, Notifications, Performance, Dashboard
+
+| Method  | Route                                 | Purpose                            |
+| ------- | ------------------------------------- | ---------------------------------- |
+| `GET`   | `/activities`                         | Scoped Activity feed               |
+| `GET`   | `/notifications`                      | User notification inbox            |
+| `GET`   | `/notifications/unread-count`         | Unread notification count          |
+| `PATCH` | `/notifications/:notificationId/read` | Mark one notification read         |
+| `PATCH` | `/notifications/read-all`             | Mark all notifications read        |
+| `GET`   | `/performance/members`                | Member performance metrics         |
+| `GET`   | `/performance/members/:memberId`      | Single Member performance          |
+| `GET`   | `/performance/teams/:teamId`          | Team performance metrics           |
+| `GET`   | `/dashboard/overview`                 | Role aware dashboard overview      |
+| `GET`   | `/dashboard/workload`                 | Team and Member workload analytics |
+| `GET`   | `/dashboard/trends`                   | UTC zero filled completion trend   |
+
+### Management Reports
+
+| Method  | Route                       | Purpose                                    |
+| ------- | --------------------------- | ------------------------------------------ |
+| `POST`  | `/reports`                  | Admin creates draft Management Report      |
+| `GET`   | `/reports`                  | List scoped Reports                        |
+| `GET`   | `/reports/:reportId`        | Get Report detail with versions and review |
+| `PATCH` | `/reports/:reportId`        | Update draft or revision required Report   |
+| `POST`  | `/reports/:reportId/submit` | Submit immutable Report version            |
+| `POST`  | `/reports/:reportId/review` | Super Admin approves or requests revision  |
+
+### Excel Import and Export
+
+| Method | Route                                    | Purpose                                 |
+| ------ | ---------------------------------------- | --------------------------------------- |
+| `POST` | `/imports/members/preview`               | Preview Member legacy workbook          |
+| `POST` | `/imports/members/error-report`          | Generate Member import error workbook   |
+| `POST` | `/imports/members`                       | Enrich existing Member designation      |
+| `POST` | `/imports/historical-tasks/preview`      | Preview historical Task workbook        |
+| `POST` | `/imports/historical-tasks/error-report` | Generate historical Task error workbook |
+| `POST` | `/imports/historical-tasks`              | Import terminal historical Tasks        |
+| `GET`  | `/exports/tasks`                         | Export Tasks XLSX                       |
+| `GET`  | `/exports/performance/members`           | Export Member Performance XLSX          |
+| `GET`  | `/exports/performance/teams/:teamId`     | Export Team Performance XLSX            |
+| `GET`  | `/exports/dashboard/workload`            | Export Dashboard Workload XLSX          |
+| `GET`  | `/exports/dashboard/trends`              | Export Dashboard Trends XLSX            |
+| `GET`  | `/exports/management-reports`            | Export Management Reports XLSX          |
+
+### Inventory
+
+| Method  | Route                                          | Purpose                          |
+| ------- | ---------------------------------------------- | -------------------------------- |
+| `POST`  | `/inventory/categories`                        | Create global Inventory Category |
+| `GET`   | `/inventory/categories`                        | List Categories                  |
+| `GET`   | `/inventory/categories/:categoryId`            | Get Category detail              |
+| `PATCH` | `/inventory/categories/:categoryId`            | Update Category                  |
+| `POST`  | `/inventory/items`                             | Create Team scoped Item          |
+| `GET`   | `/inventory/items`                             | List Items with stock state      |
+| `GET`   | `/inventory/items/:itemId`                     | Get Item detail                  |
+| `PATCH` | `/inventory/items/:itemId`                     | Update Item catalog fields       |
+| `POST`  | `/inventory/items/:itemId/stock-in`            | Increase stock                   |
+| `POST`  | `/inventory/items/:itemId/stock-out`           | Consumable stock out             |
+| `POST`  | `/inventory/items/:itemId/adjustments`         | Audited stock correction         |
+| `POST`  | `/inventory/items/:itemId/assignments`         | Assign returnable item to Member |
+| `GET`   | `/inventory/assignments`                       | List scoped assignments          |
+| `GET`   | `/inventory/assignments/:assignmentId`         | Get assignment detail            |
+| `POST`  | `/inventory/assignments/:assignmentId/returns` | Partial or full return           |
+| `GET`   | `/inventory/transactions`                      | Stock ledger history             |
+| `GET`   | `/inventory/summary`                           | Scoped inventory summary         |
+
+### Data Flow
+
+```text
+User action
+  ↓
+Frontend request
+  ↓
+NestJS route and guards
+  ↓
+DTO validation
+  ↓
+Service scope check
+  ↓
+Prisma query or serializable transaction
+  ↓
+Activity / Notification when part of business transaction
+  ↓
+Safe response mapper
+  ↓
+Frontend state update
+```
+
+---
+
+## Key Features
+
+### Workflow and Operations
+
+- **Task lifecycle engine** with assignment, start, submission, review, revision, completion, and cancellation.
+- **Submission versioning** that preserves each submitted attempt.
+- **Admin submitted Management Reports** with immutable submitted versions and Super Admin review.
+- **Inventory V1** with stock movements, returnable assignments, returns, and immutable ledger history.
+
+### Security and Governance
+
+- **Role based access control** for `SUPER_ADMIN`, `ADMIN`, and `MEMBER`.
+- **Account status enforcement** for inactive and suspended users.
+- **Scope policies** that prevent cross Team data leakage.
+- **Privacy safe not found behavior** for scoped resources.
+
+### Analytics and Reporting
+
+- **Dashboard overview, workload, and trends** derived from operational data.
+- **Performance metrics** for Members and Teams.
+- **Activity feed** for auditable business events.
+- **Dynamic XLSX exports** for authorized operational datasets.
+
+### Files and Excel
+
+- **Authenticated file storage** through a provider neutral storage abstraction.
+- **Proxied downloads** that never expose storage credentials.
+- **Excel migration previews and error reports** for legacy Member and historical Task workbooks.
+- **Formula safe spreadsheet output** to protect generated workbooks.
+
+---
+
+## Installation and Local Setup
 
 ### Prerequisites
 
-- **Node.js:** `v22.12.0` or newer
-- **Package Manager:** `pnpm v10.28.0`
-- **Database:** `PostgreSQL v16+`
+- Node.js `22.12.0` or newer
+- pnpm `10.28.0`
+- PostgreSQL
 
-### 1. Clone & Install Dependencies
+### 1. Clone the repository
 
 ```bash
-git clone https://github.com/ArnabSaga/Operix-Backend.git
+git clone <your-repository-url>
 cd Operix-Backend
+```
+
+### 2. Install dependencies
+
+```bash
 pnpm install --frozen-lockfile
 ```
 
-### 2. Environment Configuration
-
-Copy the environment template:
+### 3. Configure environment
 
 ```bash
-# POSIX (Linux/macOS)
-cp .env.example .env
-
-# Windows PowerShell
 Copy-Item .env.example .env
 ```
 
-Edit `.env` to configure your PostgreSQL connection and auth secrets:
+For macOS or Linux:
+
+```bash
+cp .env.example .env
+```
+
+Fill in at minimum:
 
 ```env
-NODE_ENV=development
-PORT=5000
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/operix?schema=public
-TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/operix_test?schema=public
-BETTER_AUTH_SECRET=a_very_secret_32_character_minimum_key_string
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/operix
+BETTER_AUTH_SECRET=replace_with_a_secure_32_character_secret
 BETTER_AUTH_URL=http://localhost:5000
 FRONTEND_URL=http://localhost:3000
 FRONTEND_APP_URL=http://localhost:3000
 ```
 
-### 3. Database Migration & Seed
-
-Generate the Prisma Client and run database migrations:
+### 4. Prepare the database
 
 ```bash
-# Validate schema files
 pnpm prisma:validate
-
-# Generate Prisma Client (outputs to src/generated/prisma)
 pnpm prisma:generate
+pnpm prisma:migrate
+```
 
-# Seed the initial Super Admin account
+Optional initial Super Admin seed:
+
+```bash
 pnpm seed:super-admin
 ```
 
-### 4. Run Development Server
+### 5. Start development server
 
 ```bash
 pnpm dev
 ```
 
-The server will start at `http://localhost:5000/api/v1`. Swagger docs will be accessible at `http://localhost:5000/api/docs`.
+The API runs at:
+
+```text
+http://localhost:5000/api/v1
+```
+
+Swagger runs at:
+
+```text
+http://localhost:5000/api/docs
+```
+
+when `SWAGGER_ENABLED=true`.
 
 ---
 
-## ⚙️ Environment Variables
+## Environment Variables
 
-| Variable                   | Requirement  | Default                 | Purpose                                                       |
-| -------------------------- | ------------ | ----------------------- | ------------------------------------------------------------- |
-| `NODE_ENV`                 | **Required** | `development`           | Runtime environment (`development`, `test`, `production`)     |
-| `PORT`                     | Optional     | `5000`                  | HTTP server port                                              |
-| `DATABASE_URL`             | **Required** | —                       | PostgreSQL connection string                                  |
-| `TEST_DATABASE_URL`        | Test Only    | —                       | Isolated PostgreSQL database connection for integration tests |
-| `BETTER_AUTH_SECRET`       | **Required** | —                       | Better Auth secret key (minimum 32 characters)                |
-| `BETTER_AUTH_URL`          | **Required** | `http://localhost:5000` | Backend canonical URL for auth callbacks                      |
-| `FRONTEND_URL`             | **Required** | `http://localhost:3000` | CORS allowed origin(s)                                        |
-| `FRONTEND_APP_URL`         | **Required** | `http://localhost:3000` | Canonical frontend app URL for email links                    |
-| `SWAGGER_ENABLED`          | Optional     | `true`                  | Enables Swagger API documentation at `/api/docs`              |
-| `THROTTLE_TTL_MS`          | Optional     | `60000`                 | Rate limiter window in milliseconds                           |
-| `THROTTLE_LIMIT`           | Optional     | `100`                   | Maximum requests per throttle window                          |
-| `SMTP_ENABLED`             | Optional     | `false`                 | Enables best-effort SMTP email delivery                       |
-| `SMTP_HOST`                | Conditional  | —                       | Required if `SMTP_ENABLED=true`                               |
-| `SMTP_PORT`                | Conditional  | —                       | Required if `SMTP_ENABLED=true`                               |
-| `FILE_STORAGE_ENABLED`     | Optional     | `false`                 | Enables Cloudinary file storage backend                       |
-| `CLOUDINARY_CLOUD_NAME`    | Conditional  | —                       | Required if `FILE_STORAGE_ENABLED=true`                       |
-| `EXCEL_MAX_FILE_BYTES`     | Optional     | `10485760`              | Maximum spreadsheet upload file size (10 MB)                  |
-| `EXCEL_MAX_WORKSHEET_ROWS` | Optional     | `10000`                 | Maximum allowed worksheet row limit                           |
+| Variable                    | Purpose                                | Example                                             |
+| --------------------------- | -------------------------------------- | --------------------------------------------------- |
+| `NODE_ENV`                  | Runtime mode                           | `development`                                       |
+| `PORT`                      | API server port                        | `5000`                                              |
+| `DATABASE_URL`              | PostgreSQL connection string           | `postgresql://user:pass@localhost:5432/operix`      |
+| `TEST_DATABASE_URL`         | Isolated integration test database     | `postgresql://user:pass@localhost:5432/operix_test` |
+| `BETTER_AUTH_SECRET`        | Better Auth secret, 32 plus characters | `replace_with_secure_secret`                        |
+| `BETTER_AUTH_URL`           | Backend canonical auth URL             | `http://localhost:5000`                             |
+| `FRONTEND_URL`              | Trusted CORS origin                    | `http://localhost:3000`                             |
+| `FRONTEND_APP_URL`          | Browser deep link and email URL        | `http://localhost:3000`                             |
+| `SWAGGER_ENABLED`           | Enables Swagger docs                   | `true`                                              |
+| `SMTP_ENABLED`              | Enables best effort SMTP delivery      | `false`                                             |
+| `SMTP_HOST`                 | SMTP host when email is enabled        | `smtp.example.com`                                  |
+| `SMTP_PORT`                 | SMTP port                              | `587`                                               |
+| `SMTP_SECURE`               | SMTP TLS mode                          | `false`                                             |
+| `SMTP_USER`                 | SMTP username                          | `mailer@example.com`                                |
+| `SMTP_PASS`                 | SMTP password                          | `********`                                          |
+| `SMTP_FROM_EMAIL`           | Sender email                           | `noreply@example.com`                               |
+| `SMTP_FROM_NAME`            | Sender display name                    | `Operix`                                            |
+| `SEED_SUPER_ADMIN_EMAIL`    | Seed Super Admin email                 | `chief@example.com`                                 |
+| `SEED_SUPER_ADMIN_PASSWORD` | Seed Super Admin password              | `ChangeMe123!`                                      |
+| `SEED_SUPER_ADMIN_NAME`     | Seed Super Admin name                  | `Chief Admin`                                       |
+| `THROTTLE_TTL_MS`           | Rate limit window in milliseconds      | `60000`                                             |
+| `THROTTLE_LIMIT`            | Requests per throttle window           | `100`                                               |
+| `FILE_STORAGE_ENABLED`      | Enables Cloudinary backed file storage | `false`                                             |
+| `CLOUDINARY_CLOUD_NAME`     | Cloudinary cloud name                  | `operix-cloud`                                      |
+| `CLOUDINARY_API_KEY`        | Cloudinary API key                     | `1234567890`                                        |
+| `CLOUDINARY_API_SECRET`     | Cloudinary API secret                  | `********`                                          |
+| `CLOUDINARY_FOLDER`         | Cloudinary folder prefix               | `operix`                                            |
+
+> Keep real `.env` files local. Do not commit runtime secrets.
 
 ---
 
-## 📁 Repository Directory Structure
+## Folder Structure
 
 ```bash
 Operix-Backend/
- ┣ 📂 context/                     # Project architecture, guidelines, and progress trackers
- ┣ 📂 prisma/
- ┃ ┣ 📂 migrations/                # Database migration history
- ┃ ┗ 📂 schema/                    # Multi-file partitioned Prisma schemas
- ┃   ┣ 📜 schema.prisma            # Datasource & generator config
- ┃   ┣ 📜 enums.prisma             # Domain enums (UserRole, TaskStatus, etc.)
- ┃   ┣ 📜 auth.prisma              # Better Auth identity models
- ┃   ┣ 📜 organization.prisma      # Team & TeamMember models
- ┃   ┣ 📜 task.prisma              # Task, Assignment, & History models
- ┃   ┣ 📜 submission.prisma        # TaskSubmissions & TaskReviews
- ┃   ┣ 📜 file.prisma              # FileAssets & Attachment joins
- ┃   ┣ 📜 activity.prisma          # ActivityLog audit model
- ┃   ┣ 📜 notification.prisma      # In-App Notification model
- ┃   ┣ 📜 performance.prisma       # PerformanceRecord snapshot model
- ┃   ┣ 📜 report.prisma            # ManagementReport & Version models
- ┃   ┗ 📜 inventory.prisma         # Inventory categories, items, & transactions
- ┣ 📂 resource/                    # PRD documentation & Excel import profile specs
- ┣ 📂 src/
- ┃ ┣ 📂 config/                    # Environment validation & NestJS config loader
- ┃ ┣ 📂 database/                  # PrismaModule & PrismaService provider
- ┃ ┣ 📂 generated/prisma           # Generated Prisma Client code
- ┃ ┣ 📂 modules/                   # Feature modules
- ┃ ┃ ┣ 📂 auth/                    # Better Auth module & Super Admin seeder
- ┃ ┃ ┣ 📂 user-management/         # Admin & Member provisioning APIs
- ┃ ┃ ┣ 📂 team/                    # Team creation & assignment APIs
- ┃ ┃ ┣ 📂 task/                    # Task lifecycle & state machine APIs
- ┃ ┃ ┣ 📂 submission/              # Submissions & Review APIs
- ┃ ┃ ┣ 📂 file/                    # File upload & asset management APIs
- ┃ ┃ ┣ 📂 notification/            # In-App Notification APIs
- ┃ ┃ ┣ 📂 activity/                # System Audit Activity Log APIs
- ┃ ┃ ┣ 📂 performance/             # Member performance metrics engine
- ┃ ┃ ┣ 📂 management-report/      # Admin-submitted management reports
- ┃ ┃ ┣ 📂 dashboard/               # Scoped operational dashboards
- ┃ ┃ ┣ 📂 import/                  # Excel migration engine & profile registry
- ┃ ┃ ┣ 📂 export/                  # Multi-format dataset export APIs
- ┃ ┃ ┗ 📂 inventory/               # Inventory ledger & tool assignment APIs
- ┃ ┣ 📂 shared/                    # Neutral cross-cutting infrastructure
- ┃ ┃ ┣ 📂 activity/                # Async ActivityLog writer service
- ┃ ┃ ┣ 📂 auth/                    # ViewerContext, RBAC Guards, & Scope helpers
- ┃ ┃ ┣ 📂 database/                # TransactionClient & serializable retry runner
- ┃ ┃ ┣ 📂 errors/                  # AppException & AppErrorCode constants
- ┃ ┃ ┣ 📂 file-storage/            # Storage abstraction & Cloudinary adapter
- ┃ ┃ ┣ 📂 mail/                    # Nodemailer SMTP service & templates
- ┃ ┃ ┣ 📂 notification/            # Notification writer service
- ┃ ┃ ┣ 📂 pagination/              # Pagination DTO & meta helpers
- ┃ ┃ ┗ 📂 spreadsheet/             # SheetJS adapter & formula injection guard
- ┃ ┣ 📜 app.module.ts              # NestJS root application container
- ┃ ┗ 📜 main.ts                    # NestJS bootstrap entrypoint
- ┣ 📂 tests/                       # Unit & E2E Integration test suites
- ┃ ┣ 📂 integration/               # Multi-module E2E PostgreSQL integration tests
- ┃ ┣ 📂 runners/                   # Jest configuration runners (unit & integration)
- ┃ ┣ 📂 support/                   # Test application factories & server harnesses
- ┃ ┗ 📂 unit/                      # Unit test suites across services, guards, & math engines
- ┣ 📜 .env.example                 # Environment variables schema template
- ┣ 📜 nest-cli.json                # NestJS CLI configuration
- ┣ 📜 package.json                 # Project dependencies & npm scripts
- ┣ 📜 prisma.config.ts             # Prisma 7 CLI configuration
- ┗ 📜 tsconfig.json                # Strict TypeScript configuration
+ ┣ context/                  # Architecture, build plan, standards, progress tracker
+ ┣ prisma/
+ ┃ ┣ migrations/             # Prisma migration history
+ ┃ ┗ schema/                 # Multi file Prisma schema
+ ┣ resource/
+ ┃ ┣ PRD.md                  # Product requirements
+ ┃ ┗ excel/                  # Excel mapping and import/export contracts
+ ┣ src/
+ ┃ ┣ config/                 # Environment validation and resolved configuration
+ ┃ ┣ database/               # Prisma module and service
+ ┃ ┣ modules/
+ ┃ ┃ ┣ auth/                 # Better Auth integration and viewer context
+ ┃ ┃ ┣ user-management/      # Admin and Member management
+ ┃ ┃ ┣ team/                 # Team and TeamMember ownership
+ ┃ ┃ ┣ task/                 # Task lifecycle and attachments
+ ┃ ┃ ┣ submission/           # Submissions, reviews, and submission files
+ ┃ ┃ ┣ activity/             # Activity feed
+ ┃ ┃ ┣ notification/         # Notification inbox
+ ┃ ┃ ┣ performance/          # Performance calculators and endpoints
+ ┃ ┃ ┣ management-report/    # Admin submitted reports
+ ┃ ┃ ┣ dashboard/            # Derived dashboard analytics
+ ┃ ┃ ┣ import/               # Excel previews and controlled imports
+ ┃ ┃ ┣ export/               # Dynamic XLSX exports
+ ┃ ┃ ┣ file/                 # Proxied file downloads
+ ┃ ┃ ┗ inventory/            # Stock ledger and returnable assignment module
+ ┃ ┣ shared/                 # Cross cutting infrastructure
+ ┃ ┣ app.module.ts           # Root Nest module
+ ┃ ┗ main.ts                 # Application bootstrap
+ ┣ tests/
+ ┃ ┣ unit/                   # Unit tests
+ ┃ ┣ integration/            # Integration tests
+ ┃ ┣ runners/                # Jest runner configs
+ ┃ ┗ support/                # Test server and fixtures
+ ┣ generated/prisma/         # Generated Prisma client
+ ┣ .env.example              # Environment contract
+ ┣ package.json              # Scripts and dependencies
+ ┗ README.md
 ```
 
 ---
 
-## 🧪 Verification & Development Scripts
+## Development Scripts
+
+| Command                 | Purpose                                        |
+| ----------------------- | ---------------------------------------------- |
+| `pnpm dev`              | Start NestJS in watch mode                     |
+| `pnpm build`            | Compile the application                        |
+| `pnpm start:prod`       | Run compiled production build                  |
+| `pnpm typecheck`        | Run TypeScript without emitting                |
+| `pnpm lint`             | Run ESLint                                     |
+| `pnpm lint:fix`         | Auto fix lint issues                           |
+| `pnpm format:check`     | Check Prettier formatting                      |
+| `pnpm format`           | Format source and test files                   |
+| `pnpm prisma:validate`  | Validate Prisma schema                         |
+| `pnpm prisma:generate`  | Generate Prisma client                         |
+| `pnpm prisma:migrate`   | Run development migrations                     |
+| `pnpm seed:super-admin` | Seed initial Super Admin                       |
+| `pnpm test:unit`        | Run unit tests                                 |
+| `pnpm test:integration` | Run integration tests with `TEST_DATABASE_URL` |
+| `pnpm verify`           | Run the full verification pipeline             |
+
+---
+
+## Quality Gate
+
+Recommended before handing off a backend change:
 
 ```bash
-# Development & Compilation
-pnpm dev              # Start NestJS server in watch mode
-pnpm build            # Compile TypeScript application bundle into dist/
-pnpm typecheck        # Run tsc type checking without emitting files
-
-# Code Quality & Format
-pnpm lint             # Run ESLint check across src/ and tests/
-pnpm lint:fix         # Fix auto-fixable ESLint issues
-pnpm format:check    # Verify formatting via Prettier
-pnpm format           # Auto-format all code files via Prettier
-
-# Database & Prisma
-pnpm prisma:validate  # Validate Prisma multi-file schema
-pnpm prisma:generate  # Generate Prisma Client to src/generated/prisma
-pnpm prisma:migrate   # Apply dev database migrations
-pnpm seed:super-admin # Seed initial trusted Super Admin account
-
-# Testing Suite
-pnpm test:unit        # Run unit tests (Jest ESM runner)
-pnpm test:integration # Run integration tests (Requires TEST_DATABASE_URL)
-pnpm verify           # Complete CI quality suite verification
+pnpm prisma:validate
+pnpm prisma:generate
+pnpm typecheck
+pnpm lint
+pnpm format:check
+pnpm build
+pnpm test:unit
+git diff --check
 ```
+
+Integration tests require a separate test database:
+
+```bash
+pnpm test:integration
+```
+
+Never run destructive integration tests against a development or production database.
+
+---
+
+## Current Product Scope
+
+### Supported
+
+- Authentication and RBAC
+- Admin and Member management
+- Teams and Team membership
+- Task lifecycle and assignment
+- Submission and review workflow
+- Task and Submission attachments
+- Activity and Notifications
+- Performance and Dashboard analytics
+- Admin submitted Management Reports
+- Excel import previews, error reports, and controlled imports
+- Dynamic XLSX exports
+- Inventory V1
+
+### Deferred
+
+- Realtime transport
+- CSV and PDF exports
+- Stored or scheduled exports
+- Management Report attachments
+- Inventory attachments
+- Inventory Excel import/export
+- Warehouse, procurement, valuation, batch, expiry, serial number, barcode
+- Automatic task assignment
+- Production deployment hardening
+
+---
+
+## License
+
+This repository is currently marked as:
+
+```text
+ArnabSaga
+```
+
+Update the license before publishing as open source.
 
 ---
 
 <div align="center">
 
-### 🏛️ **Operix Engineering Standard**
-
-_Built with strict type safety, role isolation, deterministic workflows, and high-performance database design._
-
-Made with ❤️ for Enterprise Pharmaceutical Operations Management.
+**Operix**
+_A workflow first backend for operational clarity, auditability, and data driven decisions._
 
 </div>
