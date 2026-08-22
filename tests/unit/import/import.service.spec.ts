@@ -154,6 +154,19 @@ function existingHistoricalTask(overrides = {}) {
   };
 }
 
+function memberImportUser(overrides = {}) {
+  return {
+    id: 'member-a',
+    role: UserRole.MEMBER,
+    status: UserStatus.ACTIVE,
+    employeeId: 'EMP-001',
+    email: 'member@example.com',
+    designation: 'Officer',
+    teamMembership: { teamId: 'team-a' },
+    ...overrides,
+  };
+}
+
 describe('ImportService', () => {
   it('requires Super Admin for previews', async () => {
     const { service } = createService();
@@ -259,6 +272,263 @@ describe('ImportService', () => {
 
     expect(report.filename).toContain('operix-member-import-errors-');
     expect(report.buffer.length).toBeGreaterThan(0);
+  });
+
+  it('hardens Member preview identity, duplicates, and designation validation', async () => {
+    const longDesignation = 'x'.repeat(121);
+    const file = workbookFile('Members', [
+      ['Employee ID', 'Email', 'Team ID', 'Name', 'Designation'],
+      ['EMP-001', '', 'team-a', 'Ignored Name', 'Senior Officer'],
+      ['', 'member@example.com', 'team-a', 'Ignored Name', 'Senior Officer'],
+      ['EMP-999', 'member@example.com', 'team-a', 'Ignored Name', 'Officer'],
+      ['EMP-002', 'admin@example.com', 'team-a', 'Ignored Name', 'Officer'],
+      [
+        'EMP-003',
+        'other@example.com',
+        'team-a',
+        'Ignored Name',
+        longDesignation,
+      ],
+    ]);
+    const { service } = createService({
+      user: {
+        findMany: jestApi.fn().mockResolvedValue([
+          memberImportUser(),
+          memberImportUser({
+            id: 'member-b',
+            employeeId: 'EMP-999',
+            email: 'other-member@example.com',
+          }),
+        ]),
+      },
+      team: {
+        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+      },
+    });
+
+    const preview = await service.preview(viewer(), IMPORT_TYPE.MEMBER, file);
+
+    expect(preview.summary).toMatchObject({
+      candidateRows: 0,
+      candidateUpdateRows: 0,
+      invalidRows: 4,
+      conflictRows: 1,
+    });
+    expect(preview.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining([
+        'DUPLICATE_SOURCE_MEMBER',
+        'EMPLOYEE_EMAIL_CONFLICT',
+        'MEMBER_NOT_RESOLVED',
+        'MEMBER_DESIGNATION_INVALID',
+      ]),
+    );
+  });
+
+  it('treats Member identity assertion mismatch as conflict', async () => {
+    const file = workbookFile('Members', [
+      ['Employee ID', 'Email', 'Team ID', 'Designation'],
+      ['EMP-999', 'member@example.com', 'team-a', 'Senior Officer'],
+    ]);
+    const { service } = createService({
+      user: {
+        findMany: jestApi.fn().mockResolvedValue([memberImportUser()]),
+        update: jestApi.fn(),
+      },
+      team: {
+        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+      },
+    });
+
+    const preview = await service.preview(viewer(), IMPORT_TYPE.MEMBER, file);
+
+    expect(preview.summary).toMatchObject({
+      candidateRows: 0,
+      candidateUpdateRows: 0,
+      conflictRows: 1,
+    });
+    expect(preview.issues.map((issue) => issue.code)).toContain(
+      'MEMBER_IDENTITY_CONFLICT',
+    );
+  });
+
+  it('imports Member designation updates only', async () => {
+    const file = workbookFile('Members', [
+      ['Employee ID', 'Email', 'Team ID', 'Name', 'Designation'],
+      [
+        'EMP-001',
+        'member@example.com',
+        'team-a',
+        'Ignored Name',
+        'Senior Officer',
+      ],
+    ]);
+    const { service, prisma } = createService({
+      user: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValueOnce([memberImportUser()])
+          .mockResolvedValueOnce([memberImportUser()])
+          .mockResolvedValueOnce([
+            memberImportUser({ designation: 'Senior Officer' }),
+          ]),
+        update: jestApi.fn().mockResolvedValue({ id: 'member-a' }),
+      },
+      team: {
+        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+      },
+    });
+
+    const result = await service.importMembers(viewer(), file);
+
+    expect(result.summary).toMatchObject({
+      updatedRows: 1,
+      alreadyPresentRows: 0,
+    });
+    expect(result.verification).toEqual({ membersUpdated: 1 });
+    expect(firstMockArg<{ data: unknown }>(prisma.user.update).data).toEqual({
+      designation: 'Senior Officer',
+    });
+    const activityInput = firstMockArg<{
+      data: {
+        action: string;
+        entityType: string;
+        metadata: {
+          mappingProfile: string;
+          updatedRows: number;
+        };
+      };
+    }>(prisma.activityLog.create);
+    expect(activityInput.data.action).toBe('MEMBERS_IMPORTED');
+    expect(activityInput.data.entityType).toBe('IMPORT');
+    expect(activityInput.data.metadata).toMatchObject({
+      mappingProfile: 'MEMBER_LEGACY_V1',
+      updatedRows: 1,
+    });
+    expect(prisma.notification.create).not.toHaveBeenCalled();
+  });
+
+  it('returns no-op when Member designation is blank', async () => {
+    const file = workbookFile('Members', [
+      ['Employee ID', 'Email', 'Team ID', 'Designation'],
+      ['EMP-001', 'member@example.com', 'team-a', ''],
+    ]);
+    const { service, prisma } = createService({
+      user: {
+        findMany: jestApi.fn().mockResolvedValue([memberImportUser()]),
+        update: jestApi.fn(),
+      },
+      team: {
+        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+      },
+    });
+
+    const result = await service.importMembers(viewer(), file);
+
+    expect(result.summary).toMatchObject({
+      updatedRows: 0,
+      alreadyPresentRows: 1,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.activityLog.create).not.toHaveBeenCalled();
+  });
+
+  it('counts concurrent desired Member designation as no-op', async () => {
+    const file = workbookFile('Members', [
+      ['Employee ID', 'Email', 'Team ID', 'Designation'],
+      ['EMP-001', 'member@example.com', 'team-a', 'Senior Officer'],
+    ]);
+    const { service, prisma } = createService({
+      user: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValueOnce([memberImportUser()])
+          .mockResolvedValueOnce([
+            memberImportUser({ designation: 'Senior Officer' }),
+          ]),
+        update: jestApi.fn(),
+      },
+      team: {
+        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+      },
+    });
+
+    const result = await service.importMembers(viewer(), file);
+
+    expect(result.summary).toMatchObject({
+      updatedRows: 0,
+      alreadyPresentRows: 1,
+    });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.activityLog.create).not.toHaveBeenCalled();
+  });
+
+  it('rolls back Member import when one candidate has a third designation value', async () => {
+    const file = workbookFile('Members', [
+      ['Employee ID', 'Email', 'Team ID', 'Designation'],
+      ['EMP-001', 'member-a@example.com', 'team-a', 'Senior Officer'],
+      ['EMP-002', 'member-b@example.com', 'team-a', 'Lead Officer'],
+      ['EMP-003', 'member-c@example.com', 'team-a', 'Manager'],
+    ]);
+    const analyzedMembers = [
+      memberImportUser({
+        id: 'member-a',
+        employeeId: 'EMP-001',
+        email: 'member-a@example.com',
+        designation: 'Officer',
+      }),
+      memberImportUser({
+        id: 'member-b',
+        employeeId: 'EMP-002',
+        email: 'member-b@example.com',
+        designation: 'Officer',
+      }),
+      memberImportUser({
+        id: 'member-c',
+        employeeId: 'EMP-003',
+        email: 'member-c@example.com',
+        designation: 'Officer',
+      }),
+    ];
+    const { service, prisma } = createService({
+      user: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValueOnce(analyzedMembers)
+          .mockResolvedValueOnce([
+            analyzedMembers[0],
+            memberImportUser({
+              id: 'member-b',
+              employeeId: 'EMP-002',
+              email: 'member-b@example.com',
+              designation: 'Lead Officer',
+            }),
+            memberImportUser({
+              id: 'member-c',
+              employeeId: 'EMP-003',
+              email: 'member-c@example.com',
+              designation: 'Director',
+            }),
+          ]),
+        update: jestApi.fn(),
+      },
+      team: {
+        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+      },
+    });
+
+    await service
+      .importMembers(viewer(), file)
+      .catch((error: unknown) =>
+        expectAppException(
+          error,
+          HttpStatus.CONFLICT,
+          'CONCURRENT_MODIFICATION',
+        ),
+      );
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.activityLog.create).not.toHaveBeenCalled();
   });
 
   it('previews terminal historical Tasks and rejects active statuses', async () => {

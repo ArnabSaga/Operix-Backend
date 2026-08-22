@@ -50,6 +50,16 @@ export class ImportController {
     return this.importService.preview(viewer, IMPORT_TYPE.MEMBER, file);
   }
 
+  @Post('members')
+  @RequireRoles(UserRole.SUPER_ADMIN)
+  @UseInterceptors(IMPORT_FILE_INTERCEPTOR)
+  importMembers(
+    @CurrentViewer() viewer: OperixViewer,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    return this.importService.importMembers(viewer, file);
+  }
+
   @Post('members/error-report')
   @RequireRoles(UserRole.SUPER_ADMIN)
   @UseInterceptors(IMPORT_FILE_INTERCEPTOR)

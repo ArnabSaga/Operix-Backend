@@ -1,8 +1,8 @@
 # MEMBER_LEGACY_V1 Mapping Profile
 
-Status: Approved sanitized V1 profile for Step 17B / 17C preview implementation
+Status: Approved sanitized V1 profile for Step 17E existing Member enrichment execution
 
-This profile previews existing Member account enrichment only. It creates no accounts and performs no database writes.
+This profile previews and executes existing Member account enrichment only. It creates no accounts and writes only `User.designation` plus one safe batch Activity when actual rows are updated.
 
 ## Recognition fingerprint
 
@@ -97,10 +97,25 @@ No automatic Team creation.
 ```text
 employeeId
 email
-designation
 teamId
-status-like metadata if approved
+designation
 ```
+
+Assertion and context fields:
+
+```text
+employeeId
+email
+teamId
+```
+
+Writable fields:
+
+```text
+designation
+```
+
+The writer must update `designation` explicitly. Do not use this field list to build a dynamic update object.
 
 ## Source column mapping
 
@@ -109,8 +124,8 @@ status-like metadata if approved
 | Employee ID | EMP-001 | `User.employeeId` | Conditional identity | exact trimmed match against existing Member | APPROVED |
 | Email | member@example.com | `User.email` | Conditional identity | lowercase trimmed match against existing Member | APPROVED |
 | Team ID | team-a | `TeamMember.teamId` | Yes | explicit Operix `teamId`; no Team name fuzzy matching | APPROVED |
-| Name | Member A | none | No | ignored for identity; may appear in diagnostics only | APPROVED_IGNORED |
-| Designation | Officer | `User.designation` | No | candidate update only; no write in Step 17C | APPROVED |
+| Name | Member A | none | No | ignored for identity, matching, duplicate detection, and updates | APPROVED_IGNORED |
+| Designation | Officer | `User.designation` | No | only writable field; trimmed, max 120; blank preserves current value | APPROVED |
 
 ## Validation issues to catalog
 
@@ -124,6 +139,8 @@ NO_CURRENT_TEAM_EQUIVALENT
 UNKNOWN_STATUS_VALUE
 INVALID_EMAIL
 DUPLICATE_SOURCE_MEMBER
+MEMBER_IDENTITY_CONFLICT
+MEMBER_DESIGNATION_INVALID
 ```
 
 These labels now feed Step 17C row diagnostics.
@@ -134,12 +151,109 @@ These labels now feed Step 17C row diagnostics.
 existing Member + all import owned fields match
 → ALREADY_PRESENT
 
-existing Member + designation differs
+existing Member + blank designation
+→ ALREADY_PRESENT
+
+existing Member + designation differs and is valid
 → CANDIDATE_UPDATE
+
+existing Member + employeeId differs
+→ CONFLICT
+
+existing Member + email differs
+→ CONFLICT
 
 existing Member + Team differs
 → CONFLICT
 
 unresolved Member
 → INVALID
+
+duplicate resolved Member
+→ INVALID
+```
+
+For this profile:
+
+```text
+candidateRows = 0
+```
+
+Rows are grouped by resolved `User.id` after identity resolution. Duplicate source rows targeting the same Member block the workbook even if their designations are identical.
+
+## Step 17E execution semantics
+
+```http
+POST /api/v1/imports/members
+```
+
+Execution reruns the full Step 17C analysis and never trusts a previous preview.
+
+Rows with:
+
+```text
+INVALID
+CONFLICT
+```
+
+block execution with:
+
+```text
+409 IMPORT_EXECUTION_BLOCKED
+```
+
+and zero business writes.
+
+Candidate update rows are written in one serializable transaction. The transaction rechecks:
+
+```text
+User.id still exists
+User.role still MEMBER
+employeeId assertion still matches
+email assertion still matches
+TeamMember.teamId still matches
+```
+
+Status changes among `ACTIVE`, `INACTIVE`, and `SUSPENDED` do not block while role remains `MEMBER`.
+
+Designation concurrency:
+
+```text
+current == target
+→ no op
+
+current == baseline
+→ update designation
+
+current is a third value
+→ rollback
+→ CONCURRENT_MODIFICATION
+```
+
+Only this Prisma update shape is allowed:
+
+```ts
+data: {
+  designation: targetDesignation,
+}
+```
+
+Execution writes one batch Activity only when actual rows are updated:
+
+```text
+MEMBERS_IMPORTED
+```
+
+Execution does not create:
+
+```text
+Better Auth account
+User email update
+User employeeId update
+User name update
+User role update
+User status update
+TeamMember update
+Notification
+SMTP email
 ```

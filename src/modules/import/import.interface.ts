@@ -73,7 +73,26 @@ export interface ImportAnalyzedRow<
   issues: ImportPreviewIssue[];
 }
 
-export type ImportRowResult = ImportAnalyzedRow;
+export type ImportRowResult<
+  TCanonical = unknown,
+  TResolved = unknown,
+  TBaseline = unknown,
+> = ImportAnalyzedRow<TCanonical, TResolved, TBaseline>;
+
+export interface MemberImportResponse {
+  importType: ImportType;
+  mappingProfile: ImportProfileId;
+  summary: {
+    sourceRowCount: number;
+    consideredRows: number;
+    ignoredRows: number;
+    updatedRows: number;
+    alreadyPresentRows: number;
+  };
+  verification: {
+    membersUpdated: number;
+  };
+}
 
 export interface HistoricalTaskImportResponse {
   importType: ImportType;

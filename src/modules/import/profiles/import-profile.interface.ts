@@ -27,6 +27,7 @@ export interface ImportProfile {
   requiredHeaders: string[];
   optionalHeaders: string[];
   importOwnedFields: string[];
+  writableFields?: readonly string[];
   recognize(workbook: SpreadsheetWorkbook): ImportProfileRecognition;
   preview(
     workbook: SpreadsheetWorkbook,

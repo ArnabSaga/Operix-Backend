@@ -1,19 +1,22 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client.js';
+import { UserRole } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../database/prisma.service.js';
+import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import { runSerializableTransaction } from '../../shared/database/serializable-transaction.js';
 import type { PrismaTransactionClient } from '../../shared/database/transaction-client.type.js';
+import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
 import { AppException } from '../../shared/errors/app.exception.js';
 import {
   validateImportWorkbook,
   type ValidatedImportWorkbook,
 } from '../../shared/spreadsheet/spreadsheet-validation.js';
-import { SpreadsheetService } from '../../shared/spreadsheet/spreadsheet.service.js';
 import { SPREADSHEET_LIMIT } from '../../shared/spreadsheet/spreadsheet.constant.js';
-import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
-import { UserRole } from '../../../generated/prisma/enums.js';
-import { assertWorkbookWithinResourceLimits } from './analyzers/workbook-analyzer.js';
+import { SpreadsheetService } from '../../shared/spreadsheet/spreadsheet.service.js';
 import { ProfileRecognizer } from './analyzers/profile-recognizer.js';
+import { assertWorkbookWithinResourceLimits } from './analyzers/workbook-analyzer.js';
+import { buildIssue, sortIssues } from './import-diagnostics.js';
+import { ImportErrorReportService } from './import-error-report.service.js';
 import {
   IMPORT_DISPOSITION,
   IMPORT_ERROR_CODE,
@@ -21,21 +24,26 @@ import {
   IMPORT_ROW_ISSUE_CODE,
   IMPORT_TYPE,
 } from './import.constant.js';
-import { buildIssue, sortIssues } from './import-diagnostics.js';
 import type {
   HistoricalTaskImportResponse,
   ImportAnalyzedRow,
   ImportPreviewResponse,
   ImportPreviewResult,
   ImportType,
+  MemberImportResponse,
 } from './import.interface.js';
-import { ImportErrorReportService } from './import-error-report.service.js';
 import type {
   HistoricalTaskAnalyzedRow,
   HistoricalTaskCanonical,
   HistoricalTaskExisting,
 } from './profiles/historical-task-legacy-v1.profile.js';
 import { historicalTaskMatches } from './profiles/historical-task-legacy-v1.profile.js';
+import type {
+  MemberImportAnalyzedRow,
+  MemberImportBaseline,
+  MemberImportCanonical,
+} from './profiles/member-legacy-v1.profile.js';
+import { normalizeMemberImportDesignation } from './profiles/member-legacy-v1.profile.js';
 
 @Injectable()
 export class ImportService {
@@ -69,6 +77,92 @@ export class ImportService {
     return {
       buffer: this.errorReportService.buildReport(preview),
       filename: buildErrorReportFilename(expectedType),
+    };
+  }
+
+  async importMembers(
+    viewer: OperixViewer,
+    file: Express.Multer.File | undefined,
+  ): Promise<MemberImportResponse> {
+    this.assertSuperAdmin(viewer);
+
+    const analysis = await this.buildAnalysis(IMPORT_TYPE.MEMBER, file);
+
+    if (
+      analysis.preview.mappingProfile !== IMPORT_PROFILE_ID.MEMBER_LEGACY_V1
+    ) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        IMPORT_ERROR_CODE.IMPORT_PROFILE_NOT_FOUND,
+        'Workbook does not match the Member import profile.',
+      );
+    }
+
+    if (
+      analysis.preview.summary.invalidRows > 0 ||
+      analysis.preview.summary.conflictRows > 0
+    ) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        IMPORT_ERROR_CODE.IMPORT_EXECUTION_BLOCKED,
+        'Member import is blocked by invalid or conflicting rows.',
+        publicPreview(analysis.preview),
+      );
+    }
+
+    if (analysis.preview.summary.candidateRows > 0) {
+      throw new AppException(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        IMPORT_ERROR_CODE.IMPORT_VERIFICATION_FAILED,
+        'Member import verification failed.',
+      );
+    }
+
+    const candidateUpdateRows = analysis.rows.filter(
+      (row): row is MemberImportAnalyzedRow =>
+        row.disposition === IMPORT_DISPOSITION.CANDIDATE_UPDATE &&
+        isMemberImportCanonical(row.canonical) &&
+        isMemberImportBaseline(row.baseline),
+    );
+
+    if (candidateUpdateRows.length === 0) {
+      return {
+        importType: IMPORT_TYPE.MEMBER,
+        mappingProfile: IMPORT_PROFILE_ID.MEMBER_LEGACY_V1,
+        summary: {
+          sourceRowCount: analysis.preview.summary.sourceRowCount,
+          consideredRows: analysis.preview.summary.consideredRows,
+          ignoredRows: analysis.preview.summary.ignoredRows,
+          updatedRows: 0,
+          alreadyPresentRows: analysis.preview.summary.alreadyPresentRows,
+        },
+        verification: {
+          membersUpdated: 0,
+        },
+      };
+    }
+
+    const execution = await runSerializableTransaction(
+      this.prisma,
+      async (tx) =>
+        this.executeMemberCandidateUpdates(tx, viewer, candidateUpdateRows),
+    );
+
+    return {
+      importType: IMPORT_TYPE.MEMBER,
+      mappingProfile: IMPORT_PROFILE_ID.MEMBER_LEGACY_V1,
+      summary: {
+        sourceRowCount: analysis.preview.summary.sourceRowCount,
+        consideredRows: analysis.preview.summary.consideredRows,
+        ignoredRows: analysis.preview.summary.ignoredRows,
+        updatedRows: execution.updatedRows,
+        alreadyPresentRows:
+          analysis.preview.summary.alreadyPresentRows +
+          execution.concurrentAlreadyPresentRows,
+      },
+      verification: {
+        membersUpdated: execution.membersUpdated,
+      },
     };
   }
 
@@ -423,6 +517,227 @@ export class ImportService {
     };
   }
 
+  private async executeMemberCandidateUpdates(
+    tx: PrismaTransactionClient,
+    viewer: OperixViewer,
+    rows: MemberImportAnalyzedRow[],
+  ): Promise<{
+    updatedRows: number;
+    concurrentAlreadyPresentRows: number;
+    membersUpdated: number;
+  }> {
+    const candidates = rows
+      .map((row) => ({
+        canonical: row.canonical,
+        baseline: row.baseline,
+      }))
+      .filter(isExecutableMemberImportRow);
+    const memberIds = unique(candidates.map((row) => row.canonical.memberId));
+    const currentMembers = await this.findMemberImportUsers(tx, memberIds);
+    const currentById = new Map(
+      currentMembers.map((member) => [member.id, member]),
+    );
+    const rowsToUpdate: MemberImportCanonical[] = [];
+    let concurrentAlreadyPresentRows = 0;
+
+    for (const row of candidates) {
+      const current = currentById.get(row.canonical.memberId);
+
+      if (!current) {
+        throw this.memberImportExecutionBlocked(
+          row.canonical,
+          'memberId',
+          row.canonical.memberId,
+          'Member no longer exists.',
+        );
+      }
+
+      this.assertMemberImportProtectedFields(row.canonical, current);
+
+      const currentDesignation = normalizeMemberImportDesignation(
+        current.designation,
+      );
+      const baselineDesignation = normalizeMemberImportDesignation(
+        row.baseline.designation,
+      );
+      const targetDesignation = normalizeMemberImportDesignation(
+        row.canonical.targetDesignation,
+      );
+
+      if (!targetDesignation) {
+        throw new AppException(
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          IMPORT_ERROR_CODE.IMPORT_VERIFICATION_FAILED,
+          'Member import verification failed.',
+        );
+      }
+
+      if (currentDesignation === targetDesignation) {
+        concurrentAlreadyPresentRows += 1;
+        continue;
+      }
+
+      if (currentDesignation === baselineDesignation) {
+        rowsToUpdate.push(row.canonical);
+        continue;
+      }
+
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        APP_ERROR_CODE.CONCURRENT_MODIFICATION,
+        'The Member changed while processing this import. Please retry.',
+      );
+    }
+
+    if (rowsToUpdate.length === 0) {
+      return {
+        updatedRows: 0,
+        concurrentAlreadyPresentRows,
+        membersUpdated: 0,
+      };
+    }
+
+    for (const row of rowsToUpdate) {
+      await tx.user.update({
+        where: {
+          id: row.memberId,
+        },
+        data: {
+          designation: row.targetDesignation,
+        },
+        select: {
+          id: true,
+        },
+      });
+    }
+
+    const verifiedMembers = await this.findMemberImportUsers(
+      tx,
+      rowsToUpdate.map((row) => row.memberId),
+    );
+    const verifiedById = new Map(
+      verifiedMembers.map((member) => [member.id, member]),
+    );
+    const unverified = rowsToUpdate.find((row) => {
+      const member = verifiedById.get(row.memberId);
+      return (
+        !member ||
+        !this.memberImportProtectedFieldsMatch(row, member) ||
+        normalizeMemberImportDesignation(member.designation) !==
+          row.targetDesignation
+      );
+    });
+
+    if (verifiedMembers.length !== rowsToUpdate.length || unverified) {
+      throw new AppException(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        IMPORT_ERROR_CODE.IMPORT_VERIFICATION_FAILED,
+        'Member import verification failed.',
+      );
+    }
+
+    await tx.activityLog.create({
+      data: {
+        actorId: viewer.userId,
+        action: 'MEMBERS_IMPORTED',
+        entityType: 'IMPORT',
+        entityId: null,
+        metadata: {
+          mappingProfile: IMPORT_PROFILE_ID.MEMBER_LEGACY_V1,
+          sourceRows: rows.length,
+          updatedRows: rowsToUpdate.length,
+          alreadyPresentRows: concurrentAlreadyPresentRows,
+        },
+      },
+    });
+
+    return {
+      updatedRows: rowsToUpdate.length,
+      concurrentAlreadyPresentRows,
+      membersUpdated: rowsToUpdate.length,
+    };
+  }
+
+  private async findMemberImportUsers(
+    tx: Pick<PrismaTransactionClient, 'user'>,
+    memberIds: string[],
+  ): Promise<MemberImportUser[]> {
+    if (memberIds.length === 0) {
+      return [];
+    }
+
+    return tx.user.findMany({
+      where: {
+        id: {
+          in: memberIds,
+        },
+      },
+      select: MEMBER_IMPORT_USER_SELECT,
+    });
+  }
+
+  private assertMemberImportProtectedFields(
+    row: MemberImportCanonical,
+    current: MemberImportUser,
+  ): void {
+    if (!this.memberImportProtectedFieldsMatch(row, current)) {
+      throw this.memberImportExecutionBlocked(
+        row,
+        'memberId',
+        row.memberId,
+        'Member identity or Team context changed during execution.',
+      );
+    }
+  }
+
+  private memberImportProtectedFieldsMatch(
+    row: MemberImportCanonical,
+    current: MemberImportUser,
+  ): boolean {
+    if (current.role !== UserRole.MEMBER) {
+      return false;
+    }
+
+    if (
+      row.employeeId &&
+      normalizeMemberEmployeeId(current.employeeId) !== row.employeeId
+    ) {
+      return false;
+    }
+
+    if (row.email && normalizeMemberEmail(current.email) !== row.email) {
+      return false;
+    }
+
+    return current.teamMembership?.teamId === row.teamId;
+  }
+
+  private memberImportExecutionBlocked(
+    row: MemberImportCanonical,
+    field: string,
+    value: string,
+    message: string,
+  ): AppException {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      IMPORT_ERROR_CODE.IMPORT_EXECUTION_BLOCKED,
+      'Member import is blocked because the database changed during execution.',
+      {
+        issues: [
+          buildIssue({
+            sheet: 'Members',
+            row: row.sourceRow,
+            field,
+            sourceValue: value,
+            normalizedValue: value,
+            code: IMPORT_ROW_ISSUE_CODE.IMPORT_CONFLICT,
+            message,
+          }),
+        ],
+      },
+    );
+  }
+
   private async assertHistoricalReferencesStillValid(
     tx: Pick<PrismaTransactionClient, 'team' | 'user'>,
     rows: HistoricalTaskCanonical[],
@@ -622,6 +937,24 @@ const HISTORICAL_TASK_EXISTING_SELECT = {
   },
 } satisfies Prisma.TaskSelect;
 
+const MEMBER_IMPORT_USER_SELECT = {
+  id: true,
+  role: true,
+  status: true,
+  employeeId: true,
+  email: true,
+  designation: true,
+  teamMembership: {
+    select: {
+      teamId: true,
+    },
+  },
+} satisfies Prisma.UserSelect;
+
+type MemberImportUser = Prisma.UserGetPayload<{
+  select: typeof MEMBER_IMPORT_USER_SELECT;
+}>;
+
 function summarizeRows(
   rows: { disposition: string; issues: { severity: string }[] }[],
 ) {
@@ -694,6 +1027,43 @@ function isHistoricalTaskCanonical(
     'memberId' in value &&
     'assignedAt' in value
   );
+}
+
+function isMemberImportCanonical(
+  value: unknown,
+): value is MemberImportCanonical {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'memberId' in value &&
+    'targetDesignation' in value
+  );
+}
+
+function isMemberImportBaseline(value: unknown): value is MemberImportBaseline {
+  return typeof value === 'object' && value !== null && 'memberId' in value;
+}
+
+function isExecutableMemberImportRow(row: {
+  canonical?: MemberImportCanonical | null;
+  baseline?: MemberImportBaseline | null;
+}): row is {
+  canonical: MemberImportCanonical;
+  baseline: MemberImportBaseline;
+} {
+  return (
+    isMemberImportCanonical(row.canonical) &&
+    isMemberImportBaseline(row.baseline)
+  );
+}
+
+function normalizeMemberEmployeeId(value: string | null): string | null {
+  const normalized = value?.trim() ?? '';
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeMemberEmail(value: string): string {
+  return value.trim().toLowerCase();
 }
 
 function isUniqueReferenceConflict(error: unknown): boolean {

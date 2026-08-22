@@ -1469,6 +1469,17 @@ Verify
 Platform Database
 ```
 
+V1 Excel migration currently supports:
+
+```text
+Historical terminal Task import
+Existing Member designation enrichment
+```
+
+Member Excel import is deliberately not bulk account administration. It validates `employeeId`, `email`, and current Team context, then updates only `User.designation` for existing `MEMBER` accounts.
+
+Member Excel import must not create accounts, provision Better Auth, change identity fields, change roles or statuses, transfer Teams, create Notifications, or send email.
+
 ---
 
 # 44. Example Excel Mapping
