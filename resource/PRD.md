@@ -1474,11 +1474,16 @@ V1 Excel migration currently supports:
 ```text
 Historical terminal Task import
 Existing Member designation enrichment
+System generated XLSX exports
 ```
 
 Member Excel import is deliberately not bulk account administration. It validates `employeeId`, `email`, and current Team context, then updates only `User.designation` for existing `MEMBER` accounts.
 
 Member Excel import must not create accounts, provision Better Auth, change identity fields, change roles or statuses, transfer Teams, create Notifications, or send email.
+
+V1 XLSX exports are read only generated workbooks for Tasks, Performance, Dashboard workload/trends, and Management Reports. Exports must use Operix authorization, scoped reads, and canonical calculators. Excel displays Operix results; Excel formulas must not become business truth.
+
+CSV, PDF, stored exports, scheduled exports, and email delivery of exports remain deferred.
 
 ---
 

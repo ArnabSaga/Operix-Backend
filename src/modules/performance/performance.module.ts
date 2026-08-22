@@ -8,5 +8,6 @@ import { PerformanceService } from './performance.service.js';
   imports: [PrismaModule, OperixAuthModule],
   controllers: [PerformanceController],
   providers: [PerformanceService],
+  exports: [PerformanceService],
 })
 export class PerformanceModule {}

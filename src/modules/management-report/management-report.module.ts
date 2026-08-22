@@ -8,5 +8,6 @@ import { ManagementReportService } from './management-report.service.js';
   imports: [PrismaModule, OperixAuthModule],
   controllers: [ManagementReportController],
   providers: [ManagementReportService],
+  exports: [ManagementReportService],
 })
 export class ManagementReportModule {}

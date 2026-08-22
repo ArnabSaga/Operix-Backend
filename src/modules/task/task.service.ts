@@ -132,6 +132,24 @@ export class TaskService {
     };
   }
 
+  async getTasksForExport(
+    viewer: OperixViewer,
+    query: ListTaskQueryDto,
+    now: Date,
+    take: number,
+  ): Promise<SafeTaskResponse[]> {
+    const where = buildTaskListWhere(viewer, query, now);
+    const orderBy = getTaskOrderBy(query.sort);
+    const tasks = await this.prisma.task.findMany({
+      where,
+      select: taskSelect,
+      orderBy,
+      take,
+    });
+
+    return tasks.map((task) => mapTaskResponse(task, now));
+  }
+
   async getTask(
     viewer: OperixViewer,
     taskId: string,
