@@ -158,13 +158,13 @@ All routes are prefixed with:
 /api/v1
 ```
 
-### Health and Auth
+### Health, Auth, and Viewer
 
-| Method | Route                              | Purpose                                      |
-| ------ | ---------------------------------- | -------------------------------------------- |
-| `GET`  | `/health`                          | Health check                                 |
-| `GET`  | `/auth/me`                         | Resolve active Operix viewer context         |
-| `POST` | Better Auth routes under `/auth/*` | Sign in, sign out, and auth provider actions |
+| Method | Route                              | Purpose                                             |
+| ------ | ---------------------------------- | --------------------------------------------------- |
+| `GET`  | `/health`                          | Health check                                        |
+| `POST` | Better Auth routes under `/auth/*` | Sign in, sign out, session, and auth provider flows |
+| `GET`  | `/viewer/me`                       | Resolve active Operix viewer context                |
 
 ### User and Team Management
 

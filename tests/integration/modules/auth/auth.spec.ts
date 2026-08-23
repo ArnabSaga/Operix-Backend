@@ -6,6 +6,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { PrismaService } from '../../../../src/database/prisma.service';
 import { UserRole, UserStatus } from '../../../../generated/prisma/enums';
 import { createOperixSeedAuth } from '../../../../src/modules/auth/auth.factory';
+import { APP_ERROR_CODE } from '../../../../src/shared/errors/app-error-code.constant';
 import { getTestDatabaseUrl } from '../../../support/database/test-database-url';
 import { createTestApplication } from '../../../support/server/create-test-application';
 
@@ -92,6 +93,15 @@ describe('Auth integration', () => {
     const agent = request.agent(testApp.getHttpServer());
 
     await agent
+      .get('/api/v1/viewer/me')
+      .expect(401)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          code: APP_ERROR_CODE.AUTH_REQUIRED,
+        });
+      });
+
+    await agent
       .post('/api/v1/auth/sign-in/email')
       .send({
         email: seededEmail,
@@ -110,7 +120,7 @@ describe('Auth integration', () => {
     });
 
     await agent
-      .get('/api/v1/auth/me')
+      .get('/api/v1/viewer/me')
       .expect(200)
       .expect((response) => {
         const body = response.body as unknown;
@@ -134,6 +144,15 @@ describe('Auth integration', () => {
       .expect(200);
 
     expect(signedOutSession.body).toBeNull();
+
+    await agent
+      .get('/api/v1/viewer/me')
+      .expect(401)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          code: APP_ERROR_CODE.AUTH_REQUIRED,
+        });
+      });
   });
 
   it('uses a test bootstrap configured for disabled Nest body parsing', () => {
