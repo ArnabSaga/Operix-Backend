@@ -364,9 +364,10 @@ export class TaskService {
     try {
       await this.mailService.sendTaskAssignedEmail(assignmentResult.mail);
     } catch (error) {
-      this.logger.warn(
-        `TASK_ASSIGNED email failed for task ${taskId}: ${getErrorMessage(error)}`,
-      );
+      this.logger.warn('Task assignment email failed.', {
+        taskId,
+        errorName: getErrorName(error),
+      });
     }
 
     return assignmentResult.task;
@@ -571,6 +572,6 @@ function mapAssignmentConflict(error: unknown): Error {
   return error instanceof Error ? error : new Error('Unexpected error.');
 }
 
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Unknown SMTP error';
+function getErrorName(error: unknown): string {
+  return error instanceof Error ? error.name : 'UnknownError';
 }

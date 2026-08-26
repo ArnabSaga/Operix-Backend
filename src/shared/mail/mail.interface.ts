@@ -9,3 +9,17 @@ export interface TaskAssignedEmailInput {
   dueAt: Date | null;
   assignmentNote: string | null;
 }
+
+export interface WelcomeUserEmailInput {
+  userId: string;
+  recipientName: string;
+  accountEmail: string;
+  role: 'ADMIN' | 'MEMBER';
+}
+
+export interface PasswordResetEmailInput {
+  userId: string;
+  recipientName: string;
+  email: string;
+  resetUrl: string;
+}

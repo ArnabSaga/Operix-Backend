@@ -22,7 +22,9 @@ describe('Auth integration', () => {
     process.env.PORT = '3000';
     process.env.DATABASE_URL = databaseUrl;
     process.env.FRONTEND_URL = 'http://localhost:3001';
+    process.env.FRONTEND_APP_URL = 'http://localhost:3001';
     process.env.SWAGGER_ENABLED = 'false';
+    process.env.SMTP_ENABLED = 'false';
     process.env.BETTER_AUTH_SECRET = 'test-secret-that-is-long-enough-for-auth';
     process.env.BETTER_AUTH_URL = 'http://localhost:3000';
 
@@ -157,6 +159,26 @@ describe('Auth integration', () => {
 
   it('uses a test bootstrap configured for disabled Nest body parsing', () => {
     expect(app).toBeDefined();
+  });
+
+  it('preserves non-enumerating password reset request responses', async () => {
+    const testApp = getApplication(app);
+    const known = await request(testApp.getHttpServer())
+      .post('/api/v1/auth/request-password-reset')
+      .send({
+        email: seededEmail,
+        redirectTo: 'http://localhost:3001/reset-password',
+      })
+      .expect(200);
+    const unknown = await request(testApp.getHttpServer())
+      .post('/api/v1/auth/request-password-reset')
+      .send({
+        email: `unknown-${randomUUID()}@operix.test`,
+        redirectTo: 'http://localhost:3001/reset-password',
+      })
+      .expect(200);
+
+    expect(known.body).toEqual(unknown.body);
   });
 });
 

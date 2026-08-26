@@ -1319,7 +1319,20 @@ V1 email channel:
 ```text
 TASK_ASSIGNED
 → best-effort SMTP email to the assigned Member after the database transaction commits
+
+WELCOME_USER
+→ best-effort SMTP email after account provisioning and required Activity succeed
+
+PASSWORD_RESET
+→ Better Auth native password-reset email with non-enumerating request semantics
 ```
+
+Email rendering uses server-controlled EJS templates, shared layout and CSS,
+inlined styles, and a plain-text alternative. Welcome mail never contains the
+initial password. Password-reset tokens and reset URLs must not be logged.
+
+Database Notification creation does not automatically send SMTP email. External
+email routing remains explicit per approved business event.
 
 Possible future channels:
 

@@ -3,6 +3,7 @@ import { prismaAdapter } from '@better-auth/prisma-adapter';
 import { betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
 import type { PrismaService } from '../../database/prisma.service.js';
+import type { MailService } from '../../shared/mail/mail.service.js';
 import { UserStatus, type UserRole } from '../../../generated/prisma/enums.js';
 import { OPERIX_AUTH_BASE_PATH } from './auth.constant.js';
 import {
@@ -31,7 +32,11 @@ const operixUserAdditionalFields = {
   },
 } as const;
 
-export function createOperixAuth(prisma: PrismaService, config: ConfigService) {
+export function createOperixAuth(
+  prisma: PrismaService,
+  config: ConfigService,
+  mailService: MailService,
+) {
   const options = {
     basePath: OPERIX_AUTH_BASE_PATH,
     baseURL: config.getOrThrow<string>('auth.baseUrl'),
@@ -43,6 +48,19 @@ export function createOperixAuth(prisma: PrismaService, config: ConfigService) {
     emailAndPassword: {
       enabled: true,
       disableSignUp: true,
+      sendResetPassword: async ({ user, url }) => {
+        void mailService
+          .sendPasswordResetEmail({
+            userId: user.id,
+            recipientName: user.name,
+            email: user.email,
+            resetUrl: url,
+          })
+          .catch((error: unknown) => {
+            mailService.logPasswordResetDeliveryFailure(user.id, error);
+          });
+        await Promise.resolve();
+      },
     },
     user: {
       additionalFields: operixUserAdditionalFields,

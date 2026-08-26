@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '../../../../generated/prisma/client.js';
 import { UserRole } from '../../../../generated/prisma/enums.js';
 import { PrismaService } from '../../../database/prisma.service.js';
@@ -6,6 +6,7 @@ import { writeActivity } from '../../../shared/activity/activity-write.js';
 import type { OperixViewer } from '../../../shared/auth/viewer.interface.js';
 import { APP_ERROR_CODE } from '../../../shared/errors/app-error-code.constant.js';
 import { AppException } from '../../../shared/errors/app.exception.js';
+import { MailService } from '../../../shared/mail/mail.service.js';
 import {
   createPaginationMeta,
   normalizePagination,
@@ -30,10 +31,13 @@ import type { UpdateMemberStatusDto } from './dto/update-member-status.dto.js';
 
 @Injectable()
 export class MemberService {
+  private readonly logger = new Logger(MemberService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly provisioner: AccountProvisioningService,
     private readonly teamService: TeamService,
+    private readonly mailService: MailService,
   ) {}
 
   async createMember(
@@ -64,6 +68,20 @@ export class MemberService {
     } catch (error) {
       await this.provisioner.cleanupCreatedUser(member.id);
       throw error;
+    }
+
+    try {
+      await this.mailService.sendWelcomeUserEmail({
+        userId: member.id,
+        recipientName: member.name,
+        accountEmail: member.email,
+        role: 'MEMBER',
+      });
+    } catch (error) {
+      this.logger.warn('Member Welcome email failed.', {
+        userId: member.id,
+        errorName: getErrorName(error),
+      });
     }
 
     return member;
@@ -235,6 +253,10 @@ export class MemberService {
       'Member not found.',
     );
   }
+}
+
+function getErrorName(error: unknown): string {
+  return error instanceof Error ? error.name : 'UnknownError';
 }
 
 function isNoOp(
