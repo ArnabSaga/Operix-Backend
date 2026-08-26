@@ -1,10 +1,24 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
 import type { ApplicationConfiguration } from '../../config/configuration.js';
+import { APP_ERROR_CODE } from '../errors/app-error-code.constant.js';
+import { AppException } from '../errors/app.exception.js';
 import { SMTP_TIMEOUT_MS } from './mail.constant.js';
-import type { TaskAssignedEmailInput } from './mail.interface.js';
-import { renderTaskAssignedEmail } from './task-assigned-email.template.js';
+import {
+  MAIL_TEMPLATE,
+  type MailTemplateName,
+} from './mail-template.constant.js';
+import type {
+  MailRecipient,
+  MailTemplateContextMap,
+} from './mail-template.interface.js';
+import { MailTemplateRenderer } from './mail-template.renderer.js';
+import type {
+  PasswordResetEmailInput,
+  TaskAssignedEmailInput,
+  WelcomeUserEmailInput,
+} from './mail.interface.js';
 
 @Injectable()
 export class MailService {
@@ -19,6 +33,7 @@ export class MailService {
       ApplicationConfiguration,
       true
     >,
+    private readonly renderer: MailTemplateRenderer,
   ) {
     const smtp = this.configService.get('smtp', { infer: true });
     this.frontendAppUrl = this.configService.get('app.frontendAppUrl', {
@@ -46,29 +61,167 @@ export class MailService {
     });
   }
 
+  async sendTemplatedEmail<TName extends MailTemplateName>(
+    to: MailRecipient,
+    subject: string,
+    templateName: TName,
+    context: MailTemplateContextMap[TName],
+  ): Promise<void> {
+    if (!this.transporter) {
+      throw new AppException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        APP_ERROR_CODE.MAIL_DELIVERY_UNAVAILABLE,
+        'Mail delivery is unavailable.',
+      );
+    }
+
+    const rendered = await this.renderer.render(templateName, context);
+
+    try {
+      await this.transporter.sendMail({
+        from: {
+          name: this.fromName,
+          address: this.fromEmail,
+        },
+        to,
+        subject,
+        text: rendered.text,
+        html: rendered.html,
+      });
+    } catch (error) {
+      this.logger.error('Mail delivery failed.', {
+        templateName,
+        errorName: getErrorName(error),
+      });
+      throw new AppException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        APP_ERROR_CODE.MAIL_DELIVERY_FAILED,
+        'Mail delivery failed.',
+      );
+    }
+  }
+
   async sendTaskAssignedEmail(input: TaskAssignedEmailInput): Promise<void> {
     if (!this.transporter) {
       return;
     }
 
-    const rendered = renderTaskAssignedEmail(input, this.frontendAppUrl);
-
-    await this.transporter.sendMail({
-      from: {
-        name: this.fromName,
-        address: this.fromEmail,
+    const taskUrl = new URL(
+      `/tasks/${encodeURIComponent(input.taskId)}`,
+      this.frontendAppUrl,
+    ).toString();
+    const details = [
+      { label: 'Reference', value: input.referenceCode },
+      { label: 'Task', value: input.title },
+      { label: 'Priority', value: input.priority },
+      {
+        label: 'Due',
+        value: input.dueAt?.toISOString() ?? 'No deadline set',
       },
-      to: {
+    ];
+    const note = input.assignmentNote?.trim();
+    if (note) {
+      details.push({ label: 'Assignment note', value: note });
+    }
+
+    await this.sendTemplatedEmail(
+      {
         name: input.memberName,
         address: input.memberEmail,
       },
-      subject: rendered.subject,
-      text: rendered.text,
-      html: rendered.html,
-    });
-
-    this.logger.log(
-      `TASK_ASSIGNED email sent for task ${input.taskId} to member ${input.memberId}`,
+      `New Operix task assigned: ${input.referenceCode}`,
+      MAIL_TEMPLATE.NOTIFICATION_ALERT,
+      {
+        recipientName: input.memberName,
+        heading: 'New task assigned',
+        message: 'A new task has been assigned to you in Operix.',
+        details,
+        actionLabel: 'Open this task in Operix',
+        actionUrl: taskUrl,
+      },
     );
+
+    this.logger.log('Task assignment email sent.', {
+      templateName: MAIL_TEMPLATE.NOTIFICATION_ALERT,
+      eventId: input.taskId,
+    });
   }
+
+  async sendWelcomeUserEmail(input: WelcomeUserEmailInput): Promise<void> {
+    if (!this.transporter) {
+      return;
+    }
+
+    const loginUrl = new URL('/login', this.frontendAppUrl).toString();
+    await this.sendTemplatedEmail(
+      {
+        name: input.recipientName,
+        address: input.accountEmail,
+      },
+      'Welcome to Operix',
+      MAIL_TEMPLATE.WELCOME_USER,
+      {
+        recipientName: input.recipientName,
+        accountEmail: input.accountEmail,
+        roleLabel: input.role === 'ADMIN' ? 'Admin' : 'Member',
+        loginUrl,
+      },
+    );
+
+    this.logger.log('Welcome email sent.', {
+      templateName: MAIL_TEMPLATE.WELCOME_USER,
+      eventId: input.userId,
+    });
+  }
+
+  async sendPasswordResetEmail(input: PasswordResetEmailInput): Promise<void> {
+    await this.sendTemplatedEmail(
+      {
+        name: input.recipientName,
+        address: input.email,
+      },
+      'Reset your Operix password',
+      MAIL_TEMPLATE.PASSWORD_RESET,
+      {
+        recipientName: input.recipientName,
+        resetUrl: input.resetUrl,
+      },
+    );
+
+    this.logger.log('Password reset email sent.', {
+      templateName: MAIL_TEMPLATE.PASSWORD_RESET,
+      eventId: input.userId,
+    });
+  }
+
+  logPasswordResetDeliveryFailure(userId: string, error: unknown): void {
+    this.logger.warn('Password reset email delivery failed.', {
+      templateName: MAIL_TEMPLATE.PASSWORD_RESET,
+      eventId: userId,
+      errorName: getErrorName(error),
+      errorCode: getSafeErrorCode(error),
+    });
+  }
+}
+
+function getErrorName(error: unknown): string {
+  return error instanceof Error ? error.name : 'UnknownError';
+}
+
+function getSafeErrorCode(error: unknown): string {
+  if (!(error instanceof AppException)) {
+    return APP_ERROR_CODE.INTERNAL_SERVER_ERROR;
+  }
+
+  const response = error.getResponse();
+  if (
+    typeof response === 'object' &&
+    response !== null &&
+    'code' in response &&
+    typeof response.code === 'string'
+  ) {
+    return response.code;
+  }
+
+  return APP_ERROR_CODE.INTERNAL_SERVER_ERROR;
 }

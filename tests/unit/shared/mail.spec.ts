@@ -1,12 +1,11 @@
 import { ConfigService } from '@nestjs/config';
 import { TaskPriority } from '../../../generated/prisma/enums';
 import type { ApplicationConfiguration } from '../../../src/config/configuration';
+import { APP_ERROR_CODE } from '../../../src/shared/errors/app-error-code.constant';
 import { SMTP_TIMEOUT_MS } from '../../../src/shared/mail/mail.constant';
+import { MAIL_TEMPLATE } from '../../../src/shared/mail/mail-template.constant';
+import { MailTemplateRenderer } from '../../../src/shared/mail/mail-template.renderer';
 import { MailService } from '../../../src/shared/mail/mail.service';
-import {
-  escapeHtml,
-  renderTaskAssignedEmail,
-} from '../../../src/shared/mail/task-assigned-email.template';
 
 const jestApi = import.meta.jest;
 
@@ -53,42 +52,121 @@ function createConfig(
   return new ConfigService(configuration);
 }
 
-describe('mail templates', () => {
-  it('escapes HTML and includes task assignment content', () => {
-    const rendered = renderTaskAssignedEmail(
-      {
-        memberId: 'member-a',
-        memberName: '<Member A>',
-        memberEmail: 'member@example.com',
-        taskId: 'task-a',
-        referenceCode: 'TASK-20260821-ABC123',
-        title: 'Batch <Review>',
-        priority: TaskPriority.URGENT,
-        dueAt: new Date('2026-08-22T10:00:00.000Z'),
-        assignmentNote: 'Use <safe> notes.',
-      },
-      'https://app.operix.test',
-    );
+function getAppErrorCode(error: unknown): string | undefined {
+  if (
+    typeof error !== 'object' ||
+    error === null ||
+    !('getResponse' in error) ||
+    typeof error.getResponse !== 'function'
+  ) {
+    return undefined;
+  }
 
-    expect(rendered.subject).toContain('TASK-20260821-ABC123');
-    expect(rendered.text).toContain(
-      'Open task: https://app.operix.test/tasks/task-a',
-    );
-    expect(rendered.text).toContain('Assignment note: Use <safe> notes.');
+  const getResponse = error.getResponse as () => unknown;
+  const response = getResponse.call(error) as { code?: string };
+  return response.code;
+}
+
+describe('MailTemplateRenderer', () => {
+  it('renders escaped and inlined notification HTML with a text CTA URL', async () => {
+    const renderer = new MailTemplateRenderer();
+    const rendered = await renderer.render(MAIL_TEMPLATE.NOTIFICATION_ALERT, {
+      recipientName: '<Member A>',
+      heading: 'New task assigned',
+      message: 'Review <safe> content.',
+      details: [
+        { label: 'Task', value: 'Batch <Review>' },
+        { label: 'Priority', value: 'HIGH' },
+      ],
+      actionLabel: 'Open Task',
+      actionUrl: 'https://app.operix.test/tasks/task-a',
+    });
+
     expect(rendered.html).toContain('&lt;Member A&gt;');
     expect(rendered.html).toContain('Batch &lt;Review&gt;');
-    expect(rendered.html).toContain('Use &lt;safe&gt; notes.');
-    expect(escapeHtml('"quoted"')).toBe('&quot;quoted&quot;');
+    expect(rendered.html).toContain('style="');
+    expect(rendered.text).toContain('Open Task');
+    expect(rendered.text).toContain('https://app.operix.test/tasks/task-a');
+    expect(rendered.text).toContain(
+      'This is an automated message from Operix.',
+    );
+  });
+
+  it('renders Welcome and password reset templates', async () => {
+    const renderer = new MailTemplateRenderer();
+
+    const welcome = await renderer.render(MAIL_TEMPLATE.WELCOME_USER, {
+      recipientName: 'Admin A',
+      accountEmail: 'admin@example.com',
+      roleLabel: 'Admin',
+      loginUrl: 'https://app.operix.test/login',
+    });
+    const reset = await renderer.render(MAIL_TEMPLATE.PASSWORD_RESET, {
+      recipientName: 'Admin A',
+      resetUrl: 'https://api.operix.test/api/v1/auth/reset-password/token',
+    });
+
+    expect(welcome.text).toContain('https://app.operix.test/login');
+    expect(welcome.text).not.toContain('password:');
+    expect(reset.text).toContain(
+      'https://api.operix.test/api/v1/auth/reset-password/token',
+    );
+  });
+
+  it.each([
+    ['unknown template', '../../secrets', {}],
+    [
+      'missing context',
+      MAIL_TEMPLATE.WELCOME_USER,
+      {
+        recipientName: '',
+        accountEmail: 'admin@example.com',
+        roleLabel: 'Admin',
+        loginUrl: 'https://app.operix.test/login',
+      },
+    ],
+    [
+      'invalid URL',
+      MAIL_TEMPLATE.PASSWORD_RESET,
+      { recipientName: 'Admin A', resetUrl: 'javascript:alert(1)' },
+    ],
+    [
+      'invalid details',
+      MAIL_TEMPLATE.NOTIFICATION_ALERT,
+      {
+        recipientName: 'Member A',
+        heading: 'Heading',
+        message: 'Message',
+        details: [{ label: '', value: 'value' }],
+        actionLabel: null,
+        actionUrl: null,
+      },
+    ],
+  ])('normalizes %s failures', async (_caseName, templateName, context) => {
+    const renderer = new MailTemplateRenderer();
+
+    try {
+      await renderer.render(
+        templateName as typeof MAIL_TEMPLATE.WELCOME_USER,
+        context as never,
+      );
+      throw new Error('Expected rendering to fail.');
+    } catch (error) {
+      expect(getAppErrorCode(error)).toBe(
+        APP_ERROR_CODE.MAIL_TEMPLATE_RENDER_FAILED,
+      );
+    }
   });
 });
 
 describe('MailService', () => {
-  it('is a safe no-op when SMTP is disabled', async () => {
+  it('keeps optional Task and Welcome mail as no-ops when SMTP is disabled', async () => {
     const service = new MailService(
       createConfig() as unknown as ConfigService<
         ApplicationConfiguration,
         true
       >,
+      new MailTemplateRenderer(),
     );
 
     await expect(
@@ -104,6 +182,38 @@ describe('MailService', () => {
         assignmentNote: null,
       }),
     ).resolves.toBeUndefined();
+    await expect(
+      service.sendWelcomeUserEmail({
+        userId: 'admin-a',
+        recipientName: 'Admin A',
+        accountEmail: 'admin@example.com',
+        role: 'ADMIN',
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('reports unavailable delivery for strict password reset mail', async () => {
+    const service = new MailService(
+      createConfig() as unknown as ConfigService<
+        ApplicationConfiguration,
+        true
+      >,
+      new MailTemplateRenderer(),
+    );
+
+    try {
+      await service.sendPasswordResetEmail({
+        userId: 'admin-a',
+        recipientName: 'Admin A',
+        email: 'admin@example.com',
+        resetUrl: 'https://api.operix.test/reset-password/token',
+      });
+      throw new Error('Expected delivery to fail.');
+    } catch (error) {
+      expect(getAppErrorCode(error)).toBe(
+        APP_ERROR_CODE.MAIL_DELIVERY_UNAVAILABLE,
+      );
+    }
   });
 
   it('exposes bounded timeout constants for SMTP transport creation', () => {
@@ -114,7 +224,7 @@ describe('MailService', () => {
     });
   });
 
-  it('uses an enabled transporter when configured', async () => {
+  it('sends rendered HTML and text through an enabled transporter', async () => {
     const service = new MailService(
       createConfig({
         enabled: true,
@@ -125,13 +235,18 @@ describe('MailService', () => {
         pass: 'pass',
         fromEmail: 'noreply@example.com',
       }) as unknown as ConfigService<ApplicationConfiguration, true>,
+      new MailTemplateRenderer(),
     );
     const serviceInternals = service as unknown as {
       transporter: {
         sendMail: unknown;
       };
     };
-    const sendMail = jestApi.fn().mockResolvedValue({});
+    const sentMessages: unknown[] = [];
+    const sendMail = jestApi.fn((message: unknown) => {
+      sentMessages.push(message);
+      return Promise.resolve({});
+    });
     serviceInternals.transporter.sendMail = sendMail;
 
     await service.sendTaskAssignedEmail({
@@ -146,13 +261,55 @@ describe('MailService', () => {
       assignmentNote: null,
     });
 
-    expect(sendMail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: {
-          name: 'Member A',
-          address: 'member@example.com',
-        },
-      }) as Record<string, unknown>,
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    const message = sentMessages[0] as
+      | {
+          to?: { name?: string; address?: string };
+          subject?: string;
+          html?: unknown;
+          text?: unknown;
+        }
+      | undefined;
+    expect(message?.to).toEqual({
+      name: 'Member A',
+      address: 'member@example.com',
+    });
+    expect(message?.subject).toBe(
+      'New Operix task assigned: TASK-20260821-ABC123',
     );
+    expect(typeof message?.html).toBe('string');
+    expect(typeof message?.text).toBe('string');
+  });
+
+  it('normalizes Nodemailer failures', async () => {
+    const service = new MailService(
+      createConfig({
+        enabled: true,
+        host: 'smtp.example.com',
+        port: 587,
+        user: 'user',
+        pass: 'pass',
+        fromEmail: 'noreply@example.com',
+      }) as unknown as ConfigService<ApplicationConfiguration, true>,
+      new MailTemplateRenderer(),
+    );
+    const serviceInternals = service as unknown as {
+      transporter: { sendMail: unknown };
+    };
+    serviceInternals.transporter.sendMail = jestApi
+      .fn()
+      .mockRejectedValue(new Error('recipient@example.com refused'));
+
+    try {
+      await service.sendPasswordResetEmail({
+        userId: 'admin-a',
+        recipientName: 'Admin A',
+        email: 'admin@example.com',
+        resetUrl: 'https://api.operix.test/reset-password/token',
+      });
+      throw new Error('Expected delivery to fail.');
+    } catch (error) {
+      expect(getAppErrorCode(error)).toBe(APP_ERROR_CODE.MAIL_DELIVERY_FAILED);
+    }
   });
 });

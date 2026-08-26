@@ -1,0 +1,15 @@
+<h1>Welcome to Operix</h1>
+<p>Hello <%= recipientName %>,</p>
+<p>Your Operix account has been created.</p>
+<table class="details" role="presentation" cellpadding="0" cellspacing="0">
+  <tr>
+    <td class="details-label">Email</td>
+    <td><%= accountEmail %></td>
+  </tr>
+  <tr>
+    <td class="details-label">Role</td>
+    <td><%= roleLabel %></td>
+  </tr>
+</table>
+<p>Use the credentials provided by your administrator to sign in.</p>
+<p><a class="email-button" href="<%= loginUrl %>">Sign in to Operix</a></p>

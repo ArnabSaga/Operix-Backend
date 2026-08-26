@@ -8,6 +8,7 @@ import {
   USER_MANAGEMENT_ERROR_CODE,
 } from '../../../src/modules/user-management/user-management.constant';
 import type { OperixViewer } from '../../../src/shared/auth/viewer.interface';
+import type { MailService } from '../../../src/shared/mail/mail.service';
 
 const jestApi = import.meta.jest;
 
@@ -60,6 +61,7 @@ describe('AdminService', () => {
     const service = new AdminService(
       prisma as unknown as PrismaService,
       {} as AccountProvisioningService,
+      {} as MailService,
     );
 
     await expect(
@@ -106,6 +108,7 @@ describe('AdminService', () => {
     const service = new AdminService(
       prisma as unknown as PrismaService,
       {} as AccountProvisioningService,
+      {} as MailService,
     );
 
     try {
@@ -147,9 +150,13 @@ describe('AdminService', () => {
     const provisioner = {
       provisionAccount: jestApi.fn().mockResolvedValue(admin),
     };
+    const mailService = {
+      sendWelcomeUserEmail: jestApi.fn().mockResolvedValue(undefined),
+    };
     const service = new AdminService(
       prisma as unknown as PrismaService,
       provisioner as unknown as AccountProvisioningService,
+      mailService as unknown as MailService,
     );
 
     await service.createAdmin(viewer, {
@@ -172,5 +179,104 @@ describe('AdminService', () => {
         userAgent: null,
       },
     });
+    expect(mailService.sendWelcomeUserEmail).toHaveBeenCalledWith({
+      userId: admin.id,
+      recipientName: admin.name,
+      accountEmail: admin.email,
+      role: 'ADMIN',
+    });
+  });
+
+  it('does not send Welcome and cleans up when required Activity fails', async () => {
+    const admin = {
+      id: 'admin-a',
+      name: 'Admin A',
+      email: 'admin-a@example.com',
+      employeeId: null,
+      designation: null,
+      role: UserRole.ADMIN,
+      status: UserStatus.ACTIVE,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const activityError = new Error('Activity failed.');
+    const prisma = {
+      $transaction: jestApi.fn().mockRejectedValue(activityError),
+    };
+    const provisioner = {
+      provisionAccount: jestApi.fn().mockResolvedValue(admin),
+      cleanupCreatedUser: jestApi.fn().mockResolvedValue(undefined),
+    };
+    const mailService = {
+      sendWelcomeUserEmail: jestApi.fn(),
+    };
+    const service = new AdminService(
+      prisma as unknown as PrismaService,
+      provisioner as unknown as AccountProvisioningService,
+      mailService as unknown as MailService,
+    );
+
+    await expect(
+      service.createAdmin(viewer, {
+        name: admin.name,
+        email: admin.email,
+        initialPassword: 'super-secret-1',
+      }),
+    ).rejects.toBe(activityError);
+
+    expect(provisioner.cleanupCreatedUser).toHaveBeenCalledWith(admin.id);
+    expect(mailService.sendWelcomeUserEmail).not.toHaveBeenCalled();
+  });
+
+  it('keeps the created Admin when Welcome delivery fails', async () => {
+    const admin = {
+      id: 'admin-a',
+      name: 'Admin A',
+      email: 'admin-a@example.com',
+      employeeId: null,
+      designation: null,
+      role: UserRole.ADMIN,
+      status: UserStatus.ACTIVE,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const prisma = {
+      $transaction: jestApi.fn(
+        (
+          callback: (tx: {
+            activityLog: { create: () => Promise<unknown> };
+          }) => Promise<unknown>,
+        ) =>
+          callback({
+            activityLog: {
+              create: jestApi.fn().mockResolvedValue({ id: 'activity-a' }),
+            },
+          }),
+      ),
+    };
+    const provisioner = {
+      provisionAccount: jestApi.fn().mockResolvedValue(admin),
+      cleanupCreatedUser: jestApi.fn(),
+    };
+    const mailService = {
+      sendWelcomeUserEmail: jestApi
+        .fn()
+        .mockRejectedValue(new Error('Delivery failed.')),
+    };
+    const service = new AdminService(
+      prisma as unknown as PrismaService,
+      provisioner as unknown as AccountProvisioningService,
+      mailService as unknown as MailService,
+    );
+
+    await expect(
+      service.createAdmin(viewer, {
+        name: admin.name,
+        email: admin.email,
+        initialPassword: 'super-secret-1',
+      }),
+    ).resolves.toBe(admin);
+
+    expect(provisioner.cleanupCreatedUser).not.toHaveBeenCalled();
   });
 });

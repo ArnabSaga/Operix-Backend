@@ -1,10 +1,11 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '../../../../generated/prisma/client.js';
 import { UserRole, UserStatus } from '../../../../generated/prisma/enums.js';
 import { PrismaService } from '../../../database/prisma.service.js';
 import { writeActivity } from '../../../shared/activity/activity-write.js';
 import { AppException } from '../../../shared/errors/app.exception.js';
 import { runSerializableTransaction } from '../../../shared/database/serializable-transaction.js';
+import { MailService } from '../../../shared/mail/mail.service.js';
 import {
   createPaginationMeta,
   normalizePagination,
@@ -27,9 +28,12 @@ import type { UpdateAdminStatusDto } from './dto/update-admin-status.dto.js';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly provisioner: AccountProvisioningService,
+    private readonly mailService: MailService,
   ) {}
 
   async createAdmin(
@@ -60,6 +64,20 @@ export class AdminService {
     } catch (error) {
       await this.provisioner.cleanupCreatedUser(admin.id);
       throw error;
+    }
+
+    try {
+      await this.mailService.sendWelcomeUserEmail({
+        userId: admin.id,
+        recipientName: admin.name,
+        accountEmail: admin.email,
+        role: 'ADMIN',
+      });
+    } catch (error) {
+      this.logger.warn('Admin Welcome email failed.', {
+        userId: admin.id,
+        errorName: getErrorName(error),
+      });
     }
 
     return admin;
@@ -226,6 +244,10 @@ export class AdminService {
       'Admin not found.',
     );
   }
+}
+
+function getErrorName(error: unknown): string {
+  return error instanceof Error ? error.name : 'UnknownError';
 }
 
 function isNoOp(

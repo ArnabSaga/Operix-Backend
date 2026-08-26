@@ -73,21 +73,21 @@ It is intentionally built as a serious backend product, not a demo dashboard. Th
 
 ## Tech Stack
 
-| Layer          | Technology                          | Role in the system                                                                |
-| -------------- | ----------------------------------- | --------------------------------------------------------------------------------- |
-| Runtime        | Node.js 22.12 plus ESM              | Modern JavaScript runtime for the NestJS API                                      |
-| Framework      | NestJS 11                           | Modular backend architecture, dependency injection, guards, controllers, services |
-| Language       | TypeScript strict mode              | Strong compile time safety across DTOs, services, and Prisma types                |
-| Database       | PostgreSQL                          | Relational source of truth, constraints, indexes, transactional integrity         |
-| ORM            | Prisma 7                            | Multi file schema, generated typed client, migrations                             |
-| Authentication | Better Auth                         | Session based authentication with Operix viewer context                           |
-| Authorization  | Custom guards and scope policies    | Role isolation and Team scoped access control                                     |
-| Files          | Cloudinary plus storage abstraction | Authenticated Task and Submission attachments                                     |
-| Excel          | SheetJS CE 0.20.3                   | XLSX import preview, error reporting, controlled imports, dynamic exports         |
-| Email          | Nodemailer                          | Best effort Task assignment SMTP email                                            |
-| Security       | Helmet, CORS, Nest throttler        | HTTP hardening, trusted origins, rate limiting                                    |
-| Testing        | Jest, Supertest                     | Unit and integration test runners                                                 |
-| Tooling        | ESLint, Prettier, Prisma CLI        | Quality gates and schema verification                                             |
+| Layer          | Technology                           | Role in the system                                                                |
+| -------------- | ------------------------------------ | --------------------------------------------------------------------------------- |
+| Runtime        | Node.js 22.12 plus ESM               | Modern JavaScript runtime for the NestJS API                                      |
+| Framework      | NestJS 11                            | Modular backend architecture, dependency injection, guards, controllers, services |
+| Language       | TypeScript strict mode               | Strong compile time safety across DTOs, services, and Prisma types                |
+| Database       | PostgreSQL                           | Relational source of truth, constraints, indexes, transactional integrity         |
+| ORM            | Prisma 7                             | Multi file schema, generated typed client, migrations                             |
+| Authentication | Better Auth                          | Session based authentication with Operix viewer context                           |
+| Authorization  | Custom guards and scope policies     | Role isolation and Team scoped access control                                     |
+| Files          | Cloudinary plus storage abstraction  | Authenticated Task and Submission attachments                                     |
+| Excel          | SheetJS CE 0.20.3                    | XLSX import preview, error reporting, controlled imports, dynamic exports         |
+| Email          | Nodemailer, EJS, Juice, html-to-text | Templated Task, Welcome, and Better Auth password-reset SMTP email                |
+| Security       | Helmet, CORS, Nest throttler         | HTTP hardening, trusted origins, rate limiting                                    |
+| Testing        | Jest, Supertest                      | Unit and integration test runners                                                 |
+| Tooling        | ESLint, Prettier, Prisma CLI         | Quality gates and schema verification                                             |
 
 ---
 
@@ -165,6 +165,13 @@ All routes are prefixed with:
 | `GET`  | `/health`                          | Health check                                        |
 | `POST` | Better Auth routes under `/auth/*` | Sign in, sign out, session, and auth provider flows |
 | `GET`  | `/viewer/me`                       | Resolve active Operix viewer context                |
+
+Native Better Auth password reset routes include:
+
+| Method | Route                          | Purpose                                  |
+| ------ | ------------------------------ | ---------------------------------------- |
+| `POST` | `/auth/request-password-reset` | Request a non-enumerating password reset |
+| `POST` | `/auth/reset-password`         | Submit a Better Auth-issued reset token  |
 
 ### User and Team Management
 
@@ -417,7 +424,7 @@ when `SWAGGER_ENABLED=true`.
 | `FRONTEND_URL`              | Trusted CORS origin                    | `http://localhost:3000`                             |
 | `FRONTEND_APP_URL`          | Browser deep link and email URL        | `http://localhost:3000`                             |
 | `SWAGGER_ENABLED`           | Enables Swagger docs                   | `true`                                              |
-| `SMTP_ENABLED`              | Enables best effort SMTP delivery      | `false`                                             |
+| `SMTP_ENABLED`              | Enables explicit SMTP delivery events  | `false`                                             |
 | `SMTP_HOST`                 | SMTP host when email is enabled        | `smtp.example.com`                                  |
 | `SMTP_PORT`                 | SMTP port                              | `587`                                               |
 | `SMTP_SECURE`               | SMTP TLS mode                          | `false`                                             |
@@ -543,6 +550,7 @@ Never run destructive integration tests against a development or production data
 - Submission and review workflow
 - Task and Submission attachments
 - Activity and Notifications
+- EJS email templates for Task assignment, account Welcome, and password reset
 - Performance and Dashboard analytics
 - Admin submitted Management Reports
 - Excel import previews, error reports, and controlled imports
