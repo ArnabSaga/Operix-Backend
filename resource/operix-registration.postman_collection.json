@@ -1,0 +1,90 @@
+{
+  "info": {
+    "name": "Operix Registration API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api/v1"
+    },
+    {
+      "key": "registrationRequestId",
+      "value": "00000000-0000-4000-8000-000000000000"
+    }
+  ],
+  "item": [
+    {
+      "name": "Registration Requests",
+      "item": [
+        {
+          "name": "Submit Registration Request",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Applicant Name\",\n  \"email\": \"applicant@example.com\"\n}"
+            },
+            "url": "{{baseUrl}}/registration-requests"
+          }
+        },
+        {
+          "name": "List Registration Requests",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/registration-requests?page=1&limit=20"
+          }
+        },
+        {
+          "name": "Get Registration Request",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/registration-requests/{{registrationRequestId}}"
+          }
+        },
+        {
+          "name": "Approve Registration Request",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"MEMBER\",\n  \"employeeId\": \"EMP-1001\",\n  \"designation\": \"Officer\"\n}"
+            },
+            "url": "{{baseUrl}}/registration-requests/{{registrationRequestId}}/approve"
+          }
+        },
+        {
+          "name": "Reject Registration Request",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Private review reason\"\n}" },
+            "url": "{{baseUrl}}/registration-requests/{{registrationRequestId}}/reject"
+          }
+        },
+        {
+          "name": "Resend Setup Link",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/registration-requests/{{registrationRequestId}}/resend-setup"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Internal Cron",
+      "item": [
+        {
+          "name": "Registration Cleanup",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cronSecret}}" }],
+            "url": "{{baseUrl}}/internal/cron/registration-cleanup"
+          }
+        }
+      ]
+    }
+  ]
+}

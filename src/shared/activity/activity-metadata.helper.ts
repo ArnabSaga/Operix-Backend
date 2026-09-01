@@ -64,6 +64,12 @@ const activityMetadataAllowlist: Record<string, ReadonlySet<string>> = {
     'importedRows',
     'alreadyPresentRows',
   ]),
+  REGISTRATION_REQUESTED: new Set([]),
+  REGISTRATION_APPROVED: new Set([]),
+  REGISTRATION_REJECTED: new Set([]),
+  REGISTRATION_SETUP_RESENT: new Set([]),
+  REGISTRATION_PASSWORD_CONFIGURED: new Set([]),
+  REGISTRATION_PURGED: new Set(['terminalStatus']),
 };
 
 function isPlainObject(value: SanitizableJson): value is SanitizableJsonObject {

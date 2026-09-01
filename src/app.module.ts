@@ -17,6 +17,7 @@ import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { ManagementReportModule } from './modules/management-report/management-report.module.js';
 import { NotificationModule } from './modules/notification/notification.module.js';
 import { PerformanceModule } from './modules/performance/performance.module.js';
+import { RegistrationModule } from './modules/registration/registration.module.js';
 import { SubmissionModule } from './modules/submission/submission.module.js';
 import { TaskModule } from './modules/task/task.module.js';
 import { TeamModule } from './modules/team/team.module.js';
@@ -55,6 +56,7 @@ const ENV_FILE_PATHS = [
     NotificationModule,
     ActivityModule,
     PerformanceModule,
+    RegistrationModule,
     ManagementReportModule,
     DashboardModule,
     ImportModule,

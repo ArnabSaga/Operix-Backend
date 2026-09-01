@@ -10,6 +10,13 @@ enum UserStatus {
   SUSPENDED
 }
 
+enum RegistrationRequestStatus {
+  PENDING
+  APPROVING
+  APPROVED
+  REJECTED
+}
+
 enum TaskStatus {
   PENDING
   ASSIGNED

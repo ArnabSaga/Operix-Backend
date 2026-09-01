@@ -148,6 +148,20 @@ export function validateEnvironment(
   );
 
   const betterAuthUrl = requiredString(environment, 'BETTER_AUTH_URL');
+  const registrationRateLimitSecret = requiredString(
+    environment,
+    'REGISTRATION_RATE_LIMIT_SECRET',
+  );
+  const cronSecret = requiredString(environment, 'CRON_SECRET');
+
+  if (registrationRateLimitSecret.length < 32) {
+    throw new Error(
+      'REGISTRATION_RATE_LIMIT_SECRET must be at least 32 characters long',
+    );
+  }
+  if (cronSecret.length < 32) {
+    throw new Error('CRON_SECRET must be at least 32 characters long');
+  }
 
   validateUrl(databaseUrl, 'DATABASE_URL');
 
@@ -257,6 +271,8 @@ export function validateEnvironment(
     BETTER_AUTH_SECRET: betterAuthSecret,
 
     BETTER_AUTH_URL: betterAuthUrl,
+    REGISTRATION_RATE_LIMIT_SECRET: registrationRateLimitSecret,
+    CRON_SECRET: cronSecret,
 
     SWAGGER_ENABLED: swaggerEnabled,
 

@@ -591,6 +591,21 @@ This is a coordinated breaking contract: clients must send public UUIDs and must
 
 <div align="center">
 
+## Self Registration and Account Setup
+
+Public applicants submit only their name and email through `POST /api/v1/registration-requests`. The API always returns the same accepted response for valid requests, while a PostgreSQL backed HMAC rate limit protects the public route. Applicants do not become Better Auth users until an active Super Admin approves them as an `ADMIN` or `MEMBER`.
+
+Approval creates an inactive account and sends a native Better Auth password setup link. A successful setup activates only registration linked users whose setup is still required. Public Better Auth signup remains disabled. Registration receipt, setup, and rejection emails are explicit best effort SMTP events.
+
+Required deployment secrets:
+
+```env
+REGISTRATION_RATE_LIMIT_SECRET=
+CRON_SECRET=
+```
+
+The daily cleanup endpoint is `GET /api/v1/internal/cron/registration-cleanup` with `Authorization: Bearer <CRON_SECRET>`.
+
 **Operix**
 _A workflow first backend for operational clarity, auditability, and data driven decisions._
 

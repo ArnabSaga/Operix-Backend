@@ -1,0 +1,18 @@
+export const registrationRequestSelect = {
+  id: true,
+  publicId: true,
+  name: true,
+  normalizedEmail: true,
+  status: true,
+  selectedRole: true,
+  selectedEmployeeId: true,
+  selectedDesignation: true,
+  rejectionReason: true,
+  reviewedAt: true,
+  approvedAt: true,
+  passwordConfiguredAt: true,
+  createdAt: true,
+  updatedAt: true,
+  selectedTeam: { select: { publicId: true, name: true } },
+  reviewer: { select: { publicId: true, name: true } },
+} as const;

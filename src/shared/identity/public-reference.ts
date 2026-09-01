@@ -98,6 +98,16 @@ export async function resolvePublicReference(
           })
         )?.publicId ?? null
       );
+    case 'REGISTRATION_REQUEST':
+      if (!canResolve('registrationRequest')) return null;
+      return (
+        (
+          await tx.registrationRequest.findUnique({
+            where: { id: databaseId },
+            select: { publicId: true },
+          })
+        )?.publicId ?? null
+      );
     default:
       return null;
   }

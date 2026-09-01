@@ -36,6 +36,11 @@ export interface ApplicationConfiguration {
     cloudinaryApiSecret: string;
     cloudinaryFolder: string;
   };
+
+  registration: {
+    rateLimitSecret: string;
+    cronSecret: string;
+  };
 }
 
 export default function configuration(): ApplicationConfiguration {
@@ -92,6 +97,11 @@ export default function configuration(): ApplicationConfiguration {
       cloudinaryApiKey: process.env.CLOUDINARY_API_KEY ?? '',
       cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET ?? '',
       cloudinaryFolder: process.env.CLOUDINARY_FOLDER ?? 'operix',
+    },
+
+    registration: {
+      rateLimitSecret: process.env.REGISTRATION_RATE_LIMIT_SECRET ?? '',
+      cronSecret: process.env.CRON_SECRET ?? '',
     },
   };
 }
