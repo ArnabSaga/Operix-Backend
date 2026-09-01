@@ -12,7 +12,8 @@ import type { OperixViewerScope } from '../../shared/auth/scope/viewer-scope.int
 import { MailService } from '../../shared/mail/mail.service.js';
 import { createOperixAuth } from './auth.factory.js';
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function userWhereById(id: string) {
   return UUID_REGEX.test(id) ? { OR: [{ id }, { publicId: id }] } : { id };
 }
@@ -43,8 +44,26 @@ export class OperixAuthService {
 
   async getViewer(userId: string): Promise<OperixViewer> {
     const user = this.prisma.user.findFirst
-      ? await this.prisma.user.findFirst({ where: userWhereById(userId), select: { id: true, role: true, status: true, administeredTeams: { select: { id: true } }, teamMembership: { select: { teamId: true } } } })
-      : await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, status: true, administeredTeams: { select: { id: true } }, teamMembership: { select: { teamId: true } } } });
+      ? await this.prisma.user.findFirst({
+          where: userWhereById(userId),
+          select: {
+            id: true,
+            role: true,
+            status: true,
+            administeredTeams: { select: { id: true } },
+            teamMembership: { select: { teamId: true } },
+          },
+        })
+      : await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            role: true,
+            status: true,
+            administeredTeams: { select: { id: true } },
+            teamMembership: { select: { teamId: true } },
+          },
+        });
 
     if (!user) {
       throw new AppException(
@@ -68,8 +87,30 @@ export class OperixAuthService {
 
   async getViewerResponse(userId: string): Promise<OperixViewerResponse> {
     const user = this.prisma.user.findFirst
-      ? await this.prisma.user.findFirst({ where: userWhereById(userId), select: { publicId: true, role: true, status: true, administeredTeams: { select: { publicId: true } }, teamMembership: { select: { team: { select: { publicId: true } } } } } })
-      : await this.prisma.user.findUnique({ where: { id: userId }, select: { publicId: true, role: true, status: true, administeredTeams: { select: { publicId: true } }, teamMembership: { select: { team: { select: { publicId: true } } } } } });
+      ? await this.prisma.user.findFirst({
+          where: userWhereById(userId),
+          select: {
+            publicId: true,
+            role: true,
+            status: true,
+            administeredTeams: { select: { publicId: true } },
+            teamMembership: {
+              select: { team: { select: { publicId: true } } },
+            },
+          },
+        })
+      : await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            publicId: true,
+            role: true,
+            status: true,
+            administeredTeams: { select: { publicId: true } },
+            teamMembership: {
+              select: { team: { select: { publicId: true } } },
+            },
+          },
+        });
 
     if (!user) {
       throw new AppException(

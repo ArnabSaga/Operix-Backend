@@ -168,7 +168,14 @@ export class RegistrationService {
     const q = query.q?.trim();
     const where: Prisma.RegistrationRequestWhereInput = {
       ...(query.status === RegistrationRequestStatus.PENDING
-        ? { status: { in: [RegistrationRequestStatus.PENDING, RegistrationRequestStatus.APPROVING] } }
+        ? {
+            status: {
+              in: [
+                RegistrationRequestStatus.PENDING,
+                RegistrationRequestStatus.APPROVING,
+              ],
+            },
+          }
         : query.status
           ? { status: query.status }
           : {}),
@@ -318,7 +325,7 @@ export class RegistrationService {
               'Registration approval changed while processing.',
             );
           const internalUser = await tx.user.findFirst({
-            where: { publicId: user.id, registrationRequestId: request.id },
+            where: { id: user.id, registrationRequestId: request.id },
             select: { id: true },
           });
           if (!internalUser)
@@ -361,7 +368,7 @@ export class RegistrationService {
     } catch (error) {
       try {
         const internal = await this.prisma.user.findUnique({
-          where: { publicId: user.id },
+          where: { id: user.id },
           select: { id: true },
         });
         if (internal) await this.provisioner.cleanupCreatedUser(internal.id);
