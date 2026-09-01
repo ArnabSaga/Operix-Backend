@@ -50,6 +50,14 @@ describe('createOperixAuth', () => {
     );
 
     expect(auth.options.basePath).toBe('/api/v1/auth');
+    expect(auth.options.advanced).toMatchObject({
+      useSecureCookies: true,
+      defaultCookieAttributes: {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+      },
+    });
     expect(auth.options.emailAndPassword).toMatchObject({
       enabled: true,
       disableSignUp: true,

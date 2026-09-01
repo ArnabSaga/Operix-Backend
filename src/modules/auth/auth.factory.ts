@@ -48,6 +48,14 @@ export function createOperixAuth(
     baseURL: config.getOrThrow<string>('auth.baseUrl'),
     secret: config.getOrThrow<string>('auth.secret'),
     trustedOrigins: config.getOrThrow<string[]>('app.frontendOrigins'),
+    advanced: {
+      useSecureCookies: true,
+      defaultCookieAttributes: {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+      },
+    },
     disabledPaths: [
       '/list-sessions',
       '/revoke-session',
