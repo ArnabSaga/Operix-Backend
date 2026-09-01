@@ -57,8 +57,12 @@ export class TaskService {
     this.assertRole(viewer, UserRole.ADMIN);
 
     return runSerializableTransaction(this.prisma, async (tx) => {
-      await this.assertAdminOwnsTeam(tx, viewer.userId, dto.teamId);
-      await this.assertCategoryExists(tx, dto.categoryId);
+      const teamId = await this.resolveAdminTeamId(
+        tx,
+        viewer.userId,
+        dto.teamId,
+      );
+      const categoryId = await this.resolveCategoryId(tx, dto.categoryId);
 
       const task = await tx.task.create({
         data: {
@@ -69,8 +73,8 @@ export class TaskService {
           priority: dto.priority ?? TaskPriority.MEDIUM,
           status: TaskStatus.PENDING,
           dueAt: dto.dueAt ?? null,
-          teamId: dto.teamId,
-          categoryId: dto.categoryId ?? null,
+          teamId,
+          categoryId,
           createdById: viewer.userId,
         },
         select: taskSelect,
@@ -156,7 +160,7 @@ export class TaskService {
   ): Promise<SafeTaskResponse> {
     const task = await this.prisma.task.findFirst({
       where: {
-        id: taskId,
+        publicId: taskId,
         ...buildTaskScopeWhere(viewer),
       },
       select: taskSelect,
@@ -176,11 +180,12 @@ export class TaskService {
   ): Promise<PaginatedTaskStatusHistoryResponse> {
     const task = await this.prisma.task.findFirst({
       where: {
-        id: taskId,
+        publicId: taskId,
         AND: [buildTaskScopeWhere(viewer)],
       },
       select: {
         id: true,
+        publicId: true,
       },
     });
 
@@ -189,19 +194,15 @@ export class TaskService {
     }
 
     const normalized = normalizePagination(pagination);
-    const where = {
-      taskId,
-    };
+    const where = { taskId: task.id };
 
     const [data, total] = await Promise.all([
       this.prisma.taskStatusHistory.findMany({
         where,
         select: {
-          id: true,
-          taskId: true,
           fromStatus: true,
           toStatus: true,
-          changedById: true,
+          changedBy: { select: { publicId: true, name: true } },
           notes: true,
           changedAt: true,
         },
@@ -215,7 +216,14 @@ export class TaskService {
     ]);
 
     return {
-      data,
+      data: data.map((entry) => ({
+        taskId: task.publicId,
+        fromStatus: entry.fromStatus,
+        toStatus: entry.toStatus,
+        changedBy: { id: entry.changedBy.publicId, name: entry.changedBy.name },
+        notes: entry.notes,
+        changedAt: entry.changedAt,
+      })),
       meta: createPaginationMeta({
         page: normalized.page,
         limit: normalized.limit,
@@ -256,7 +264,7 @@ export class TaskService {
 
           const currentAssignment = await this.findCurrentAssignment(
             tx,
-            taskId,
+            task.id,
           );
 
           if (currentAssignment) {
@@ -269,7 +277,7 @@ export class TaskService {
 
           const member = await tx.user.findFirst({
             where: {
-              id: dto.memberId,
+              publicId: dto.memberId,
               role: UserRole.MEMBER,
               status: UserStatus.ACTIVE,
               teamMembership: {
@@ -293,8 +301,8 @@ export class TaskService {
 
           await tx.taskAssignment.create({
             data: {
-              taskId,
-              memberId: dto.memberId,
+              taskId: task.id,
+              memberId: member.id,
               assignedById: viewer.userId,
               note: dto.note ?? null,
             },
@@ -302,7 +310,7 @@ export class TaskService {
 
           const updated = await tx.task.update({
             where: {
-              id: taskId,
+              id: task.id,
             },
             data: {
               status: TaskStatus.ASSIGNED,
@@ -312,7 +320,7 @@ export class TaskService {
 
           await tx.taskStatusHistory.create({
             data: {
-              taskId,
+              taskId: task.id,
               fromStatus: TaskStatus.PENDING,
               toStatus: TaskStatus.ASSIGNED,
               changedById: viewer.userId,
@@ -324,21 +332,21 @@ export class TaskService {
             actorId: viewer.userId,
             action: TASK_ACTIVITY.TASK_ASSIGNED,
             entityType: 'TASK',
-            entityId: taskId,
+            entityId: task.id,
             metadata: {
-              taskId,
-              memberId: dto.memberId,
+              taskId: task.id,
+              memberId: member.id,
             },
           });
 
           await createNotification(tx, {
-            receiverId: dto.memberId,
+            receiverId: member.id,
             actorId: viewer.userId,
             type: TASK_NOTIFICATION.TASK_ASSIGNED,
             title: 'New task assigned',
             body: 'A new task has been assigned to you.',
             targetType: 'TASK',
-            targetId: taskId,
+            targetId: task.id,
           });
 
           return {
@@ -347,7 +355,7 @@ export class TaskService {
               memberId: member.id,
               memberName: member.name,
               memberEmail: member.email,
-              taskId: updated.id,
+              taskId: updated.publicId,
               referenceCode: updated.referenceCode,
               title: updated.title,
               priority: updated.priority,
@@ -382,7 +390,7 @@ export class TaskService {
     return runSerializableTransaction(this.prisma, async (tx) => {
       const task = await tx.task.findFirst({
         where: {
-          id: taskId,
+          publicId: taskId,
           assignments: {
             some: {
               memberId: viewer.userId,
@@ -410,7 +418,7 @@ export class TaskService {
 
       const updated = await tx.task.update({
         where: {
-          id: taskId,
+          id: task.id,
         },
         data: {
           status: TaskStatus.IN_PROGRESS,
@@ -421,7 +429,7 @@ export class TaskService {
 
       await tx.taskStatusHistory.create({
         data: {
-          taskId,
+          taskId: task.id,
           fromStatus: TaskStatus.ASSIGNED,
           toStatus: TaskStatus.IN_PROGRESS,
           changedById: viewer.userId,
@@ -433,7 +441,7 @@ export class TaskService {
         actorId: viewer.userId,
         action: TASK_ACTIVITY.TASK_STARTED,
         entityType: 'TASK',
-        entityId: taskId,
+        entityId: task.id,
         metadata: {
           taskId,
         },
@@ -450,7 +458,7 @@ export class TaskService {
   ) {
     const task = await tx.task.findFirst({
       where: {
-        id: taskId,
+        publicId: taskId,
         team: {
           adminId,
         },
@@ -469,14 +477,14 @@ export class TaskService {
     return task;
   }
 
-  private async assertAdminOwnsTeam(
+  private async resolveAdminTeamId(
     tx: PrismaTransactionClient,
     adminId: string,
     teamId: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const team = await tx.team.findFirst({
       where: {
-        id: teamId,
+        publicId: teamId,
         adminId,
       },
       select: {
@@ -487,19 +495,20 @@ export class TaskService {
     if (!team) {
       throw this.taskNotFound();
     }
+    return team.id;
   }
 
-  private async assertCategoryExists(
+  private async resolveCategoryId(
     tx: PrismaTransactionClient,
     categoryId?: string,
-  ): Promise<void> {
+  ): Promise<string | null> {
     if (!categoryId) {
-      return;
+      return null;
     }
 
     const category = await tx.taskCategory.findUnique({
       where: {
-        id: categoryId,
+        publicId: categoryId,
       },
       select: {
         id: true,
@@ -513,6 +522,7 @@ export class TaskService {
         'Task category does not exist.',
       );
     }
+    return category.id;
   }
 
   private async findCurrentAssignment(

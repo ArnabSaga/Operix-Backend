@@ -1,5 +1,6 @@
 model TaskCategory {
   id          String   @id @default(cuid())
+  publicId    String   @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
   name        String   @unique
   description String?
   isActive    Boolean  @default(true)
@@ -13,6 +14,7 @@ model TaskCategory {
 
 model Task {
   id            String       @id @default(cuid())
+  publicId      String       @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
   referenceCode String       @unique
   title         String
   description   String?

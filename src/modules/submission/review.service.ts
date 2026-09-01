@@ -35,7 +35,7 @@ export class ReviewService {
     return runSerializableTransaction(this.prisma, async (tx) => {
       const submission = await tx.taskSubmission.findFirst({
         where: {
-          id: submissionId,
+          publicId: submissionId,
           task: {
             team: {
               adminId: viewer.userId,
@@ -204,7 +204,14 @@ export class ReviewService {
         targetId: submission.id,
       });
 
-      return review;
+      return {
+        submissionId: review.submission.publicId,
+        reviewer: { id: review.reviewer.publicId, name: review.reviewer.name },
+        action: review.action,
+        feedback: review.feedback,
+        reviewedAt: review.reviewedAt,
+        createdAt: review.createdAt,
+      };
     });
   }
 

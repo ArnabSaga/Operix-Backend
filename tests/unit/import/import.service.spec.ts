@@ -200,7 +200,9 @@ describe('ImportService', () => {
         update: jestApi.fn(),
       },
       team: {
-        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'team-a', publicId: 'team-a' }]),
         create: jestApi.fn(),
         update: jestApi.fn(),
       },
@@ -260,7 +262,9 @@ describe('ImportService', () => {
         ]),
       },
       team: {
-        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'team-a', publicId: 'team-a' }]),
       },
     });
 
@@ -302,7 +306,9 @@ describe('ImportService', () => {
         ]),
       },
       team: {
-        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'team-a', publicId: 'team-a' }]),
       },
     });
 
@@ -335,7 +341,9 @@ describe('ImportService', () => {
         update: jestApi.fn(),
       },
       team: {
-        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'team-a', publicId: 'team-a' }]),
       },
     });
 
@@ -374,7 +382,9 @@ describe('ImportService', () => {
         update: jestApi.fn().mockResolvedValue({ id: 'member-a' }),
       },
       team: {
-        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'team-a', publicId: 'team-a' }]),
       },
     });
 
@@ -418,7 +428,9 @@ describe('ImportService', () => {
         update: jestApi.fn(),
       },
       team: {
-        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'team-a', publicId: 'team-a' }]),
       },
     });
 
@@ -449,7 +461,9 @@ describe('ImportService', () => {
         update: jestApi.fn(),
       },
       team: {
-        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'team-a', publicId: 'team-a' }]),
       },
     });
 
@@ -513,7 +527,9 @@ describe('ImportService', () => {
         update: jestApi.fn(),
       },
       team: {
-        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'team-a', publicId: 'team-a' }]),
       },
     });
 
@@ -582,7 +598,9 @@ describe('ImportService', () => {
           .mockResolvedValueOnce([{ id: 'admin-a' }]),
       },
       team: {
-        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'team-a', publicId: 'team-a' }]),
       },
       task: {
         findMany: jestApi.fn().mockResolvedValue([]),
@@ -830,8 +848,8 @@ describe('ImportService', () => {
       team: {
         findMany: jestApi
           .fn()
-          .mockResolvedValueOnce([{ id: 'team-a' }])
-          .mockResolvedValueOnce([{ id: 'team-a' }]),
+          .mockResolvedValueOnce([{ id: 'team-a', publicId: 'team-a' }])
+          .mockResolvedValueOnce([{ id: 'team-a', publicId: 'team-a' }]),
       },
       task: {
         findMany: jestApi
@@ -1017,7 +1035,7 @@ describe('ImportService', () => {
       team: {
         findMany: jestApi
           .fn()
-          .mockResolvedValueOnce([{ id: 'team-a' }])
+          .mockResolvedValueOnce([{ id: 'team-a', publicId: 'team-a' }])
           .mockResolvedValueOnce([]),
       },
       task: {
@@ -1087,8 +1105,8 @@ describe('ImportService', () => {
       team: {
         findMany: jestApi
           .fn()
-          .mockResolvedValueOnce([{ id: 'team-a' }])
-          .mockResolvedValueOnce([{ id: 'team-a' }]),
+          .mockResolvedValueOnce([{ id: 'team-a', publicId: 'team-a' }])
+          .mockResolvedValueOnce([{ id: 'team-a', publicId: 'team-a' }]),
       },
       task: {
         findMany: jestApi
@@ -1152,7 +1170,9 @@ describe('ImportService', () => {
           ]),
       },
       team: {
-        findMany: jestApi.fn().mockResolvedValue([{ id: 'team-a' }]),
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ id: 'team-a', publicId: 'team-a' }]),
       },
       task: {
         findMany: jestApi.fn().mockResolvedValueOnce([

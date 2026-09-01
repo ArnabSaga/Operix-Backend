@@ -45,7 +45,7 @@ function createViewer(role: UserRole = UserRole.ADMIN): OperixViewer {
 }
 
 function createReport(overrides: Record<string, unknown> = {}) {
-  return {
+  const report = {
     id: 'report-a',
     adminId: 'admin-a',
     teamId: 'team-a',
@@ -69,6 +69,22 @@ function createReport(overrides: Record<string, unknown> = {}) {
     versions: [],
     ...overrides,
   };
+  Object.defineProperties(report, {
+    publicId: { value: report.id, enumerable: false },
+    admin: { value: { publicId: report.adminId }, enumerable: false },
+    team: { value: { publicId: report.teamId }, enumerable: false },
+  });
+  for (const version of report.versions as {
+    review?: Record<string, unknown> | null;
+  }[]) {
+    if (version.review) {
+      Object.defineProperty(version.review, 'reviewer', {
+        value: { publicId: version.review.reviewerId },
+        enumerable: false,
+      });
+    }
+  }
+  return report;
 }
 
 function createVersion(overrides: Record<string, unknown> = {}) {
@@ -256,7 +272,7 @@ describe('ManagementReportService', () => {
     expect(tx.team.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          id: 'team-a',
+          publicId: 'team-a',
           adminId: 'admin-a',
         },
       }),
@@ -502,7 +518,7 @@ describe('ManagementReportService', () => {
       1,
       expect.objectContaining({
         where: {
-          id: 'report-a',
+          publicId: 'report-a',
           status: ManagementReportStatus.SUBMITTED,
         },
         data: {
@@ -514,7 +530,7 @@ describe('ManagementReportService', () => {
       2,
       expect.objectContaining({
         where: {
-          id: 'report-a',
+          publicId: 'report-a',
           status: ManagementReportStatus.UNDER_REVIEW,
         },
         data: expect.objectContaining({
@@ -628,7 +644,7 @@ describe('ManagementReportService', () => {
               status: ManagementReportStatus.DRAFT,
             },
             {
-              teamId: 'team-a',
+              team: { publicId: 'team-a' },
             },
             {
               title: {

@@ -301,12 +301,13 @@ async function resolveMemberReferences(
       : Promise.resolve([]),
     context.prisma.team.findMany({
       where: {
-        id: {
+        publicId: {
           in: teamIds,
         },
       },
       select: {
         id: true,
+        publicId: true,
       },
     }),
   ]);
@@ -320,7 +321,7 @@ async function resolveMemberReferences(
     usersByEmail: new Map(
       users.map((user) => [normalizeEmail(user.email), user]),
     ),
-    teamIds: new Set(teams.map((team) => team.id)),
+    teamsByPublicId: new Map(teams.map((team) => [team.publicId, team.id])),
   };
 }
 
@@ -346,7 +347,8 @@ function evaluateMemberCandidate(
   resolved: Awaited<ReturnType<typeof resolveMemberReferences>>,
   resolvedMemberCounts: Map<string, number>,
 ): MemberImportAnalyzedRow {
-  if (!resolved.teamIds.has(candidate.teamId)) {
+  const databaseTeamId = resolved.teamsByPublicId.get(candidate.teamId);
+  if (!databaseTeamId) {
     return conflict(
       candidate,
       'teamId',
@@ -396,7 +398,7 @@ function evaluateMemberCandidate(
           row: candidate.row,
           field: 'employeeId/email',
           sourceValue: sourceIdentity(candidate),
-          normalizedValue: user.id,
+          normalizedValue: sourceIdentity(candidate),
           code: IMPORT_ROW_ISSUE_CODE.DUPLICATE_SOURCE_MEMBER,
           message: 'Duplicate source rows resolve to the same Member.',
         }),
@@ -410,7 +412,7 @@ function evaluateMemberCandidate(
     return identityIssue;
   }
 
-  if (user.teamMembership?.teamId !== candidate.teamId) {
+  if (user.teamMembership?.teamId !== databaseTeamId) {
     return conflict(
       candidate,
       'teamId',
@@ -476,7 +478,7 @@ function evaluateMemberCandidate(
       memberId: user.id,
       employeeId: candidate.employeeId,
       email: candidate.email,
-      teamId: candidate.teamId,
+      teamId: databaseTeamId,
       targetDesignation,
     },
     resolved: {

@@ -45,10 +45,6 @@ type SelectedPerformanceMember = Prisma.UserGetPayload<{
   select: typeof performanceMemberSelect;
 }>;
 
-type SelectedPerformanceTask = Prisma.TaskGetPayload<{
-  select: typeof performanceTaskSelect;
-}>;
-
 @Injectable()
 export class PerformanceService {
   constructor(private readonly prisma: PrismaService) {}
@@ -157,7 +153,7 @@ export class PerformanceService {
     const now = new Date();
     const member = await this.prisma.user.findFirst({
       where: {
-        id: memberId,
+        publicId: memberId,
         AND: [buildPerformanceMemberScopeWhere(viewer)],
       },
       select: performanceMemberSelect,
@@ -192,7 +188,7 @@ export class PerformanceService {
     const now = new Date();
     const team = await this.prisma.team.findFirst({
       where: {
-        id: teamId,
+        publicId: teamId,
         AND: [buildPerformanceTeamScopeWhere(viewer)],
       },
       select: performanceTeamSelect,
@@ -206,12 +202,12 @@ export class PerformanceService {
       await Promise.all([
         this.prisma.teamMember.count({
           where: {
-            teamId,
+            teamId: team.id,
           },
         }),
         this.prisma.teamMember.count({
           where: {
-            teamId,
+            teamId: team.id,
             member: {
               status: UserStatus.ACTIVE,
             },
@@ -219,16 +215,18 @@ export class PerformanceService {
         }),
         this.prisma.task.findMany({
           where: {
-            teamId,
+            teamId: team.id,
           },
           select: performanceTaskSelect,
         }),
-        this.loadTeamRevisions(teamId),
+        this.loadTeamRevisions(team.id),
       ]);
 
     return {
       team: {
-        ...team,
+        id: team.publicId,
+        name: team.name,
+        adminId: team.admin.publicId,
         memberCount,
         activeMemberCount,
       },
@@ -247,7 +245,7 @@ export class PerformanceService {
 
     const team = await this.prisma.team.findFirst({
       where: {
-        id: teamId,
+        publicId: teamId,
         AND: [buildPerformanceTeamScopeWhere(viewer)],
       },
       select: performanceTeamSelect,
@@ -261,12 +259,12 @@ export class PerformanceService {
       await Promise.all([
         this.prisma.teamMember.count({
           where: {
-            teamId,
+            teamId: team.id,
           },
         }),
         this.prisma.teamMember.count({
           where: {
-            teamId,
+            teamId: team.id,
             member: {
               status: UserStatus.ACTIVE,
             },
@@ -274,16 +272,18 @@ export class PerformanceService {
         }),
         this.prisma.task.findMany({
           where: {
-            teamId,
+            teamId: team.id,
           },
           select: performanceTaskSelect,
         }),
-        this.loadTeamRevisions(teamId),
+        this.loadTeamRevisions(team.id),
       ]);
 
     return {
       team: {
-        ...team,
+        id: team.publicId,
+        name: team.name,
+        adminId: team.admin.publicId,
         memberCount,
         activeMemberCount,
       },
@@ -389,7 +389,7 @@ export class PerformanceService {
 
   private buildMemberSummary(
     member: SelectedPerformanceMember,
-    tasks: SelectedPerformanceTask[],
+    tasks: PerformanceTaskMetricSource[],
     revisions: RevisionMetricSource[],
     now: Date,
   ): MemberPerformanceSummary {
@@ -430,7 +430,7 @@ function buildMemberListWhere(
   if (teamId) {
     filters.push({
       teamMembership: {
-        teamId,
+        team: { publicId: teamId },
       },
     });
   }
@@ -444,12 +444,12 @@ function mapMemberIdentity(
   member: SelectedPerformanceMember,
 ): MemberPerformanceIdentity {
   return {
-    id: member.id,
+    id: member.publicId,
     name: member.name,
     employeeId: member.employeeId,
     designation: member.designation,
     status: member.status,
-    teamId: member.teamMembership?.teamId ?? null,
+    teamId: member.teamMembership?.team.publicId ?? null,
     teamName: member.teamMembership?.team.name ?? null,
   };
 }

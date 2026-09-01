@@ -1,5 +1,3 @@
-import type { FileAsset } from '../../../generated/prisma/client.js';
-
 export interface SafeFileResponse {
   id: string;
   originalName: string;
@@ -15,17 +13,24 @@ export interface SafeAttachmentResponse {
   downloadUrl: string;
 }
 
-export type SafeFileSource = Pick<
-  FileAsset,
-  | 'id'
-  | 'originalName'
-  | 'mimeType'
-  | 'sizeBytes'
-  | 'uploadedById'
-  | 'createdAt'
->;
+export interface SafeSubmissionAttachmentResponse {
+  file: SafeFileResponse;
+  downloadUrl: string;
+}
+
+export interface SafeFileSource {
+  id: string;
+  publicId: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedById: string;
+  uploadedBy: { publicId: string };
+  createdAt: Date;
+}
 
 export interface SafeAttachmentSource {
   id: string;
+  publicId?: string;
   file: SafeFileSource;
 }

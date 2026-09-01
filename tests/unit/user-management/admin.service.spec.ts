@@ -43,6 +43,7 @@ describe('AdminService', () => {
   it('returns the current admin and writes no activity for identical updates', async () => {
     const admin = {
       id: 'admin-a',
+      publicId: 'admin-a',
       name: 'Admin A',
       email: 'admin-a@example.com',
       employeeId: 'A-1',
@@ -70,7 +71,7 @@ describe('AdminService', () => {
         employeeId: admin.employeeId,
         designation: admin.designation,
       }),
-    ).resolves.toBe(admin);
+    ).resolves.toMatchObject({ id: admin.publicId, email: admin.email });
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -78,6 +79,7 @@ describe('AdminService', () => {
   it('prevents suspending an Admin that owns teams', async () => {
     const admin = {
       id: 'admin-a',
+      publicId: 'admin-a',
       name: 'Admin A',
       email: 'admin-a@example.com',
       employeeId: null,
@@ -127,6 +129,7 @@ describe('AdminService', () => {
   it('creates Admin activity only after provisioning succeeds', async () => {
     const admin = {
       id: 'admin-a',
+      publicId: 'admin-a',
       name: 'Admin A',
       email: 'admin-a@example.com',
       employeeId: null,
@@ -171,9 +174,7 @@ describe('AdminService', () => {
         actorId: viewer.userId,
         entityType: 'USER',
         entityId: 'admin-a',
-        metadata: {
-          adminId: 'admin-a',
-        },
+        metadata: undefined,
         ipAddress: null,
         requestId: null,
         userAgent: null,
@@ -190,6 +191,7 @@ describe('AdminService', () => {
   it('does not send Welcome and cleans up when required Activity fails', async () => {
     const admin = {
       id: 'admin-a',
+      publicId: 'admin-a',
       name: 'Admin A',
       email: 'admin-a@example.com',
       employeeId: null,
@@ -231,6 +233,7 @@ describe('AdminService', () => {
   it('keeps the created Admin when Welcome delivery fails', async () => {
     const admin = {
       id: 'admin-a',
+      publicId: 'admin-a',
       name: 'Admin A',
       email: 'admin-a@example.com',
       employeeId: null,
@@ -275,7 +278,7 @@ describe('AdminService', () => {
         email: admin.email,
         initialPassword: 'super-secret-1',
       }),
-    ).resolves.toBe(admin);
+    ).resolves.toMatchObject({ id: admin.publicId, email: admin.email });
 
     expect(provisioner.cleanupCreatedUser).not.toHaveBeenCalled();
   });

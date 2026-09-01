@@ -7,3 +7,13 @@ export interface OperixViewer {
   status: UserStatus;
   scope: OperixViewerScope;
 }
+
+export interface OperixViewerResponse {
+  userId: string;
+  role: UserRole;
+  status: UserStatus;
+  scope:
+    | { type: 'GLOBAL' }
+    | { type: 'ADMIN'; teamIds: string[] }
+    | { type: 'MEMBER'; teamId: string | null };
+}

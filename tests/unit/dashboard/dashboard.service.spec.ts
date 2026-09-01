@@ -44,7 +44,7 @@ function task(overrides = {}) {
 }
 
 function member(overrides = {}) {
-  return {
+  const value = {
     id: 'member-a',
     name: 'Member A',
     employeeId: 'EMP-001',
@@ -58,6 +58,16 @@ function member(overrides = {}) {
     },
     ...overrides,
   };
+  Object.defineProperties(value, {
+    publicId: { value: value.id, enumerable: false },
+  });
+  if (value.teamMembership) {
+    Object.defineProperty(value.teamMembership.team, 'publicId', {
+      value: value.teamMembership.teamId,
+      enumerable: false,
+    });
+  }
+  return value;
 }
 
 function createService(prismaOverrides = {}) {
@@ -425,11 +435,15 @@ describe('DashboardService', () => {
   it('builds Super Admin Team workload directly from Task.teamId', async () => {
     const { service } = createService({
       team: {
-        findMany: jestApi
-          .fn()
-          .mockResolvedValue([
-            { id: 'team-a', name: 'Alpha', adminId: 'admin-a' },
-          ]),
+        findMany: jestApi.fn().mockResolvedValue([
+          {
+            id: 'team-a',
+            publicId: 'team-a',
+            name: 'Alpha',
+            adminId: 'admin-a',
+            admin: { publicId: 'admin-a' },
+          },
+        ]),
       },
       teamMember: {
         findMany: jestApi.fn().mockResolvedValue([

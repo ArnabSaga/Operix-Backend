@@ -1,14 +1,13 @@
 export const activitySelect = {
-  id: true,
-  actorId: true,
+  publicId: true,
   action: true,
   entityType: true,
-  entityId: true,
+  entityPublicId: true,
   metadata: true,
   createdAt: true,
   actor: {
     select: {
-      id: true,
+      publicId: true,
       name: true,
     },
   },

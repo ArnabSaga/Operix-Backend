@@ -7,6 +7,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { CreateReviewDto } from './dto/create-review.dto.js';
 import { ReviewService } from './review.service.js';
 
@@ -20,7 +21,7 @@ export class ReviewController {
   @RequireRoles(UserRole.ADMIN)
   createReview(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('submissionId') submissionId: string,
+    @Param('submissionId', PublicIdPipe) submissionId: string,
     @Body() dto: CreateReviewDto,
   ) {
     return this.reviewService.createReview(viewer, submissionId, dto);

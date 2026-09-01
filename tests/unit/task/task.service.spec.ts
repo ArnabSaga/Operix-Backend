@@ -63,14 +63,24 @@ function createViewer(role: UserRole): OperixViewer {
 function createTask(
   overrides: Partial<SafeTaskResponse> = {},
 ): SafeTaskResponse {
-  return {
+  const task = {
     ...baseTask(),
     ...overrides,
   };
+  Object.defineProperties(task, {
+    publicId: { value: task.id, enumerable: false },
+    team: { value: { publicId: task.teamId }, enumerable: false },
+    category: {
+      value: task.categoryId ? { publicId: task.categoryId } : null,
+      enumerable: false,
+    },
+    createdBy: { value: { publicId: task.createdById }, enumerable: false },
+  });
+  return task;
 }
 
 function baseTask(): SafeTaskResponse {
-  return {
+  const task = {
     id: 'task-a',
     referenceCode: 'TASK-20260820-ABC123',
     title: 'Prepare batch report',
@@ -89,6 +99,8 @@ function baseTask(): SafeTaskResponse {
     updatedAt: fixedDate,
     isOverdue: false,
   };
+
+  return task;
 }
 
 function expectAppException(
@@ -344,17 +356,17 @@ describe('TaskService', () => {
 
   it('returns paginated status history after scoped task lookup', async () => {
     const history = {
-      id: 'history-a',
-      taskId: 'task-a',
       fromStatus: TaskStatus.SUBMITTED,
       toStatus: TaskStatus.UNDER_REVIEW,
-      changedById: 'admin-a',
+      changedBy: { publicId: 'admin-a', name: 'Admin A' },
       notes: 'Task review started.',
       changedAt: fixedDate,
     };
     const prisma = {
       task: {
-        findFirst: jestApi.fn().mockResolvedValue({ id: 'task-a' }),
+        findFirst: jestApi
+          .fn()
+          .mockResolvedValue({ id: 'task-a-db', publicId: 'task-a' }),
       },
       taskStatusHistory: {
         findMany: jestApi.fn().mockResolvedValue([history]),
@@ -369,7 +381,16 @@ describe('TaskService', () => {
         limit: 20,
       }),
     ).resolves.toEqual({
-      data: [history],
+      data: [
+        {
+          taskId: 'task-a',
+          fromStatus: history.fromStatus,
+          toStatus: history.toStatus,
+          changedBy: { id: 'admin-a', name: 'Admin A' },
+          notes: history.notes,
+          changedAt: history.changedAt,
+        },
+      ],
       meta: {
         page: 1,
         limit: 20,
@@ -380,7 +401,7 @@ describe('TaskService', () => {
 
     expect(prisma.task.findFirst).toHaveBeenCalledWith({
       where: {
-        id: 'task-a',
+        publicId: 'task-a',
         AND: [
           {
             teamId: {
@@ -391,18 +412,17 @@ describe('TaskService', () => {
       },
       select: {
         id: true,
+        publicId: true,
       },
     });
     expect(prisma.taskStatusHistory.findMany).toHaveBeenCalledWith({
       where: {
-        taskId: 'task-a',
+        taskId: 'task-a-db',
       },
       select: {
-        id: true,
-        taskId: true,
         fromStatus: true,
         toStatus: true,
-        changedById: true,
+        changedBy: { select: { publicId: true, name: true } },
         notes: true,
         changedAt: true,
       },
@@ -788,7 +808,7 @@ describe('task query helpers', () => {
         {
           assignments: {
             some: {
-              memberId: 'member-b',
+              member: { publicId: 'member-b' },
               unassignedAt: null,
             },
           },

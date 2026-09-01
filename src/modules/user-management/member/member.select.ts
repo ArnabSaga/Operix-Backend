@@ -1,5 +1,6 @@
 export const memberSelect = {
   id: true,
+  publicId: true,
   name: true,
   email: true,
   employeeId: true,

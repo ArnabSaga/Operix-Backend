@@ -15,6 +15,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { InventoryAssignmentQueryDto } from './dto/inventory-assignment-query.dto.js';
 import { ReturnInventoryDto } from './dto/return-inventory.dto.js';
 import { InventoryAssignmentService } from './inventory-assignment.service.js';
@@ -38,7 +39,7 @@ export class InventoryAssignmentController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
   getAssignment(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('assignmentId') assignmentId: string,
+    @Param('assignmentId', PublicIdPipe) assignmentId: string,
   ) {
     return this.assignmentService.getAssignment(viewer, assignmentId);
   }
@@ -47,7 +48,7 @@ export class InventoryAssignmentController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   returnInventory(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('assignmentId') assignmentId: string,
+    @Param('assignmentId', PublicIdPipe) assignmentId: string,
     @Body() dto: ReturnInventoryDto,
   ) {
     return this.assignmentService.returnInventory(viewer, assignmentId, dto);

@@ -32,7 +32,6 @@ import type {
 import {
   buildInventoryItemScopeWhere,
   buildInventoryTransactionScopeWhere,
-  getInventoryScopedTeamIds,
 } from './inventory-scope.policy.js';
 import {
   mapInventoryItemResponse,
@@ -121,7 +120,11 @@ export class InventoryStockService {
       }
 
       if (dto.memberId) {
-        await this.assertActiveMemberInTeam(tx, dto.memberId, item.teamId);
+        dto.memberId = await this.resolveActiveMemberInTeam(
+          tx,
+          dto.memberId,
+          item.teamId,
+        );
       }
 
       const resultingQuantity = item.quantity - dto.quantity;
@@ -265,21 +268,11 @@ export class InventoryStockService {
     ];
 
     if (query.teamId) {
-      if (
-        viewer.role === UserRole.ADMIN &&
-        !getInventoryScopedTeamIds(viewer).includes(query.teamId)
-      ) {
-        throw new AppException(
-          HttpStatus.FORBIDDEN,
-          APP_ERROR_CODE.FORBIDDEN,
-          'You do not have access to this Team inventory.',
-        );
-      }
-      filters.push({ item: { teamId: query.teamId } });
+      filters.push({ item: { team: { publicId: query.teamId } } });
     }
 
     if (query.itemId) {
-      filters.push({ itemId: query.itemId });
+      filters.push({ item: { publicId: query.itemId } });
     }
 
     if (query.type) {
@@ -287,11 +280,11 @@ export class InventoryStockService {
     }
 
     if (query.memberId) {
-      filters.push({ memberId: query.memberId });
+      filters.push({ member: { publicId: query.memberId } });
     }
 
     if (query.actorId) {
-      filters.push({ actorId: query.actorId });
+      filters.push({ actor: { publicId: query.actorId } });
     }
 
     if (query.from || query.to) {
@@ -313,7 +306,7 @@ export class InventoryStockService {
   ) {
     const item = await tx.inventoryItem.findFirst({
       where: {
-        id: itemId,
+        publicId: itemId,
         AND: [buildInventoryItemScopeWhere(viewer)],
       },
       select: {
@@ -357,14 +350,15 @@ export class InventoryStockService {
     }
   }
 
-  private async assertActiveMemberInTeam(
+  private async resolveActiveMemberInTeam(
     tx: PrismaTransactionClient,
     memberId: string,
     teamId: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const member = await tx.user.findUnique({
-      where: { id: memberId },
+      where: { publicId: memberId },
       select: {
+        id: true,
         role: true,
         status: true,
         teamMembership: {
@@ -398,6 +392,7 @@ export class InventoryStockService {
         'Member does not belong to the inventory item Team.',
       );
     }
+    return member.id;
   }
 }
 

@@ -45,16 +45,16 @@ export class InventoryItemService {
     this.assertItemManager(viewer);
 
     return runSerializableTransaction(this.prisma, async (tx) => {
-      await this.assertTeamInScope(tx, viewer, dto.teamId);
-      await this.assertActiveCategory(tx, dto.categoryId);
-      await this.assertSkuAvailable(tx, dto.teamId, dto.sku);
+      const teamId = await this.resolveTeamInScope(tx, viewer, dto.teamId);
+      const categoryId = await this.resolveActiveCategory(tx, dto.categoryId);
+      await this.assertSkuAvailable(tx, teamId, dto.sku);
 
       const openingQuantity = dto.openingQuantity ?? 0;
 
       const item = await tx.inventoryItem.create({
         data: {
-          teamId: dto.teamId,
-          categoryId: dto.categoryId ?? null,
+          teamId,
+          categoryId,
           sku: dto.sku,
           name: dto.name,
           description: dto.description ?? null,
@@ -157,7 +157,7 @@ export class InventoryItemService {
     this.assertItemManager(viewer);
     const item = await this.prisma.inventoryItem.findFirst({
       where: {
-        id: itemId,
+        publicId: itemId,
         AND: [buildInventoryItemScopeWhere(viewer)],
       },
       select: inventoryItemSelect,
@@ -180,7 +180,7 @@ export class InventoryItemService {
     return runSerializableTransaction(this.prisma, async (tx) => {
       const existing = await tx.inventoryItem.findFirst({
         where: {
-          id: itemId,
+          publicId: itemId,
           AND: [buildInventoryItemScopeWhere(viewer)],
         },
         select: {
@@ -200,7 +200,7 @@ export class InventoryItemService {
       }
 
       if (dto.categoryId !== undefined && dto.categoryId !== null) {
-        await this.assertActiveCategory(tx, dto.categoryId);
+        dto.categoryId = await this.resolveActiveCategory(tx, dto.categoryId);
       }
 
       if (existing.isReturnable && dto.isReturnable === false) {
@@ -359,21 +359,11 @@ export class InventoryItemService {
     }
 
     if (query.categoryId) {
-      filters.push({ categoryId: query.categoryId });
+      filters.push({ category: { publicId: query.categoryId } });
     }
 
     if (query.teamId) {
-      if (
-        viewer.role === UserRole.ADMIN &&
-        !getInventoryScopedTeamIds(viewer).includes(query.teamId)
-      ) {
-        throw new AppException(
-          HttpStatus.FORBIDDEN,
-          APP_ERROR_CODE.FORBIDDEN,
-          'You do not have access to this Team inventory.',
-        );
-      }
-      filters.push({ teamId: query.teamId });
+      filters.push({ team: { publicId: query.teamId } });
     }
 
     if (query.isActive !== undefined) {
@@ -404,13 +394,13 @@ export class InventoryItemService {
     );
   }
 
-  private async assertTeamInScope(
+  private async resolveTeamInScope(
     tx: PrismaTransactionClient,
     viewer: OperixViewer,
     teamId: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const team = await tx.team.findUnique({
-      where: { id: teamId },
+      where: { publicId: teamId },
       select: { id: true },
     });
 
@@ -424,7 +414,7 @@ export class InventoryItemService {
 
     if (
       viewer.role === UserRole.ADMIN &&
-      !getInventoryScopedTeamIds(viewer).includes(teamId)
+      !getInventoryScopedTeamIds(viewer).includes(team.id)
     ) {
       throw new AppException(
         HttpStatus.FORBIDDEN,
@@ -432,18 +422,19 @@ export class InventoryItemService {
         'You do not have access to this Team inventory.',
       );
     }
+    return team.id;
   }
 
-  private async assertActiveCategory(
+  private async resolveActiveCategory(
     tx: PrismaTransactionClient,
     categoryId?: string | null,
-  ): Promise<void> {
+  ): Promise<string | null> {
     if (!categoryId) {
-      return;
+      return null;
     }
 
     const category = await tx.inventoryCategory.findUnique({
-      where: { id: categoryId },
+      where: { publicId: categoryId },
       select: { id: true, isActive: true },
     });
 
@@ -462,6 +453,7 @@ export class InventoryItemService {
         'Inactive inventory categories cannot be selected.',
       );
     }
+    return category.id;
   }
 
   private async assertSkuAvailable(

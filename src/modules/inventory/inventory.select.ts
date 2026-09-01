@@ -1,5 +1,6 @@
 export const inventoryCategorySelect = {
   id: true,
+  publicId: true,
   name: true,
   description: true,
   isActive: true,
@@ -9,6 +10,7 @@ export const inventoryCategorySelect = {
 
 export const inventoryItemSelect = {
   id: true,
+  publicId: true,
   sku: true,
   name: true,
   description: true,
@@ -21,12 +23,14 @@ export const inventoryItemSelect = {
   team: {
     select: {
       id: true,
+      publicId: true,
       name: true,
     },
   },
   category: {
     select: {
       id: true,
+      publicId: true,
       name: true,
     },
   },
@@ -34,13 +38,14 @@ export const inventoryItemSelect = {
 
 export const inventoryAssignmentSelect = {
   id: true,
+  publicId: true,
   quantity: true,
   returnedQuantity: true,
   assignedAt: true,
   returnedAt: true,
   item: {
     select: {
-      id: true,
+      publicId: true,
       sku: true,
       name: true,
       isReturnable: true,
@@ -48,7 +53,7 @@ export const inventoryAssignmentSelect = {
   },
   member: {
     select: {
-      id: true,
+      publicId: true,
       name: true,
       employeeId: true,
       designation: true,
@@ -56,7 +61,7 @@ export const inventoryAssignmentSelect = {
   },
   assignedBy: {
     select: {
-      id: true,
+      publicId: true,
       name: true,
     },
   },
@@ -64,31 +69,33 @@ export const inventoryAssignmentSelect = {
 
 export const inventoryTransactionSelect = {
   id: true,
+  publicId: true,
   type: true,
   quantity: true,
   previousQuantity: true,
   resultingQuantity: true,
   assignmentId: true,
+  assignment: { select: { publicId: true } },
   reason: true,
   note: true,
   createdAt: true,
   item: {
     select: {
-      id: true,
+      publicId: true,
       sku: true,
       name: true,
     },
   },
   member: {
     select: {
-      id: true,
+      publicId: true,
       name: true,
       employeeId: true,
     },
   },
   actor: {
     select: {
-      id: true,
+      publicId: true,
       name: true,
     },
   },

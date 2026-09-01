@@ -1,23 +1,31 @@
 import type {
   SafeAttachmentResponse,
   SafeAttachmentSource,
+  SafeSubmissionAttachmentResponse,
 } from './file.interface.js';
 
 export function mapAttachmentResponse(
   attachment: SafeAttachmentSource,
 ): SafeAttachmentResponse {
   return {
-    id: attachment.id,
+    id: attachment.publicId ?? attachment.file.publicId,
     file: {
-      id: attachment.file.id,
+      id: attachment.file.publicId,
       originalName: attachment.file.originalName,
       mimeType: attachment.file.mimeType,
       sizeBytes: attachment.file.sizeBytes,
-      uploadedById: attachment.file.uploadedById,
+      uploadedById: attachment.file.uploadedBy.publicId,
       createdAt: attachment.file.createdAt,
     },
-    downloadUrl: `/api/v1/files/${attachment.file.id}/download`,
+    downloadUrl: `/api/v1/files/${attachment.file.publicId}/download`,
   };
+}
+
+export function mapSubmissionAttachmentResponse(
+  attachment: SafeAttachmentSource,
+): SafeSubmissionAttachmentResponse {
+  const mapped = mapAttachmentResponse(attachment);
+  return { file: mapped.file, downloadUrl: mapped.downloadUrl };
 }
 
 export function buildContentDisposition(filename: string): string {

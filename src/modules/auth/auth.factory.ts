@@ -2,6 +2,8 @@ import type { ConfigService } from '@nestjs/config';
 import { prismaAdapter } from '@better-auth/prisma-adapter';
 import { betterAuth } from 'better-auth';
 import type { BetterAuthOptions } from 'better-auth';
+import { createAuthMiddleware } from 'better-auth/api';
+import { customSession } from 'better-auth/plugins';
 import type { PrismaService } from '../../database/prisma.service.js';
 import type { MailService } from '../../shared/mail/mail.service.js';
 import { UserStatus, type UserRole } from '../../../generated/prisma/enums.js';
@@ -12,6 +14,10 @@ import {
 } from './password-policy.constant.js';
 
 const operixUserAdditionalFields = {
+  publicId: {
+    type: 'string',
+    input: false,
+  },
   role: {
     type: 'string',
     input: false,
@@ -42,6 +48,21 @@ export function createOperixAuth(
     baseURL: config.getOrThrow<string>('auth.baseUrl'),
     secret: config.getOrThrow<string>('auth.secret'),
     trustedOrigins: config.getOrThrow<string[]>('app.frontendOrigins'),
+    disabledPaths: [
+      '/list-sessions',
+      '/revoke-session',
+      '/revoke-sessions',
+      '/revoke-other-sessions',
+      '/update-user',
+      '/delete-user',
+      '/change-email',
+      '/change-password',
+      '/set-password',
+      '/list-accounts',
+      '/link-social',
+      '/unlink-account',
+      '/refresh-token',
+    ],
     database: prismaAdapter(prisma, {
       provider: 'postgresql',
     }),
@@ -64,6 +85,71 @@ export function createOperixAuth(
     },
     user: {
       additionalFields: operixUserAdditionalFields,
+    },
+    plugins: [
+      customSession<Record<string, unknown>>(({ user, session }, context) => {
+        // nestjs-better-auth resolves guards through the server-side auth API.
+        // Preserve that private identity for authorization while sanitizing the
+        // browser-facing Better Auth handler response below. In Better Auth
+        // 1.6.29 a handler invocation carries the originating Request; a direct
+        // auth.api invocation does not.
+        if (!context.request) {
+          return Promise.resolve({ user, session });
+        }
+
+        const operixUser = user as typeof user & {
+          publicId: string;
+          role: UserRole;
+          status: UserStatus;
+          employeeId: string | null;
+          designation: string | null;
+        };
+
+        return Promise.resolve({
+          user: {
+            id: operixUser.publicId,
+            name: operixUser.name,
+            email: operixUser.email,
+            emailVerified: operixUser.emailVerified,
+            image: operixUser.image,
+            role: operixUser.role,
+            status: operixUser.status,
+            employeeId: operixUser.employeeId,
+            designation: operixUser.designation,
+            createdAt: operixUser.createdAt,
+            updatedAt: operixUser.updatedAt,
+          },
+          session: { expiresAt: session.expiresAt },
+        });
+      }),
+    ],
+    hooks: {
+      after: createAuthMiddleware(async (context) => {
+        if (context.path !== '/sign-in/email') {
+          return;
+        }
+        const returned = context.context.returned;
+        if (
+          !returned ||
+          typeof returned !== 'object' ||
+          !('user' in returned)
+        ) {
+          return;
+        }
+
+        const response = returned as {
+          user?: Record<string, unknown>;
+        } & Record<string, unknown>;
+        if (!response.user || typeof response.user.publicId !== 'string') {
+          return;
+        }
+
+        const { publicId, ...safeUser } = response.user;
+        return context.json({
+          ...response,
+          user: { ...safeUser, id: publicId },
+        });
+      }),
     },
   } satisfies BetterAuthOptions;
 

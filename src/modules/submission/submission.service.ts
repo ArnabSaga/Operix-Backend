@@ -16,9 +16,9 @@ import {
 } from '../../shared/pagination/pagination.helper.js';
 import type { PaginationInput } from '../../shared/pagination/pagination.interface.js';
 import { TASK_ERROR_CODE } from '../task/task.constant.js';
-import { mapAttachmentResponse } from '../file/file.mapper.js';
+import { mapSubmissionAttachmentResponse } from '../file/file.mapper.js';
 import { safeAttachmentSelect } from '../file/file.select.js';
-import type { SafeAttachmentResponse } from '../file/file.interface.js';
+import type { SafeSubmissionAttachmentResponse } from '../file/file.interface.js';
 import type { CreateSubmissionDto } from './dto/create-submission.dto.js';
 import { buildSubmissionScopeWhere } from './policies/submission-scope.policy.js';
 import {
@@ -79,7 +79,7 @@ export class SubmissionService {
         async (tx) => {
           const task = await tx.task.findFirst({
             where: {
-              id: taskId,
+              publicId: taskId,
               assignments: {
                 some: {
                   memberId: viewer.userId,
@@ -111,7 +111,7 @@ export class SubmissionService {
 
           const latestSubmission = await tx.taskSubmission.findFirst({
             where: {
-              taskId,
+              taskId: task.id,
             },
             orderBy: {
               version: 'desc',
@@ -137,7 +137,7 @@ export class SubmissionService {
 
           const submission = await tx.taskSubmission.create({
             data: {
-              taskId,
+              taskId: task.id,
               submittedById: viewer.userId,
               version: nextVersion,
               submissionText: dto.submissionText,
@@ -170,7 +170,7 @@ export class SubmissionService {
 
           await tx.task.update({
             where: {
-              id: taskId,
+              id: task.id,
             },
             data: {
               status: nextStatus,
@@ -182,7 +182,7 @@ export class SubmissionService {
 
           await tx.taskStatusHistory.create({
             data: {
-              taskId,
+              taskId: task.id,
               fromStatus: task.status,
               toStatus: nextStatus,
               changedById: viewer.userId,
@@ -194,9 +194,9 @@ export class SubmissionService {
             actorId: viewer.userId,
             action,
             entityType: 'TASK',
-            entityId: taskId,
+            entityId: task.id,
             metadata: {
-              taskId,
+              taskId: task.id,
               submissionId: submission.id,
               version: submission.version,
             },
@@ -251,7 +251,7 @@ export class SubmissionService {
   ): Promise<PaginatedSubmissionResponse> {
     const normalized = normalizePagination(pagination);
     const where: Prisma.TaskSubmissionWhereInput = {
-      taskId,
+      task: { publicId: taskId },
       ...buildSubmissionScopeWhere(viewer),
     };
 
@@ -284,7 +284,7 @@ export class SubmissionService {
   ): Promise<SafeSubmissionResponse> {
     const submission = await this.prisma.taskSubmission.findFirst({
       where: {
-        id: submissionId,
+        publicId: submissionId,
         ...buildSubmissionScopeWhere(viewer),
       },
       select: submissionSelect,
@@ -300,10 +300,10 @@ export class SubmissionService {
   async listSubmissionAttachments(
     viewer: OperixViewer,
     submissionId: string,
-  ): Promise<SafeAttachmentResponse[]> {
+  ): Promise<SafeSubmissionAttachmentResponse[]> {
     const submission = await this.prisma.taskSubmission.findFirst({
       where: {
-        id: submissionId,
+        publicId: submissionId,
         ...buildSubmissionScopeWhere(viewer),
       },
       select: {
@@ -317,13 +317,13 @@ export class SubmissionService {
 
     const attachments = await this.prisma.submissionAttachment.findMany({
       where: {
-        submissionId,
+        submissionId: submission.id,
       },
       select: safeAttachmentSelect,
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
 
-    return attachments.map(mapAttachmentResponse);
+    return attachments.map(mapSubmissionAttachmentResponse);
   }
 
   private async assertSubmissionPrecheck(
@@ -332,7 +332,7 @@ export class SubmissionService {
   ): Promise<void> {
     const task = await this.prisma.task.findFirst({
       where: {
-        id: taskId,
+        publicId: taskId,
         assignments: {
           some: {
             memberId: viewer.userId,

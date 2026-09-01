@@ -16,6 +16,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { PaginationQueryDto } from '../../shared/pagination/pagination.dto.js';
 import { CreateInventoryCategoryDto } from './dto/create-inventory-category.dto.js';
 import { UpdateInventoryCategoryDto } from './dto/update-inventory-category.dto.js';
@@ -49,7 +50,7 @@ export class InventoryCategoryController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   getCategory(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('categoryId') categoryId: string,
+    @Param('categoryId', PublicIdPipe) categoryId: string,
   ) {
     return this.categoryService.getCategory(viewer, categoryId);
   }
@@ -58,7 +59,7 @@ export class InventoryCategoryController {
   @RequireRoles(UserRole.SUPER_ADMIN)
   updateCategory(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('categoryId') categoryId: string,
+    @Param('categoryId', PublicIdPipe) categoryId: string,
     @Body() dto: UpdateInventoryCategoryDto,
   ) {
     return this.categoryService.updateCategory(viewer, categoryId, dto);

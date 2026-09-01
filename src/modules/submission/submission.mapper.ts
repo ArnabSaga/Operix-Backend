@@ -1,10 +1,13 @@
-import { mapAttachmentResponse } from '../file/file.mapper.js';
+import { mapSubmissionAttachmentResponse } from '../file/file.mapper.js';
 import type { SafeSubmissionResponse } from './submission.interface.js';
 
 export interface SubmissionResponseSource {
   id: string;
+  publicId: string;
   taskId: string;
   submittedById: string;
+  task: { publicId: string };
+  submittedBy: { publicId: string };
   version: number;
   submissionText: string | null;
   submittedAt: Date;
@@ -13,10 +16,12 @@ export interface SubmissionResponseSource {
     id: string;
     file: {
       id: string;
+      publicId: string;
       originalName: string;
       mimeType: string;
       sizeBytes: number;
       uploadedById: string;
+      uploadedBy: { publicId: string };
       createdAt: Date;
     };
   }[];
@@ -30,13 +35,13 @@ export function mapSubmissionResponse(
   }
 
   return {
-    id: submission.id,
-    taskId: submission.taskId,
-    submittedById: submission.submittedById,
+    id: submission.publicId,
+    taskId: submission.task.publicId,
+    submittedById: submission.submittedBy.publicId,
     version: submission.version,
     submissionText: submission.submissionText,
     submittedAt: submission.submittedAt,
     createdAt: submission.createdAt,
-    attachments: submission.attachments.map(mapAttachmentResponse),
+    attachments: submission.attachments.map(mapSubmissionAttachmentResponse),
   };
 }

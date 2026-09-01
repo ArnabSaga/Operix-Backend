@@ -10,7 +10,17 @@ export function mapNotificationResponse(
   notification: SelectedNotification,
 ): SafeNotificationResponse {
   return {
-    ...notification,
+    id: notification.publicId,
+    type: notification.type,
+    title: notification.title,
+    body: notification.body,
+    targetType: notification.targetType,
+    targetId: notification.targetPublicId,
+    readAt: notification.readAt,
+    createdAt: notification.createdAt,
+    actor: notification.actor
+      ? { id: notification.actor.publicId, name: notification.actor.name }
+      : null,
     isRead: notification.readAt !== null,
   };
 }

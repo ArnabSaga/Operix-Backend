@@ -8,6 +8,7 @@ describe('inventory mapper', () => {
   it('derives out of stock without also marking low stock', () => {
     const response = mapInventoryItemResponse({
       id: 'item-a',
+      publicId: '11111111-1111-4111-8111-111111111111',
       sku: 'PEN',
       name: 'Blue pen',
       description: null,
@@ -19,6 +20,7 @@ describe('inventory mapper', () => {
       updatedAt: new Date('2026-08-22T00:00:00.000Z'),
       team: {
         id: 'team-a',
+        publicId: '22222222-2222-4222-8222-222222222222',
         name: 'Team A',
       },
       category: null,
@@ -31,6 +33,7 @@ describe('inventory mapper', () => {
   it('derives low stock only for positive stock within threshold', () => {
     const response = mapInventoryItemResponse({
       id: 'item-a',
+      publicId: '11111111-1111-4111-8111-111111111111',
       sku: 'PEN',
       name: 'Blue pen',
       description: null,
@@ -42,10 +45,12 @@ describe('inventory mapper', () => {
       updatedAt: new Date('2026-08-22T00:00:00.000Z'),
       team: {
         id: 'team-a',
+        publicId: '22222222-2222-4222-8222-222222222222',
         name: 'Team A',
       },
       category: {
         id: 'category-a',
+        publicId: '33333333-3333-4333-8333-333333333333',
         name: 'Stationery',
       },
     });

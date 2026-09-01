@@ -85,7 +85,7 @@ export class NotificationService {
   ): Promise<SafeNotificationResponse> {
     const notification = await this.prisma.notification.findFirst({
       where: {
-        id: notificationId,
+        publicId: notificationId,
         receiverId: viewer.userId,
       },
       select: notificationSelect,
@@ -101,7 +101,7 @@ export class NotificationService {
 
     const updated = await this.prisma.notification.update({
       where: {
-        id: notification.id,
+        publicId: notification.publicId,
       },
       data: {
         readAt: new Date(),

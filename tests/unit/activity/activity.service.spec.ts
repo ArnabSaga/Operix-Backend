@@ -26,7 +26,7 @@ function createViewer(role: UserRole): OperixViewer {
 }
 
 function activity() {
-  return {
+  const value = {
     id: 'activity-a',
     actorId: 'member-a',
     action: 'TASK_STARTED',
@@ -39,6 +39,15 @@ function activity() {
       name: 'Member A',
     },
   };
+  Object.defineProperties(value, {
+    publicId: { value: value.id, enumerable: false },
+    entityPublicId: { value: value.entityId, enumerable: false },
+  });
+  Object.defineProperty(value.actor, 'publicId', {
+    value: value.actor.id,
+    enumerable: false,
+  });
+  return value;
 }
 
 function expectAppException(
@@ -74,7 +83,7 @@ describe('ActivityService', () => {
         to: '2026-08-21T23:59:59+06:00',
       }),
     ).resolves.toEqual({
-      data: [activity()],
+      data: [withoutActorId(activity())],
       meta: {
         page: 1,
         limit: 20,
@@ -90,7 +99,7 @@ describe('ActivityService', () => {
             {},
             { action: 'TASK_STARTED' },
             { entityType: 'TASK' },
-            { actorId: 'member-a' },
+            { actor: { publicId: 'member-a' } },
             {
               createdAt: {
                 gte: new Date('2026-08-21T00:00:00Z'),
@@ -185,7 +194,7 @@ describe('ActivityService', () => {
               ],
             },
             {
-              actorId: 'other-user',
+              actor: { publicId: 'other-user' },
             },
           ],
         },
@@ -289,3 +298,11 @@ describe('ActivityService', () => {
     }
   });
 });
+
+function withoutActorId<T extends { actorId?: unknown }>(
+  value: T,
+): Omit<T, 'actorId'> {
+  const copy = { ...value };
+  delete copy.actorId;
+  return copy;
+}

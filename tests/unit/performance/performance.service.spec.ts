@@ -33,7 +33,7 @@ function createViewer(role: UserRole): OperixViewer {
 }
 
 function member(overrides = {}) {
-  return {
+  const value = {
     id: 'member-a',
     name: 'Member A',
     employeeId: 'EMP-001',
@@ -47,6 +47,21 @@ function member(overrides = {}) {
     },
     ...overrides,
   };
+  Object.defineProperties(value, {
+    publicId: { value: value.id, enumerable: false },
+  });
+  if (value.teamMembership) {
+    Object.defineProperties(value.teamMembership, {
+      team: {
+        value: {
+          ...value.teamMembership.team,
+          publicId: value.teamMembership.teamId,
+        },
+        enumerable: true,
+      },
+    });
+  }
+  return value;
 }
 
 function task(overrides = {}) {
@@ -142,24 +157,25 @@ describe('PerformanceService', () => {
       },
     });
 
-    expect(prisma.user.findMany).toHaveBeenCalledWith({
-      where: {
-        AND: [
-          {
-            role: UserRole.MEMBER,
-          },
-          {
-            teamMembership: {
-              teamId: 'team-a',
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [
+            {
+              role: UserRole.MEMBER,
             },
-          },
-        ],
-      },
-      select: expect.any(Object) as object,
-      orderBy: [{ name: 'asc' }, { id: 'asc' }],
-      skip: 0,
-      take: 20,
-    });
+            {
+              teamMembership: {
+                team: { publicId: 'team-a' },
+              },
+            },
+          ],
+        },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        skip: 0,
+        take: 20,
+      }),
+    );
     expect(prisma.taskAssignment.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
@@ -263,18 +279,19 @@ describe('PerformanceService', () => {
         completionRate: null,
       },
     });
-    expect(prisma.user.findFirst).toHaveBeenCalledWith({
-      where: {
-        id: 'member-a',
-        AND: [
-          {
-            id: 'member-a',
-            role: UserRole.MEMBER,
-          },
-        ],
-      },
-      select: expect.any(Object) as object,
-    });
+    expect(prisma.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          publicId: 'member-a',
+          AND: [
+            {
+              id: 'member-a',
+              role: UserRole.MEMBER,
+            },
+          ],
+        },
+      }),
+    );
   });
 
   it('returns MEMBER_NOT_FOUND for out-of-scope Member detail', async () => {
@@ -304,9 +321,11 @@ describe('PerformanceService', () => {
     const prisma = {
       team: {
         findFirst: jestApi.fn().mockResolvedValue({
-          id: 'team-a',
+          id: 'team-a-db',
+          publicId: 'team-a',
           name: 'Team A',
-          adminId: 'admin-a',
+          adminId: 'admin-a-db',
+          admin: { publicId: 'admin-a' },
         }),
       },
       teamMember: {
@@ -368,31 +387,32 @@ describe('PerformanceService', () => {
         asOf: fixedNow,
       },
     });
-    expect(prisma.team.findFirst).toHaveBeenCalledWith({
-      where: {
-        id: 'team-a',
-        AND: [
-          {
-            id: {
-              in: ['team-a'],
+    expect(prisma.team.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          publicId: 'team-a',
+          AND: [
+            {
+              id: {
+                in: ['team-a'],
+              },
             },
-          },
-        ],
-      },
-      select: expect.any(Object) as object,
-    });
+          ],
+        },
+      }),
+    );
     expect(prisma.task.findMany).toHaveBeenCalledWith({
       where: {
-        teamId: 'team-a',
+        teamId: 'team-a-db',
       },
-      select: expect.any(Object) as object,
+      select: expect.anything() as object,
     });
     expect(prisma.taskReview.findMany).toHaveBeenCalledWith({
       where: {
         action: 'REQUEST_REVISION',
         submission: {
           task: {
-            teamId: 'team-a',
+            teamId: 'team-a-db',
           },
         },
       },

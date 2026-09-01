@@ -1,7 +1,10 @@
 export const managementReportSelect = {
   id: true,
+  publicId: true,
   adminId: true,
   teamId: true,
+  admin: { select: { publicId: true } },
+  team: { select: { publicId: true } },
   title: true,
   periodStart: true,
   periodEnd: true,
@@ -25,16 +28,12 @@ export const managementReportSelect = {
     },
     take: 1,
     select: {
-      id: true,
-      reportId: true,
       version: true,
       submittedAt: true,
       createdAt: true,
       review: {
         select: {
-          id: true,
-          reportVersionId: true,
-          reviewerId: true,
+          reviewer: { select: { publicId: true } },
           action: true,
           feedback: true,
           reviewedAt: true,
@@ -47,7 +46,6 @@ export const managementReportSelect = {
 
 export const managementReportVersionSelect = {
   id: true,
-  reportId: true,
   version: true,
   title: true,
   periodStart: true,

@@ -684,7 +684,7 @@ export class ImportService {
       throw this.memberImportExecutionBlocked(
         row,
         'memberId',
-        row.memberId,
+        row.employeeId ?? row.email ?? 'member',
         'Member identity or Team context changed during execution.',
       );
     }
@@ -795,7 +795,7 @@ export class ImportService {
         throw this.importExecutionReferenceChanged(
           row,
           'teamId',
-          row.teamId,
+          row.referenceCode,
           'Referenced Team no longer exists.',
         );
       }
@@ -805,7 +805,7 @@ export class ImportService {
         throw this.importExecutionReferenceChanged(
           row,
           'memberId',
-          row.memberId,
+          row.referenceCode,
           'Historical assignee no longer exists as a Member.',
         );
       }
@@ -814,7 +814,7 @@ export class ImportService {
         throw this.importExecutionReferenceChanged(
           row,
           'createdById',
-          row.createdById,
+          row.referenceCode,
           'Historical creator no longer exists.',
         );
       }
@@ -823,7 +823,7 @@ export class ImportService {
         throw this.importExecutionReferenceChanged(
           row,
           'assignedById',
-          row.assignedById,
+          row.referenceCode,
           'Historical assigner no longer exists.',
         );
       }

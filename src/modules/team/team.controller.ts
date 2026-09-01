@@ -16,6 +16,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { PaginationQueryDto } from '../../shared/pagination/pagination.dto.js';
 import { AssignMemberDto } from './dto/assign-member.dto.js';
 import { CreateTeamDto } from './dto/create-team.dto.js';
@@ -51,7 +52,7 @@ export class TeamController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   getTeam(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('teamId') teamId: string,
+    @Param('teamId', PublicIdPipe) teamId: string,
   ) {
     return this.teamService.getTeam(viewer, teamId);
   }
@@ -60,7 +61,7 @@ export class TeamController {
   @RequireRoles(UserRole.SUPER_ADMIN)
   updateTeam(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('teamId') teamId: string,
+    @Param('teamId', PublicIdPipe) teamId: string,
     @Body() dto: UpdateTeamDto,
   ) {
     return this.teamService.updateTeam(viewer, teamId, dto);
@@ -70,7 +71,7 @@ export class TeamController {
   @RequireRoles(UserRole.SUPER_ADMIN)
   reassignTeamAdmin(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('teamId') teamId: string,
+    @Param('teamId', PublicIdPipe) teamId: string,
     @Body() dto: ReassignTeamAdminDto,
   ) {
     return this.teamService.reassignTeamAdmin(viewer, teamId, dto);
@@ -80,7 +81,7 @@ export class TeamController {
   @RequireRoles(UserRole.SUPER_ADMIN)
   assignMember(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('teamId') teamId: string,
+    @Param('teamId', PublicIdPipe) teamId: string,
     @Body() dto: AssignMemberDto,
   ) {
     return this.teamService.assignMember(viewer, teamId, dto);

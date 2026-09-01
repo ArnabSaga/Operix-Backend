@@ -35,14 +35,14 @@ export class TaskAttachmentService {
       requireAtLeastOne: true,
     });
 
-    await this.assertTaskCanMutateAttachments(
+    const taskDbId = await this.resolveTaskCanMutateAttachments(
       this.prisma,
       viewer.userId,
       taskId,
     );
     await this.assertTaskAttachmentCapacity(
       this.prisma,
-      taskId,
+      taskDbId,
       validatedFiles.length,
     );
 
@@ -53,8 +53,16 @@ export class TaskAttachmentService {
 
     try {
       return await runSerializableTransaction(this.prisma, async (tx) => {
-        await this.assertTaskCanMutateAttachments(tx, viewer.userId, taskId);
-        await this.assertTaskAttachmentCapacity(tx, taskId, uploaded.length);
+        const currentTaskId = await this.resolveTaskCanMutateAttachments(
+          tx,
+          viewer.userId,
+          taskId,
+        );
+        await this.assertTaskAttachmentCapacity(
+          tx,
+          currentTaskId,
+          uploaded.length,
+        );
 
         const created: SafeAttachmentResponse[] = [];
 
@@ -75,7 +83,7 @@ export class TaskAttachmentService {
 
           const attachment = await tx.taskAttachment.create({
             data: {
-              taskId,
+              taskId: currentTaskId,
               fileId: fileAsset.id,
             },
             select: safeAttachmentSelect,
@@ -88,7 +96,7 @@ export class TaskAttachmentService {
           actorId: viewer.userId,
           action: TASK_ACTIVITY.TASK_ATTACHMENTS_ADDED,
           entityType: 'TASK',
-          entityId: taskId,
+          entityId: currentTaskId,
           metadata: {
             taskId,
             fileCount: uploaded.length,
@@ -112,7 +120,7 @@ export class TaskAttachmentService {
   ): Promise<SafeAttachmentResponse[]> {
     const task = await this.prisma.task.findFirst({
       where: {
-        id: taskId,
+        publicId: taskId,
         AND: [buildTaskScopeWhere(viewer)],
       },
       select: {
@@ -126,7 +134,7 @@ export class TaskAttachmentService {
 
     const attachments = await this.prisma.taskAttachment.findMany({
       where: {
-        taskId,
+        taskId: task.id,
       },
       select: safeAttachmentSelect,
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -146,15 +154,20 @@ export class TaskAttachmentService {
     const deleted = await runSerializableTransaction(
       this.prisma,
       async (tx) => {
-        await this.assertTaskCanMutateAttachments(tx, viewer.userId, taskId);
+        const taskDbId = await this.resolveTaskCanMutateAttachments(
+          tx,
+          viewer.userId,
+          taskId,
+        );
 
         const attachment = await tx.taskAttachment.findFirst({
           where: {
-            id: attachmentId,
-            taskId,
+            publicId: attachmentId,
+            taskId: taskDbId,
           },
           select: {
             id: true,
+            publicId: true,
             fileId: true,
             file: {
               select: {
@@ -209,7 +222,7 @@ export class TaskAttachmentService {
           actorId: viewer.userId,
           action: TASK_ACTIVITY.TASK_ATTACHMENT_REMOVED,
           entityType: 'TASK',
-          entityId: taskId,
+          entityId: taskDbId,
           metadata: {
             taskId,
             attachmentId: attachment.id,
@@ -218,7 +231,7 @@ export class TaskAttachmentService {
         });
 
         return {
-          id: attachment.id,
+          id: attachment.publicId,
           storageKey: attachment.file.storageKey,
         };
       },
@@ -237,14 +250,14 @@ export class TaskAttachmentService {
     };
   }
 
-  private async assertTaskCanMutateAttachments(
+  private async resolveTaskCanMutateAttachments(
     prisma: Pick<PrismaTransactionClient, 'task'>,
     adminId: string,
     taskId: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const task = await prisma.task.findFirst({
       where: {
-        id: taskId,
+        publicId: taskId,
         team: {
           adminId,
         },
@@ -258,7 +271,6 @@ export class TaskAttachmentService {
     if (!task) {
       throw this.taskNotFound();
     }
-
     if (task.status !== TaskStatus.PENDING) {
       throw new AppException(
         HttpStatus.CONFLICT,
@@ -266,6 +278,7 @@ export class TaskAttachmentService {
         'Task attachments can only be changed while the task is pending.',
       );
     }
+    return task.id;
   }
 
   private async assertTaskAttachmentCapacity(

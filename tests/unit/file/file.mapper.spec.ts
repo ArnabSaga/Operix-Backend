@@ -10,24 +10,29 @@ describe('file mapper', () => {
         id: 'attachment-a',
         file: {
           id: 'file-a',
+          publicId: '11111111-1111-4111-8111-111111111111',
           originalName: 'document.pdf',
           mimeType: 'application/pdf',
           sizeBytes: 123,
           uploadedById: 'admin-a',
+          uploadedBy: {
+            publicId: '22222222-2222-4222-8222-222222222222',
+          },
           createdAt: new Date('2026-08-22T00:00:00.000Z'),
         },
       }),
     ).toEqual({
-      id: 'attachment-a',
+      id: '11111111-1111-4111-8111-111111111111',
       file: {
-        id: 'file-a',
+        id: '11111111-1111-4111-8111-111111111111',
         originalName: 'document.pdf',
         mimeType: 'application/pdf',
         sizeBytes: 123,
-        uploadedById: 'admin-a',
+        uploadedById: '22222222-2222-4222-8222-222222222222',
         createdAt: new Date('2026-08-22T00:00:00.000Z'),
       },
-      downloadUrl: '/api/v1/files/file-a/download',
+      downloadUrl:
+        '/api/v1/files/11111111-1111-4111-8111-111111111111/download',
     });
   });
 

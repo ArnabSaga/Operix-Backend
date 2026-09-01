@@ -1,5 +1,6 @@
 export const performanceMemberSelect = {
   id: true,
+  publicId: true,
   name: true,
   employeeId: true,
   designation: true,
@@ -9,6 +10,7 @@ export const performanceMemberSelect = {
       teamId: true,
       team: {
         select: {
+          publicId: true,
           name: true,
         },
       },
@@ -18,6 +20,7 @@ export const performanceMemberSelect = {
 
 export const performanceTaskSelect = {
   id: true,
+  publicId: true,
   status: true,
   priority: true,
   dueAt: true,
@@ -27,6 +30,8 @@ export const performanceTaskSelect = {
 
 export const performanceTeamSelect = {
   id: true,
+  publicId: true,
   name: true,
   adminId: true,
+  admin: { select: { publicId: true } },
 } as const;
