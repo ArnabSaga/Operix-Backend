@@ -167,7 +167,11 @@ export class RegistrationService {
     const pagination = normalizePagination(query);
     const q = query.q?.trim();
     const where: Prisma.RegistrationRequestWhereInput = {
-      ...(query.status ? { status: query.status } : {}),
+      ...(query.status === RegistrationRequestStatus.PENDING
+        ? { status: { in: [RegistrationRequestStatus.PENDING, RegistrationRequestStatus.APPROVING] } }
+        : query.status
+          ? { status: query.status }
+          : {}),
       ...(q
         ? {
             OR: [

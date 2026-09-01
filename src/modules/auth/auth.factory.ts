@@ -15,6 +15,11 @@ import {
   INITIAL_PASSWORD_MIN_LENGTH,
 } from './password-policy.constant.js';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function userWhereById(id: string) {
+  return UUID_REGEX.test(id) ? { OR: [{ id }, { publicId: id }] } : { id };
+}
+
 const operixUserAdditionalFields = {
   publicId: {
     type: 'string',
@@ -111,7 +116,7 @@ export function createOperixAuth(
           await prisma.$transaction(async (tx) => {
             const transitioned = await tx.user.updateMany({
               where: {
-                id: user.id,
+                ...userWhereById(user.id),
                 status: UserStatus.INACTIVE,
                 passwordSetupRequired: true,
                 registrationRequestId: { not: null },
@@ -122,9 +127,9 @@ export function createOperixAuth(
               },
             });
             if (transitioned.count !== 1) return;
-            const activated = await tx.user.findUnique({
-              where: { id: user.id },
-              select: { registrationRequestId: true },
+            const activated = await tx.user.findFirst({
+              where: userWhereById(user.id),
+              select: { registrationRequestId: true, id: true },
             });
             if (!activated?.registrationRequestId) return;
             await tx.registrationRequest.update({
