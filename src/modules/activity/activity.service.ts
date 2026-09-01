@@ -12,6 +12,7 @@ import {
 import type { ListActivityQueryDto } from './dto/list-activity-query.dto.js';
 import type { PaginatedActivityResponse } from './activity.interface.js';
 import { activitySelect } from './activity.select.js';
+import { mapActivityResponse } from './activity.mapper.js';
 
 @Injectable()
 export class ActivityService {
@@ -40,7 +41,7 @@ export class ActivityService {
     ]);
 
     return {
-      data,
+      data: data.map(mapActivityResponse),
       meta: createPaginationMeta({
         page: normalized.page,
         limit: normalized.limit,
@@ -55,12 +56,13 @@ export class ActivityService {
   ): Promise<PaginatedActivityResponse['data']> {
     const visibility = await this.buildVisibilityWhere(viewer);
 
-    return this.prisma.activityLog.findMany({
+    const activities = await this.prisma.activityLog.findMany({
       where: visibility,
       select: activitySelect,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
     });
+    return activities.map(mapActivityResponse);
   }
 
   private async buildVisibilityWhere(
@@ -263,9 +265,7 @@ export class ActivityService {
         );
       }
 
-      filters.push({
-        actorId: query.actorId,
-      });
+      filters.push({ actor: { publicId: query.actorId } });
     }
 
     const dateRange = parseActivityDateRange(query.from, query.to);

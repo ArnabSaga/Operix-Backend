@@ -1,4 +1,4 @@
-import type { ActivityLog, Prisma } from '../../../generated/prisma/client.js';
+import type { Prisma } from '../../../generated/prisma/client.js';
 import type { PaginationMeta } from '../../shared/pagination/pagination.interface.js';
 
 export interface SafeActivityActorResponse {
@@ -6,13 +6,15 @@ export interface SafeActivityActorResponse {
   name: string;
 }
 
-export type SafeActivityResponse = Pick<
-  ActivityLog,
-  'id' | 'actorId' | 'action' | 'entityType' | 'entityId' | 'createdAt'
-> & {
+export interface SafeActivityResponse {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  createdAt: Date;
   metadata: Prisma.JsonValue | null;
   actor: SafeActivityActorResponse | null;
-};
+}
 
 export interface PaginatedActivityResponse {
   data: SafeActivityResponse[];

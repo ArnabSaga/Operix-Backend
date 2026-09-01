@@ -1,52 +1,47 @@
 import type {
-  ManagementReport,
-  ManagementReportReview,
-  ManagementReportVersion,
-} from '../../../generated/prisma/client.js';
+  ManagementReportStatus,
+  ManagementReportReviewAction,
+} from '../../../generated/prisma/enums.js';
 import type { PaginationMeta } from '../../shared/pagination/pagination.interface.js';
 
-export type SafeManagementReportVersionSummary = Pick<
-  ManagementReportVersion,
-  'id' | 'reportId' | 'version' | 'submittedAt' | 'createdAt'
->;
+export interface SafeManagementReportVersionSummary {
+  version: number;
+  submittedAt: Date;
+  createdAt: Date;
+}
 
-export type SafeManagementReportReviewSummary = Pick<
-  ManagementReportReview,
-  | 'id'
-  | 'reportVersionId'
-  | 'reviewerId'
-  | 'action'
-  | 'feedback'
-  | 'reviewedAt'
-  | 'createdAt'
->;
+export interface SafeManagementReportReviewSummary {
+  reviewer: { id: string };
+  action: ManagementReportReviewAction;
+  feedback: string | null;
+  reviewedAt: Date;
+  createdAt: Date;
+}
 
-export type SafeManagementReportResponse = Pick<
-  ManagementReport,
-  | 'id'
-  | 'adminId'
-  | 'teamId'
-  | 'title'
-  | 'periodStart'
-  | 'periodEnd'
-  | 'operationalSummary'
-  | 'completedWorkSummary'
-  | 'pendingWorkSummary'
-  | 'overdueWorkSummary'
-  | 'performanceSummary'
-  | 'keyIssues'
-  | 'actionsTaken'
-  | 'nextPeriodPlan'
-  | 'remarks'
-  | 'status'
-  | 'submittedAt'
-  | 'approvedAt'
-  | 'createdAt'
-  | 'updatedAt'
-> & {
+export interface SafeManagementReportResponse {
+  id: string;
+  adminId: string;
+  teamId: string;
+  title: string;
+  periodStart: Date;
+  periodEnd: Date;
+  operationalSummary: string | null;
+  completedWorkSummary: string | null;
+  pendingWorkSummary: string | null;
+  overdueWorkSummary: string | null;
+  performanceSummary: string | null;
+  keyIssues: string | null;
+  actionsTaken: string | null;
+  nextPeriodPlan: string | null;
+  remarks: string | null;
+  status: ManagementReportStatus;
+  submittedAt: Date | null;
+  approvedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
   latestSubmittedVersion: SafeManagementReportVersionSummary | null;
   latestReview: SafeManagementReportReviewSummary | null;
-};
+}
 
 export interface PaginatedManagementReportResponse {
   data: SafeManagementReportResponse[];

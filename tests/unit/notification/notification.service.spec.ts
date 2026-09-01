@@ -22,7 +22,7 @@ function createViewer(role: UserRole = UserRole.MEMBER): OperixViewer {
 }
 
 function notification(overrides = {}) {
-  return {
+  const value = {
     id: 'notification-a',
     actorId: 'admin-a',
     type: 'TASK_ASSIGNED',
@@ -38,6 +38,15 @@ function notification(overrides = {}) {
     },
     ...overrides,
   };
+  Object.defineProperties(value, {
+    publicId: { value: value.id, enumerable: false },
+    targetPublicId: { value: value.targetId, enumerable: false },
+  });
+  Object.defineProperty(value.actor, 'publicId', {
+    value: value.actor.id,
+    enumerable: false,
+  });
+  return value;
 }
 
 function expectAppException(
@@ -74,7 +83,7 @@ describe('NotificationService', () => {
     ).resolves.toEqual({
       data: [
         {
-          ...notification(),
+          ...withoutActorId(notification()),
           isRead: false,
         },
       ],
@@ -192,3 +201,11 @@ describe('NotificationService', () => {
     });
   });
 });
+
+function withoutActorId<T extends { actorId?: unknown }>(
+  value: T,
+): Omit<T, 'actorId'> {
+  const copy = { ...value };
+  delete copy.actorId;
+  return copy;
+}

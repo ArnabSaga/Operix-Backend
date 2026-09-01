@@ -15,6 +15,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { buildContentDisposition } from './file.mapper.js';
 import { FileService } from './file.service.js';
 
@@ -28,7 +29,7 @@ export class FileController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
   async downloadFile(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('fileId') fileId: string,
+    @Param('fileId', PublicIdPipe) fileId: string,
     @Res({ passthrough: true }) response: Response,
   ) {
     const file = await this.fileService.downloadFile(viewer, fileId);

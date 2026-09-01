@@ -10,7 +10,7 @@ import { AppException } from '../../shared/errors/app.exception.js';
 import { createOperixProvisioningAuth } from '../auth/auth.factory.js';
 import { adminSelect } from './admin/admin.select.js';
 import { USER_MANAGEMENT_ERROR_CODE } from './user-management.constant.js';
-import type { SafeUserResponse } from './user-management.interface.js';
+import type { SelectedSafeUser } from './user-management.mapper.js';
 
 export interface AccountProvisioningInput {
   name: string;
@@ -30,7 +30,7 @@ export class AccountProvisioningService {
 
   async provisionAccount(
     input: AccountProvisioningInput,
-  ): Promise<SafeUserResponse> {
+  ): Promise<SelectedSafeUser> {
     await this.assertEmailAvailable(input.email);
     await this.assertEmployeeIdAvailable(input.employeeId ?? null);
 

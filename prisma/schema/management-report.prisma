@@ -1,5 +1,6 @@
 model ManagementReport {
   id String @id @default(cuid())
+  publicId String @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
 
   adminId String
   teamId  String

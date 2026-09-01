@@ -12,9 +12,9 @@ export function mapManagementReportResponse(
   const [latestSubmittedVersion] = report.versions;
 
   return {
-    id: report.id,
-    adminId: report.adminId,
-    teamId: report.teamId,
+    id: report.publicId,
+    adminId: report.admin.publicId,
+    teamId: report.team.publicId,
     title: report.title,
     periodStart: report.periodStart,
     periodEnd: report.periodEnd,
@@ -34,13 +34,19 @@ export function mapManagementReportResponse(
     updatedAt: report.updatedAt,
     latestSubmittedVersion: latestSubmittedVersion
       ? {
-          id: latestSubmittedVersion.id,
-          reportId: latestSubmittedVersion.reportId,
           version: latestSubmittedVersion.version,
           submittedAt: latestSubmittedVersion.submittedAt,
           createdAt: latestSubmittedVersion.createdAt,
         }
       : null,
-    latestReview: latestSubmittedVersion?.review ?? null,
+    latestReview: latestSubmittedVersion?.review
+      ? {
+          reviewer: { id: latestSubmittedVersion.review.reviewer.publicId },
+          action: latestSubmittedVersion.review.action,
+          feedback: latestSubmittedVersion.review.feedback,
+          reviewedAt: latestSubmittedVersion.review.reviewedAt,
+          createdAt: latestSubmittedVersion.review.createdAt,
+        }
+      : null,
   };
 }

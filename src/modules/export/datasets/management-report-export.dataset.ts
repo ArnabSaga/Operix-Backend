@@ -70,7 +70,7 @@ export function buildManagementReportExportWorkbook(
               dateCell(report.latestSubmittedVersion?.submittedAt),
               textCell(report.latestReview?.action),
               textCell(report.latestReview?.feedback),
-              textCell(report.latestReview?.reviewerId),
+              textCell(report.latestReview?.reviewer.id),
               dateCell(report.latestReview?.reviewedAt),
               dateCell(report.submittedAt),
               dateCell(report.approvedAt),

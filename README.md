@@ -581,6 +581,12 @@ ArnabSaga
 
 Update the license before publishing as open source.
 
+## Public Identifier Contract
+
+Database primary keys remain private to the backend. API route parameters and response `id`/`*Id` fields use PostgreSQL-generated UUIDs for externally addressable records. Services translate those UUIDs into private IDs before scope checks and business operations. Employee IDs, task reference codes, SKUs, emails, and names remain supported business identifiers.
+
+This is a coordinated breaking contract: clients must send public UUIDs and must not expect Prisma CUIDs. Better Auth still uses private identity internally, while browser sign-in/session responses and `GET /api/v1/viewer/me` expose public Operix identity only. See `resource/better-auth-route-inventory.md` for the auth-route security decisions.
+
 ---
 
 <div align="center">

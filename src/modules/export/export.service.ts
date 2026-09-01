@@ -266,7 +266,6 @@ export class ExportService {
       generatedAt: now,
       asOf: now,
       viewerRole: viewer.role,
-      viewerId: viewer.userId,
       effectiveScope: scopeForViewer(viewer, scope),
       effectiveFilters,
     };

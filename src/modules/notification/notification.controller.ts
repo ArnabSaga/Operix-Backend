@@ -14,6 +14,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { ListNotificationQueryDto } from './dto/list-notification-query.dto.js';
 import { NotificationService } from './notification.service.js';
 
@@ -48,7 +49,7 @@ export class NotificationController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
   markNotificationRead(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('notificationId') notificationId: string,
+    @Param('notificationId', PublicIdPipe) notificationId: string,
   ) {
     return this.notificationService.markNotificationRead(
       viewer,

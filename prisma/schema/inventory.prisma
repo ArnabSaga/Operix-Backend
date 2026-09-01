@@ -1,5 +1,6 @@
 model InventoryCategory {
   id          String  @id @default(cuid())
+  publicId    String  @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
   name        String  @unique
   description String?
   isActive    Boolean @default(true)
@@ -15,6 +16,7 @@ model InventoryCategory {
 
 model InventoryItem {
   id          String  @id @default(cuid())
+  publicId    String  @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
   sku         String
   name        String
   description String?
@@ -46,6 +48,7 @@ model InventoryItem {
 
 model InventoryTransaction {
   id String @id @default(cuid())
+  publicId String @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
 
   itemId String
 
@@ -80,6 +83,7 @@ model InventoryTransaction {
 
 model InventoryAssignment {
   id String @id @default(cuid())
+  publicId String @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
 
   itemId       String
   memberId     String

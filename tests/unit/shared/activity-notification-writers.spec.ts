@@ -84,9 +84,7 @@ describe('writeActivity', () => {
         action: 'MEMBER_CREATED',
         entityType: 'USER',
         entityId: 'member-a',
-        metadata: {
-          safe: 'value',
-        },
+        metadata: undefined,
         ipAddress: '127.0.0.1',
         userAgent: 'test',
         requestId: 'request-a',

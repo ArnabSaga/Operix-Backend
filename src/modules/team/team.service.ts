@@ -28,6 +28,7 @@ import type {
   PaginatedTeamResponse,
   SafeTeamResponse,
 } from './team.interface.js';
+import { mapTeamResponse } from './team.mapper.js';
 
 @Injectable()
 export class TeamService {
@@ -38,12 +39,12 @@ export class TeamService {
     dto: CreateTeamDto,
   ): Promise<SafeTeamResponse> {
     return runSerializableTransaction(this.prisma, async (tx) => {
-      await this.assertActiveAdmin(tx, dto.adminId);
+      const adminId = await this.resolveActiveAdminId(tx, dto.adminId);
 
       const team = await tx.team.create({
         data: {
           name: dto.name,
-          adminId: dto.adminId,
+          adminId,
         },
         select: teamSelect,
       });
@@ -59,7 +60,7 @@ export class TeamService {
         },
       });
 
-      return team;
+      return mapTeamResponse(team);
     });
   }
 
@@ -82,7 +83,7 @@ export class TeamService {
     ]);
 
     return {
-      data,
+      data: data.map(mapTeamResponse),
       meta: createPaginationMeta({
         page: normalized.page,
         limit: normalized.limit,
@@ -97,7 +98,7 @@ export class TeamService {
   ): Promise<SafeTeamResponse> {
     const team = await this.prisma.team.findFirst({
       where: {
-        id: teamId,
+        publicId: teamId,
         ...buildTeamScopeWhere(viewer),
       },
       select: teamSelect,
@@ -107,7 +108,7 @@ export class TeamService {
       throw this.teamNotFound();
     }
 
-    return team;
+    return mapTeamResponse(team);
   }
 
   async updateTeam(
@@ -115,7 +116,12 @@ export class TeamService {
     teamId: string,
     dto: UpdateTeamDto,
   ): Promise<SafeTeamResponse> {
-    const team = await this.getTeam(viewer, teamId);
+    const current = await this.prisma.team.findFirst({
+      where: { publicId: teamId, ...buildTeamScopeWhere(viewer) },
+      select: teamSelect,
+    });
+    if (!current) throw this.teamNotFound();
+    const team = mapTeamResponse(current);
 
     if (dto.name === undefined || dto.name === team.name) {
       return team;
@@ -124,7 +130,7 @@ export class TeamService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.team.update({
         where: {
-          id: teamId,
+          id: current.id,
         },
         data: {
           name: dto.name,
@@ -136,7 +142,7 @@ export class TeamService {
         actorId: viewer.userId,
         action: TEAM_ACTIVITY.TEAM_UPDATED,
         entityType: 'TEAM',
-        entityId: teamId,
+        entityId: current.id,
         metadata: {
           teamId,
           previousName: team.name,
@@ -144,7 +150,7 @@ export class TeamService {
         },
       });
 
-      return updated;
+      return mapTeamResponse(updated);
     });
   }
 
@@ -156,7 +162,7 @@ export class TeamService {
     return runSerializableTransaction(this.prisma, async (tx) => {
       const team = await tx.team.findFirst({
         where: {
-          id: teamId,
+          publicId: teamId,
           ...buildTeamScopeWhere(viewer),
         },
         select: teamSelect,
@@ -166,7 +172,8 @@ export class TeamService {
         throw this.teamNotFound();
       }
 
-      if (team.adminId === dto.adminId) {
+      const nextAdminId = await this.resolveActiveAdminId(tx, dto.adminId);
+      if (team.adminId === nextAdminId) {
         throw new AppException(
           HttpStatus.CONFLICT,
           TEAM_ERROR_CODE.TEAM_ALREADY_ASSIGNED_TO_ADMIN,
@@ -174,14 +181,12 @@ export class TeamService {
         );
       }
 
-      await this.assertActiveAdmin(tx, dto.adminId);
-
       const updated = await tx.team.update({
         where: {
-          id: teamId,
+          id: team.id,
         },
         data: {
-          adminId: dto.adminId,
+          adminId: nextAdminId,
         },
         select: teamSelect,
       });
@@ -190,25 +195,25 @@ export class TeamService {
         actorId: viewer.userId,
         action: TEAM_ACTIVITY.TEAM_ADMIN_REASSIGNED,
         entityType: 'TEAM',
-        entityId: teamId,
+        entityId: team.id,
         metadata: {
           teamId,
           previousAdminId: team.adminId,
-          newAdminId: dto.adminId,
+          newAdminId: nextAdminId,
         },
       });
 
       await createNotification(tx, {
-        receiverId: dto.adminId,
+        receiverId: nextAdminId,
         actorId: viewer.userId,
         type: TEAM_NOTIFICATION.TEAM_ADMIN_REASSIGNED,
         title: 'Team responsibility assigned',
         body: 'You have been assigned responsibility for a team.',
         targetType: 'TEAM',
-        targetId: teamId,
+        targetId: team.id,
       });
 
-      return updated;
+      return mapTeamResponse(updated);
     });
   }
 
@@ -219,12 +224,12 @@ export class TeamService {
   ): Promise<SafeTeamResponse> {
     try {
       return await runSerializableTransaction(this.prisma, async (tx) => {
-        const team = await this.findTeamWithAdmin(tx, teamId);
+        const team = await this.findTeamWithAdminByPublicId(tx, teamId);
         this.assertTeamHasActiveAdmin(team);
 
         const member = await tx.user.findFirst({
           where: {
-            id: dto.memberId,
+            publicId: dto.memberId,
             role: UserRole.MEMBER,
           },
           select: {
@@ -260,8 +265,8 @@ export class TeamService {
 
         await tx.teamMember.create({
           data: {
-            teamId,
-            memberId: dto.memberId,
+            teamId: team.id,
+            memberId: member.id,
           },
         });
 
@@ -269,32 +274,32 @@ export class TeamService {
           actorId: viewer.userId,
           action: TEAM_ACTIVITY.MEMBER_ASSIGNED_TO_TEAM,
           entityType: 'TEAM',
-          entityId: teamId,
+          entityId: team.id,
           metadata: {
-            memberId: dto.memberId,
-            teamId,
+            memberId: member.id,
+            teamId: team.id,
             adminId: team.adminId,
           },
         });
 
         await createNotification(tx, {
-          receiverId: dto.memberId,
+          receiverId: member.id,
           actorId: viewer.userId,
           type: TEAM_NOTIFICATION.MEMBER_ASSIGNED_TO_TEAM,
           title: 'Team assignment updated',
           body: 'You have been assigned to a team.',
           targetType: 'TEAM',
-          targetId: teamId,
+          targetId: team.id,
         });
 
         const assignedTeam = await tx.team.findUniqueOrThrow({
           where: {
-            id: teamId,
+            id: team.id,
           },
           select: teamSelect,
         });
 
-        return assignedTeam;
+        return mapTeamResponse(assignedTeam);
       });
     } catch (error) {
       throw mapAssignmentRace(error);
@@ -310,7 +315,7 @@ export class TeamService {
       return await this.prisma.$transaction(async (tx) => {
         const member = await tx.user.findFirst({
           where: {
-            id: memberId,
+            publicId: memberId,
             role: UserRole.MEMBER,
           },
           select: {
@@ -343,10 +348,13 @@ export class TeamService {
 
         const currentMembership = member.teamMembership;
 
-        const targetTeam = await this.findTeamWithAdmin(tx, targetTeamId);
+        const targetTeam = await this.findTeamWithAdminByPublicId(
+          tx,
+          targetTeamId,
+        );
         this.assertTeamHasActiveAdmin(targetTeam);
 
-        if (currentMembership.teamId === targetTeamId) {
+        if (currentMembership.teamId === targetTeam.id) {
           throw new AppException(
             HttpStatus.CONFLICT,
             TEAM_ERROR_CODE.MEMBER_ALREADY_IN_TARGET_TEAM,
@@ -362,8 +370,8 @@ export class TeamService {
 
         await tx.teamMember.create({
           data: {
-            teamId: targetTeamId,
-            memberId,
+            teamId: targetTeam.id,
+            memberId: member.id,
           },
         });
 
@@ -371,51 +379,51 @@ export class TeamService {
           actorId: viewer.userId,
           action: TEAM_ACTIVITY.MEMBER_TRANSFERRED,
           entityType: 'USER',
-          entityId: memberId,
+          entityId: member.id,
           metadata: {
-            memberId,
+            memberId: member.id,
             fromTeamId: currentMembership.teamId,
-            toTeamId: targetTeamId,
+            toTeamId: targetTeam.id,
             fromAdminId: currentMembership.team.adminId,
             toAdminId: targetTeam.adminId,
           },
         });
 
         await createNotification(tx, {
-          receiverId: memberId,
+          receiverId: member.id,
           actorId: viewer.userId,
           type: TEAM_NOTIFICATION.MEMBER_TRANSFERRED,
           title: 'Team assignment changed',
           body: 'You have been transferred to another team.',
           targetType: 'TEAM',
-          targetId: targetTeamId,
+          targetId: targetTeam.id,
         });
 
         const updatedTeam = await tx.team.findUniqueOrThrow({
           where: {
-            id: targetTeamId,
+            id: targetTeam.id,
           },
           select: teamSelect,
         });
 
-        return updatedTeam;
+        return mapTeamResponse(updatedTeam);
       });
     } catch (error) {
       throw mapTransferRace(error);
     }
   }
 
-  private async assertActiveAdmin(
+  private async resolveActiveAdminId(
     tx: {
       user: {
         findFirst: PrismaTransactionFindFirstUser;
       };
     },
     adminId: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const admin = await tx.user.findFirst({
       where: {
-        id: adminId,
+        publicId: adminId,
         role: UserRole.ADMIN,
         status: UserStatus.ACTIVE,
       },
@@ -431,6 +439,7 @@ export class TeamService {
         'Target Admin is not active.',
       );
     }
+    return admin.id;
   }
 
   private async findTeamWithAdmin(
@@ -457,6 +466,22 @@ export class TeamService {
       throw this.teamNotFound();
     }
 
+    return team;
+  }
+
+  private async findTeamWithAdminByPublicId(
+    tx: Pick<Prisma.TransactionClient, 'team'>,
+    publicId: string,
+  ) {
+    const team = await tx.team.findUnique({
+      where: { publicId },
+      select: {
+        id: true,
+        adminId: true,
+        admin: { select: { role: true, status: true } },
+      },
+    });
+    if (!team) throw this.teamNotFound();
     return team;
   }
 

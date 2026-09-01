@@ -29,11 +29,10 @@ export interface PaginatedTaskResponse {
 }
 
 export interface SafeTaskStatusHistoryResponse {
-  id: string;
   taskId: string;
   fromStatus: Task['status'] | null;
   toStatus: Task['status'];
-  changedById: string;
+  changedBy: { id: string; name: string };
   notes: string | null;
   changedAt: Date;
 }

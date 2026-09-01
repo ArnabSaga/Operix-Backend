@@ -3,7 +3,10 @@ import { PrismaService } from '../../database/prisma.service.js';
 import { UserRole } from '../../../generated/prisma/enums.js';
 import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
 import { AppException } from '../../shared/errors/app.exception.js';
-import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import type {
+  OperixViewer,
+  OperixViewerResponse,
+} from '../../shared/auth/viewer.interface.js';
 import type { OperixViewerScope } from '../../shared/auth/scope/viewer-scope.interface.js';
 
 @Injectable()
@@ -47,6 +50,58 @@ export class OperixAuthService {
         administeredTeamIds: user.administeredTeams.map((team) => team.id),
         memberTeamId: user.teamMembership?.teamId ?? null,
       }),
+    };
+  }
+
+  async getViewerResponse(userId: string): Promise<OperixViewerResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        publicId: true,
+        role: true,
+        status: true,
+        administeredTeams: { select: { publicId: true } },
+        teamMembership: { select: { team: { select: { publicId: true } } } },
+      },
+    });
+
+    if (!user) {
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        APP_ERROR_CODE.AUTH_REQUIRED,
+        'Authentication required.',
+      );
+    }
+
+    if (user.role === UserRole.SUPER_ADMIN) {
+      return {
+        userId: user.publicId,
+        role: user.role,
+        status: user.status,
+        scope: { type: 'GLOBAL' },
+      };
+    }
+
+    if (user.role === UserRole.ADMIN) {
+      return {
+        userId: user.publicId,
+        role: user.role,
+        status: user.status,
+        scope: {
+          type: 'ADMIN',
+          teamIds: user.administeredTeams.map((team) => team.publicId),
+        },
+      };
+    }
+
+    return {
+      userId: user.publicId,
+      role: user.role,
+      status: user.status,
+      scope: {
+        type: 'MEMBER',
+        teamId: user.teamMembership?.team.publicId ?? null,
+      },
     };
   }
 

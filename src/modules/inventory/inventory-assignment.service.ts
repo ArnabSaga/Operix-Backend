@@ -33,7 +33,6 @@ import type {
 import {
   buildInventoryAssignmentScopeWhere,
   buildInventoryItemScopeWhere,
-  getInventoryScopedTeamIds,
 } from './inventory-scope.policy.js';
 import { mapInventoryAssignmentResponse } from './inventory.mapper.js';
 import { inventoryAssignmentSelect } from './inventory.select.js';
@@ -54,7 +53,7 @@ export class InventoryAssignmentService {
     return runSerializableTransaction(this.prisma, async (tx) => {
       const item = await tx.inventoryItem.findFirst({
         where: {
-          id: itemId,
+          publicId: itemId,
           AND: [buildInventoryItemScopeWhere(viewer)],
         },
         select: {
@@ -90,7 +89,11 @@ export class InventoryAssignmentService {
         throwInsufficientStock();
       }
 
-      await this.assertActiveMemberInTeam(tx, dto.memberId, item.teamId);
+      const memberId = await this.resolveActiveMemberInTeam(
+        tx,
+        dto.memberId,
+        item.teamId,
+      );
 
       const resultingQuantity = item.quantity - dto.quantity;
 
@@ -103,7 +106,7 @@ export class InventoryAssignmentService {
       const assignmentRow = await tx.inventoryAssignment.create({
         data: {
           itemId: item.id,
-          memberId: dto.memberId,
+          memberId,
           assignedById: viewer.userId,
           quantity: dto.quantity,
           note: dto.note ?? null,
@@ -121,7 +124,7 @@ export class InventoryAssignmentService {
           previousQuantity: item.quantity,
           resultingQuantity,
           actorId: viewer.userId,
-          memberId: dto.memberId,
+          memberId,
           assignmentId: assignmentRow.id,
           note: dto.note ?? null,
         },
@@ -135,14 +138,14 @@ export class InventoryAssignmentService {
         metadata: {
           itemId: item.id,
           assignmentId: assignmentRow.id,
-          memberId: dto.memberId,
+          memberId,
           teamId: item.teamId,
           quantity: dto.quantity,
         },
       });
 
       await createNotification(tx, {
-        receiverId: dto.memberId,
+        receiverId: memberId,
         actorId: viewer.userId,
         type: INVENTORY_NOTIFICATION.INVENTORY_ASSIGNED,
         title: INVENTORY_NOTIFICATION.ASSIGNED_TITLE,
@@ -194,7 +197,7 @@ export class InventoryAssignmentService {
   ): Promise<SafeInventoryAssignmentResponse> {
     const assignment = await this.prisma.inventoryAssignment.findFirst({
       where: {
-        id: assignmentId,
+        publicId: assignmentId,
         AND: [buildInventoryAssignmentScopeWhere(viewer)],
       },
       select: inventoryAssignmentSelect,
@@ -217,7 +220,7 @@ export class InventoryAssignmentService {
     return runSerializableTransaction(this.prisma, async (tx) => {
       const assignment = await tx.inventoryAssignment.findFirst({
         where: {
-          id: assignmentId,
+          publicId: assignmentId,
           AND: [buildInventoryAssignmentScopeWhere(viewer)],
         },
         select: {
@@ -336,25 +339,15 @@ export class InventoryAssignmentService {
     }
 
     if (query.teamId) {
-      if (
-        viewer.role === UserRole.ADMIN &&
-        !getInventoryScopedTeamIds(viewer).includes(query.teamId)
-      ) {
-        throw new AppException(
-          HttpStatus.FORBIDDEN,
-          APP_ERROR_CODE.FORBIDDEN,
-          'You do not have access to this Team inventory.',
-        );
-      }
-      filters.push({ item: { teamId: query.teamId } });
+      filters.push({ item: { team: { publicId: query.teamId } } });
     }
 
     if (query.memberId) {
-      filters.push({ memberId: query.memberId });
+      filters.push({ member: { publicId: query.memberId } });
     }
 
     if (query.itemId) {
-      filters.push({ itemId: query.itemId });
+      filters.push({ item: { publicId: query.itemId } });
     }
 
     if (query.returnStatus) {
@@ -388,14 +381,15 @@ export class InventoryAssignmentService {
     );
   }
 
-  private async assertActiveMemberInTeam(
+  private async resolveActiveMemberInTeam(
     tx: PrismaTransactionClient,
     memberId: string,
     teamId: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const member = await tx.user.findUnique({
-      where: { id: memberId },
+      where: { publicId: memberId },
       select: {
+        id: true,
         role: true,
         status: true,
         teamMembership: {
@@ -429,6 +423,7 @@ export class InventoryAssignmentService {
         'Member does not belong to the inventory item Team.',
       );
     }
+    return member.id;
   }
 }
 

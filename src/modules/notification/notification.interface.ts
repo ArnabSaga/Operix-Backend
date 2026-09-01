@@ -1,4 +1,3 @@
-import type { Notification } from '../../../generated/prisma/client.js';
 import type { PaginationMeta } from '../../shared/pagination/pagination.interface.js';
 
 export interface SafeNotificationActorResponse {
@@ -6,21 +5,18 @@ export interface SafeNotificationActorResponse {
   name: string;
 }
 
-export type SafeNotificationResponse = Pick<
-  Notification,
-  | 'id'
-  | 'actorId'
-  | 'type'
-  | 'title'
-  | 'body'
-  | 'targetType'
-  | 'targetId'
-  | 'readAt'
-  | 'createdAt'
-> & {
+export interface SafeNotificationResponse {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  targetType: string | null;
+  targetId: string | null;
+  readAt: Date | null;
+  createdAt: Date;
   isRead: boolean;
   actor: SafeNotificationActorResponse | null;
-};
+}
 
 export interface PaginatedNotificationResponse {
   data: SafeNotificationResponse[];

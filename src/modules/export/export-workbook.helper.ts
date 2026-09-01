@@ -32,7 +32,6 @@ export function metadataSheet(
     row(textCell('As Of'), textCell(input.asOf.toISOString())),
     row(textCell('Timezone'), textCell(EXPORT_TIMEZONE)),
     row(textCell('Viewer Role'), textCell(input.viewerRole)),
-    row(textCell('Viewer ID'), textCell(input.viewerId)),
     row(textCell('Effective Scope'), textCell(input.effectiveScope)),
   ];
 

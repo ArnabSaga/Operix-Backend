@@ -141,18 +141,19 @@ describe('SubmissionService', () => {
       }),
     ).resolves.toBe(submission);
 
-    expect(tx.task.findFirst).toHaveBeenCalledWith({
-      where: {
-        id: 'task-a',
-        assignments: {
-          some: {
-            memberId: 'member-a',
-            unassignedAt: null,
+    expect(tx.task.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          publicId: 'task-a',
+          assignments: {
+            some: {
+              memberId: 'member-a',
+              unassignedAt: null,
+            },
           },
         },
-      },
-      select: expect.any(Object) as object,
-    });
+      }),
+    );
     expect(tx.taskSubmission.create).toHaveBeenCalledWith({
       data: {
         taskId: 'task-a',
@@ -188,8 +189,6 @@ describe('SubmissionService', () => {
         actorId: 'member-a',
         entityId: 'task-a',
         metadata: {
-          taskId: 'task-a',
-          submissionId: 'submission-a',
           version: 1,
         },
       }) as Record<string, unknown>,
@@ -355,8 +354,6 @@ describe('SubmissionService', () => {
       data: expect.objectContaining({
         action: SUBMISSION_ACTIVITY.TASK_RESUBMITTED,
         metadata: {
-          taskId: 'task-a',
-          submissionId: 'submission-b',
           version: 2,
         },
       }) as Record<string, unknown>,
@@ -458,17 +455,18 @@ describe('SubmissionService', () => {
       service.getSubmission(createViewer(UserRole.ADMIN), 'submission-a'),
     ).resolves.toBe(submission);
 
-    expect(prisma.taskSubmission.findFirst).toHaveBeenCalledWith({
-      where: {
-        id: 'submission-a',
-        task: {
-          teamId: {
-            in: ['team-a'],
+    expect(prisma.taskSubmission.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          publicId: 'submission-a',
+          task: {
+            teamId: {
+              in: ['team-a'],
+            },
           },
         },
-      },
-      select: expect.any(Object) as object,
-    });
+      }),
+    );
   });
 
   it('lets Members read their own historical submissions but not another Member submission', async () => {
@@ -494,16 +492,17 @@ describe('SubmissionService', () => {
       },
     });
 
-    expect(prisma.taskSubmission.findMany).toHaveBeenCalledWith({
-      where: {
-        taskId: 'task-a',
-        submittedById: 'member-a',
-      },
-      select: expect.any(Object) as object,
-      orderBy: [{ version: 'desc' }, { id: 'desc' }],
-      skip: 0,
-      take: 20,
-    });
+    expect(prisma.taskSubmission.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          task: { publicId: 'task-a' },
+          submittedById: 'member-a',
+        },
+        orderBy: [{ version: 'desc' }, { id: 'desc' }],
+        skip: 0,
+        take: 20,
+      }),
+    );
 
     try {
       await service.getSubmission(

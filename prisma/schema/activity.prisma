@@ -1,9 +1,11 @@
 model ActivityLog {
   id         String   @id @default(cuid())
+  publicId   String   @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
   actorId    String?
   action     String
   entityType String
   entityId   String?
+  entityPublicId String? @map("entity_public_id") @db.Uuid
   metadata   Json?
   ipAddress  String?
   userAgent  String?
@@ -14,6 +16,7 @@ model ActivityLog {
 
   @@index([actorId, createdAt])
   @@index([entityType, entityId, createdAt])
+  @@index([entityType, entityPublicId, createdAt])
   @@index([action, createdAt])
   @@index([createdAt])
   @@map("activity_log")

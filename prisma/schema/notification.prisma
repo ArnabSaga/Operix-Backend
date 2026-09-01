@@ -1,5 +1,6 @@
 model Notification {
   id         String    @id @default(cuid())
+  publicId   String    @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
   receiverId String
   actorId    String?
   type       String
@@ -7,6 +8,7 @@ model Notification {
   body       String
   targetType String?
   targetId   String?
+  targetPublicId String? @map("target_public_id") @db.Uuid
   readAt     DateTime?
   createdAt  DateTime  @default(now())
 
@@ -17,5 +19,6 @@ model Notification {
   @@index([receiverId, createdAt])
   @@index([type, createdAt])
   @@index([targetType, targetId])
+  @@index([targetType, targetPublicId])
   @@map("notification")
 }

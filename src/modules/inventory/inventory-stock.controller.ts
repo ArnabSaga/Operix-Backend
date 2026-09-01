@@ -15,6 +15,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { InventoryAdjustmentDto } from './dto/inventory-adjustment.dto.js';
 import { InventoryTransactionQueryDto } from './dto/inventory-transaction-query.dto.js';
 import { StockInDto } from './dto/stock-in.dto.js';
@@ -31,7 +32,7 @@ export class InventoryStockController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   stockIn(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('itemId') itemId: string,
+    @Param('itemId', PublicIdPipe) itemId: string,
     @Body() dto: StockInDto,
   ) {
     return this.stockService.stockIn(viewer, itemId, dto);
@@ -41,7 +42,7 @@ export class InventoryStockController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   stockOut(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('itemId') itemId: string,
+    @Param('itemId', PublicIdPipe) itemId: string,
     @Body() dto: StockOutDto,
   ) {
     return this.stockService.stockOut(viewer, itemId, dto);
@@ -51,7 +52,7 @@ export class InventoryStockController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   adjust(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('itemId') itemId: string,
+    @Param('itemId', PublicIdPipe) itemId: string,
     @Body() dto: InventoryAdjustmentDto,
   ) {
     return this.stockService.adjust(viewer, itemId, dto);

@@ -16,6 +16,7 @@ import { OperixRoleGuard } from '../../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../../shared/identity/public-id.pipe.js';
 import { PaginationQueryDto } from '../../../shared/pagination/pagination.dto.js';
 import { AdminService } from './admin.service.js';
 import { CreateAdminDto } from './dto/create-admin.dto.js';
@@ -43,14 +44,14 @@ export class AdminController {
   }
 
   @Get(':adminId')
-  getAdmin(@Param('adminId') adminId: string) {
+  getAdmin(@Param('adminId', PublicIdPipe) adminId: string) {
     return this.adminService.getAdmin(adminId);
   }
 
   @Patch(':adminId')
   updateAdmin(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('adminId') adminId: string,
+    @Param('adminId', PublicIdPipe) adminId: string,
     @Body() dto: UpdateAdminDto,
   ) {
     return this.adminService.updateAdmin(viewer, adminId, dto);
@@ -59,7 +60,7 @@ export class AdminController {
   @Patch(':adminId/status')
   updateAdminStatus(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('adminId') adminId: string,
+    @Param('adminId', PublicIdPipe) adminId: string,
     @Body() dto: UpdateAdminStatusDto,
   ) {
     return this.adminService.updateAdminStatus(viewer, adminId, dto);

@@ -16,6 +16,7 @@ import { OperixRoleGuard } from '../../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../../shared/identity/public-id.pipe.js';
 import { PaginationQueryDto } from '../../../shared/pagination/pagination.dto.js';
 import { CreateMemberDto } from './dto/create-member.dto.js';
 import { TransferMemberDto } from './dto/transfer-member.dto.js';
@@ -51,7 +52,7 @@ export class MemberController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   getMember(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('memberId') memberId: string,
+    @Param('memberId', PublicIdPipe) memberId: string,
   ) {
     return this.memberService.getMember(viewer, memberId);
   }
@@ -60,7 +61,7 @@ export class MemberController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   updateMember(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('memberId') memberId: string,
+    @Param('memberId', PublicIdPipe) memberId: string,
     @Body() dto: UpdateMemberDto,
   ) {
     return this.memberService.updateMember(viewer, memberId, dto);
@@ -70,7 +71,7 @@ export class MemberController {
   @RequireRoles(UserRole.SUPER_ADMIN)
   updateMemberStatus(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('memberId') memberId: string,
+    @Param('memberId', PublicIdPipe) memberId: string,
     @Body() dto: UpdateMemberStatusDto,
   ) {
     return this.memberService.updateMemberStatus(viewer, memberId, dto);
@@ -80,7 +81,7 @@ export class MemberController {
   @RequireRoles(UserRole.SUPER_ADMIN)
   transferMember(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('memberId') memberId: string,
+    @Param('memberId', PublicIdPipe) memberId: string,
     @Body() dto: TransferMemberDto,
   ) {
     return this.memberService.transferMember(viewer, memberId, dto);

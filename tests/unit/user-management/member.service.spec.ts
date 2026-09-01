@@ -59,6 +59,7 @@ describe('MemberService', () => {
   it('sends a password-free Welcome after required Activity succeeds', async () => {
     const member = {
       id: 'member-a',
+      publicId: 'member-a',
       name: 'Member A',
       email: 'member-a@example.com',
       employeeId: null,
@@ -112,6 +113,7 @@ describe('MemberService', () => {
   it('keeps the created Member when Welcome delivery fails', async () => {
     const member = {
       id: 'member-a',
+      publicId: 'member-a',
       name: 'Member A',
       email: 'member-a@example.com',
       employeeId: null,
@@ -157,7 +159,7 @@ describe('MemberService', () => {
         email: member.email,
         initialPassword: 'super-secret-1',
       }),
-    ).resolves.toBe(member);
+    ).resolves.toMatchObject({ id: member.publicId, email: member.email });
 
     expect(provisioner.cleanupCreatedUser).not.toHaveBeenCalled();
   });

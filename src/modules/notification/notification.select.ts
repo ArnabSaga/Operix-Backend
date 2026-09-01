@@ -1,16 +1,15 @@
 export const notificationSelect = {
-  id: true,
-  actorId: true,
+  publicId: true,
   type: true,
   title: true,
   body: true,
   targetType: true,
-  targetId: true,
+  targetPublicId: true,
   readAt: true,
   createdAt: true,
   actor: {
     select: {
-      id: true,
+      publicId: true,
       name: true,
     },
   },

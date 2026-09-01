@@ -2,8 +2,8 @@ import type { Prisma } from '../../../generated/prisma/client.js';
 
 export const reviewSelect = {
   id: true,
-  submissionId: true,
-  reviewerId: true,
+  submission: { select: { publicId: true } },
+  reviewer: { select: { publicId: true, name: true } },
   action: true,
   feedback: true,
   reviewedAt: true,

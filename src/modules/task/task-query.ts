@@ -76,7 +76,7 @@ function buildTaskFilterConditions(
 
   if (query.teamId) {
     conditions.push({
-      teamId: query.teamId,
+      team: { publicId: query.teamId },
     });
   }
 
@@ -84,7 +84,7 @@ function buildTaskFilterConditions(
     conditions.push({
       assignments: {
         some: {
-          memberId: query.assignedMemberId,
+          member: { publicId: query.assignedMemberId },
           unassignedAt: null,
         },
       },

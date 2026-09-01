@@ -62,6 +62,7 @@ type DashboardMember = Prisma.UserGetPayload<{
 
 const dashboardMemberSelect = {
   id: true,
+  publicId: true,
   name: true,
   employeeId: true,
   designation: true,
@@ -71,6 +72,7 @@ const dashboardMemberSelect = {
       teamId: true,
       team: {
         select: {
+          publicId: true,
           name: true,
         },
       },
@@ -80,8 +82,10 @@ const dashboardMemberSelect = {
 
 const dashboardTeamSelect = {
   id: true,
+  publicId: true,
   name: true,
   adminId: true,
+  admin: { select: { publicId: true } },
 } as const;
 
 @Injectable()
@@ -472,6 +476,7 @@ export class DashboardService {
         self ??
         this.createEmptyMemberWorkload({
           id: viewer.userId,
+          publicId: '',
           name: '',
           employeeId: null,
           designation: null,
@@ -534,9 +539,9 @@ export class DashboardService {
       const workload = calculateWorkloadMetrics(teamTasks, now);
 
       return {
-        teamId: team.id,
+        teamId: team.publicId,
         teamName: team.name,
-        adminId: team.adminId,
+        adminId: team.admin.publicId,
         memberCount: teamMembers.length,
         activeMemberCount: teamMembers.filter(
           (member) => member.member.status === UserStatus.ACTIVE,
@@ -645,12 +650,12 @@ export class DashboardService {
       const workload = calculateWorkloadMetrics(tasks, now);
 
       return {
-        memberId: member.id,
+        memberId: member.publicId,
         name: member.name,
         employeeId: member.employeeId,
         designation: member.designation,
         status: member.status,
-        teamId: member.teamMembership?.teamId ?? null,
+        teamId: member.teamMembership?.team.publicId ?? null,
         teamName: member.teamMembership?.team.name ?? null,
         activeTasks: workload.activeTasks,
         overdueTasks: workload.overdueTasks,
@@ -736,12 +741,12 @@ export class DashboardService {
     const workload = calculateWorkloadMetrics([], new Date());
 
     return {
-      memberId: member.id,
+      memberId: member.publicId,
       name: member.name,
       employeeId: member.employeeId,
       designation: member.designation,
       status: member.status,
-      teamId: member.teamMembership?.teamId ?? null,
+      teamId: member.teamMembership?.team.publicId ?? null,
       teamName: member.teamMembership?.team.name ?? null,
       activeTasks: workload.activeTasks,
       overdueTasks: workload.overdueTasks,

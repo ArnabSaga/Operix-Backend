@@ -1,5 +1,6 @@
 model FileAsset {
   id           String   @id @default(cuid())
+  publicId     String   @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
   originalName String
   mimeType     String
   sizeBytes    Int
@@ -32,6 +33,7 @@ model SubmissionAttachment {
 
 model TaskAttachment {
   id        String   @id @default(cuid())
+  publicId  String   @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
   taskId    String
   fileId    String
   createdAt DateTime @default(now())

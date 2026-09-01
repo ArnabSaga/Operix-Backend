@@ -28,7 +28,7 @@ export class FileService {
   ): Promise<AuthorizedFileDownload> {
     const file = await this.prisma.fileAsset.findUnique({
       where: {
-        id: fileId,
+        publicId: fileId,
       },
       select: {
         id: true,

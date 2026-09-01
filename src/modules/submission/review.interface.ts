@@ -1,12 +1,10 @@
-import type { TaskReview } from '../../../generated/prisma/client.js';
+import type { TaskReviewAction } from '../../../generated/prisma/enums.js';
 
-export type SafeReviewResponse = Pick<
-  TaskReview,
-  | 'id'
-  | 'submissionId'
-  | 'reviewerId'
-  | 'action'
-  | 'feedback'
-  | 'reviewedAt'
-  | 'createdAt'
->;
+export interface SafeReviewResponse {
+  submissionId: string;
+  reviewer: { id: string; name: string };
+  action: TaskReviewAction;
+  feedback: string | null;
+  reviewedAt: Date;
+  createdAt: Date;
+}

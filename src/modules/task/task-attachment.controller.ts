@@ -18,6 +18,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import {
   MAX_ATTACHMENT_FILES,
   MAX_FILE_SIZE_BYTES,
@@ -43,7 +44,7 @@ export class TaskAttachmentController {
   )
   uploadTaskAttachments(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('taskId') taskId: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
     @UploadedFiles() files: Express.Multer.File[] | undefined,
   ) {
     return this.taskAttachmentService.uploadTaskAttachments(
@@ -57,7 +58,7 @@ export class TaskAttachmentController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
   listTaskAttachments(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('taskId') taskId: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
   ) {
     return this.taskAttachmentService.listTaskAttachments(viewer, taskId);
   }
@@ -66,8 +67,8 @@ export class TaskAttachmentController {
   @RequireRoles(UserRole.ADMIN)
   deleteTaskAttachment(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('taskId') taskId: string,
-    @Param('attachmentId') attachmentId: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Param('attachmentId', PublicIdPipe) attachmentId: string,
   ) {
     return this.taskAttachmentService.deleteTaskAttachment(
       viewer,

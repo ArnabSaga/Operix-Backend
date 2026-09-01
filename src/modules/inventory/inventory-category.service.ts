@@ -93,7 +93,7 @@ export class InventoryCategoryService {
     this.assertCategoryReader(viewer);
 
     const category = await this.prisma.inventoryCategory.findUnique({
-      where: { id: categoryId },
+      where: { publicId: categoryId },
       select: inventoryCategorySelect,
     });
 
@@ -117,7 +117,7 @@ export class InventoryCategoryService {
 
     return runSerializableTransaction(this.prisma, async (tx) => {
       const existing = await tx.inventoryCategory.findUnique({
-        where: { id: categoryId },
+        where: { publicId: categoryId },
         select: inventoryCategorySelect,
       });
 

@@ -16,6 +16,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { buildContentDisposition } from '../file/file.mapper.js';
 import { ExportDashboardTrendQueryDto } from './dto/export-dashboard-trend-query.dto.js';
 import { ExportFormatQueryDto } from './dto/export-format-query.dto.js';
@@ -60,7 +61,7 @@ export class ExportController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   async exportTeamPerformance(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('teamId') teamId: string,
+    @Param('teamId', PublicIdPipe) teamId: string,
     @Query() query: ExportFormatQueryDto,
     @Res({ passthrough: true }) response: Response,
   ) {

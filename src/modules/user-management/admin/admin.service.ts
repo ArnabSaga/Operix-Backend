@@ -22,6 +22,7 @@ import {
   USER_MANAGEMENT_ERROR_CODE,
 } from '../user-management.constant.js';
 import { adminSelect } from './admin.select.js';
+import { mapSafeUser } from '../user-management.mapper.js';
 import type { CreateAdminDto } from './dto/create-admin.dto.js';
 import type { UpdateAdminDto } from './dto/update-admin.dto.js';
 import type { UpdateAdminStatusDto } from './dto/update-admin-status.dto.js';
@@ -80,7 +81,7 @@ export class AdminService {
       });
     }
 
-    return admin;
+    return mapSafeUser(admin);
   }
 
   async listAdmins(
@@ -103,7 +104,7 @@ export class AdminService {
     ]);
 
     return {
-      data,
+      data: data.map(mapSafeUser),
       meta: createPaginationMeta({
         page: normalized.page,
         limit: normalized.limit,
@@ -115,7 +116,7 @@ export class AdminService {
   async getAdmin(adminId: string): Promise<SafeUserResponse> {
     const admin = await this.prisma.user.findFirst({
       where: {
-        id: adminId,
+        publicId: adminId,
         role: UserRole.ADMIN,
       },
       select: adminSelect,
@@ -125,7 +126,7 @@ export class AdminService {
       throw this.adminNotFound();
     }
 
-    return admin;
+    return mapSafeUser(admin);
   }
 
   async updateAdmin(
@@ -133,7 +134,12 @@ export class AdminService {
     adminId: string,
     dto: UpdateAdminDto,
   ): Promise<SafeUserResponse> {
-    const admin = await this.getAdmin(adminId);
+    const adminRecord = await this.prisma.user.findFirst({
+      where: { publicId: adminId, role: UserRole.ADMIN },
+      select: adminSelect,
+    });
+    if (!adminRecord) throw this.adminNotFound();
+    const admin = mapSafeUser(adminRecord);
     const data = {
       name: dto.name,
       employeeId: dto.employeeId,
@@ -150,7 +156,7 @@ export class AdminService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const updated = await tx.user.update({
-          where: { id: adminId },
+          where: { id: adminRecord.id },
           data: updateData,
           select: adminSelect,
         });
@@ -159,13 +165,13 @@ export class AdminService {
           actorId: viewer.userId,
           action: USER_MANAGEMENT_ACTIVITY.ADMIN_UPDATED,
           entityType: 'USER',
-          entityId: adminId,
+          entityId: adminRecord.id,
           metadata: {
             adminId,
           },
         });
 
-        return updated;
+        return mapSafeUser(updated);
       });
     } catch (error) {
       throw mapUserConflict(error);
@@ -180,7 +186,7 @@ export class AdminService {
     return runSerializableTransaction(this.prisma, async (tx) => {
       const admin = await tx.user.findFirst({
         where: {
-          id: adminId,
+          publicId: adminId,
           role: UserRole.ADMIN,
         },
         select: adminSelect,
@@ -191,7 +197,7 @@ export class AdminService {
       }
 
       if (admin.status === dto.status) {
-        return admin;
+        return mapSafeUser(admin);
       }
 
       if (
@@ -200,7 +206,7 @@ export class AdminService {
       ) {
         const ownedTeamCount = await tx.team.count({
           where: {
-            adminId,
+            adminId: admin.id,
           },
         });
 
@@ -214,7 +220,7 @@ export class AdminService {
       }
 
       const updated = await tx.user.update({
-        where: { id: adminId },
+        where: { id: admin.id },
         data: {
           status: dto.status,
         },
@@ -225,7 +231,7 @@ export class AdminService {
         actorId: viewer.userId,
         action: USER_MANAGEMENT_ACTIVITY.ADMIN_STATUS_CHANGED,
         entityType: 'USER',
-        entityId: adminId,
+        entityId: admin.id,
         metadata: {
           adminId,
           previousStatus: admin.status,
@@ -233,7 +239,7 @@ export class AdminService {
         },
       });
 
-      return updated;
+      return mapSafeUser(updated);
     });
   }
 

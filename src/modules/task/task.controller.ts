@@ -15,6 +15,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { PaginationQueryDto } from '../../shared/pagination/pagination.dto.js';
 import { AssignTaskDto } from './dto/assign-task.dto.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
@@ -49,7 +50,7 @@ export class TaskController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
   getTaskHistory(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('taskId') taskId: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
     @Query() query: PaginationQueryDto,
   ) {
     return this.taskService.getTaskHistory(viewer, taskId, query);
@@ -59,7 +60,7 @@ export class TaskController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
   getTask(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('taskId') taskId: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
   ) {
     return this.taskService.getTask(viewer, taskId);
   }
@@ -68,7 +69,7 @@ export class TaskController {
   @RequireRoles(UserRole.ADMIN)
   assignTask(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('taskId') taskId: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
     @Body() dto: AssignTaskDto,
   ) {
     return this.taskService.assignTask(viewer, taskId, dto);
@@ -78,7 +79,7 @@ export class TaskController {
   @RequireRoles(UserRole.MEMBER)
   startTask(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('taskId') taskId: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
   ) {
     return this.taskService.startTask(viewer, taskId);
   }

@@ -555,12 +555,13 @@ async function resolveHistoricalReferences(
     }),
     context.prisma.team.findMany({
       where: {
-        id: {
+        publicId: {
           in: teamIds,
         },
       },
       select: {
         id: true,
+        publicId: true,
       },
     }),
     context.prisma.user.findMany({
@@ -590,7 +591,7 @@ async function resolveHistoricalReferences(
 
   return {
     tasksByReference: new Map(tasks.map((task) => [task.referenceCode, task])),
-    teamIds: new Set(teams.map((team) => team.id)),
+    teamsByPublicId: new Map(teams.map((team) => [team.publicId, team.id])),
     membersByEmployeeId: new Map(
       members
         .filter((member) => member.employeeId)
@@ -608,7 +609,8 @@ function evaluateHistoricalTask(
 ): HistoricalTaskAnalyzedRow {
   const issues = [];
 
-  if (!resolved.teamIds.has(candidate.teamId)) {
+  const databaseTeamId = resolved.teamsByPublicId.get(candidate.teamId);
+  if (!databaseTeamId) {
     issues.push(
       issue(candidate, 'teamId', candidate.teamId, 'TEAM_NOT_RESOLVED'),
     );
@@ -660,7 +662,7 @@ function evaluateHistoricalTask(
   const creator = resolved.actorsByEmail.get(candidate.createdByEmail);
   const assigner = resolved.actorsByEmail.get(candidate.assignedByEmail);
 
-  if (!member || !creator || !assigner) {
+  if (!member || !creator || !assigner || !databaseTeamId) {
     return {
       sourceRow: candidate.row,
       disposition: IMPORT_DISPOSITION.INVALID,
@@ -676,7 +678,7 @@ function evaluateHistoricalTask(
     remarks: candidate.remarks,
     priority: candidate.priority,
     status: candidate.status,
-    teamId: candidate.teamId,
+    teamId: databaseTeamId,
     createdById: creator.id,
     memberId: member.id,
     assignedById: assigner.id,

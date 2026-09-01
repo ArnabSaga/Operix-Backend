@@ -50,16 +50,24 @@ function createViewer(role: UserRole = UserRole.ADMIN): OperixViewer {
 function createReview(
   overrides: Partial<SafeReviewResponse> = {},
 ): SafeReviewResponse {
-  return {
-    id: 'review-a',
+  const review = {
     submissionId: 'submission-a',
-    reviewerId: 'admin-a',
+    reviewer: { id: 'admin-a', name: 'Admin A' },
     action: TaskReviewAction.APPROVE,
     feedback: null,
     reviewedAt: fixedDate,
     createdAt: fixedDate,
     ...overrides,
   };
+  Object.defineProperty(review, 'submission', {
+    value: { publicId: review.submissionId },
+    enumerable: false,
+  });
+  Object.defineProperty(review.reviewer, 'publicId', {
+    value: review.reviewer.id,
+    enumerable: false,
+  });
+  return review;
 }
 
 function createSubmissionRecord(
@@ -205,12 +213,12 @@ describe('ReviewService', () => {
       action: TaskReviewAction.APPROVE,
     });
 
-    expect(result).toBe(review);
+    expect(result).toEqual(review);
     expect(tx.taskSubmission.findFirst).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         where: {
-          id: 'submission-a',
+          publicId: 'submission-a',
           task: {
             team: {
               adminId: 'admin-a',
@@ -270,11 +278,7 @@ describe('ReviewService', () => {
           actorId: 'admin-a',
           entityId: 'task-a',
           metadata: expect.objectContaining({
-            taskId: 'task-a',
-            submissionId: 'submission-a',
-            reviewId: 'review-a',
             version: 1,
-            action: TaskReviewAction.APPROVE,
           }),
         }),
       }),

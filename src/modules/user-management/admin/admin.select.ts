@@ -1,5 +1,6 @@
 export const adminSelect = {
   id: true,
+  publicId: true,
   name: true,
   email: true,
   employeeId: true,

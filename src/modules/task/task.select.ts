@@ -1,5 +1,6 @@
 export const taskSelect = {
   id: true,
+  publicId: true,
   referenceCode: true,
   title: true,
   description: true,
@@ -13,6 +14,9 @@ export const taskSelect = {
   teamId: true,
   categoryId: true,
   createdById: true,
+  team: { select: { publicId: true } },
+  category: { select: { publicId: true } },
+  createdBy: { select: { publicId: true } },
   createdAt: true,
   updatedAt: true,
 } as const;

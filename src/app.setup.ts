@@ -4,6 +4,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter.js';
+import { PublicIdentifierValidationPipe } from './shared/identity/public-identifier-validation.pipe.js';
 
 export function configureApplication(app: NestExpressApplication): void {
   const config = app.get(ConfigService);
@@ -16,6 +17,7 @@ export function configureApplication(app: NestExpressApplication): void {
     credentials: true,
   });
   app.useGlobalPipes(
+    new PublicIdentifierValidationPipe(),
     new ValidationPipe({
       transform: true,
       whitelist: true,

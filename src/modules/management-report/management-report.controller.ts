@@ -16,6 +16,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { CreateManagementReportDto } from './dto/create-management-report.dto.js';
 import { ListManagementReportQueryDto } from './dto/list-management-report-query.dto.js';
 import { ReviewManagementReportDto } from './dto/review-management-report.dto.js';
@@ -52,7 +53,7 @@ export class ManagementReportController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   getReport(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('reportId') reportId: string,
+    @Param('reportId', PublicIdPipe) reportId: string,
   ) {
     return this.managementReportService.getReport(viewer, reportId);
   }
@@ -61,7 +62,7 @@ export class ManagementReportController {
   @RequireRoles(UserRole.ADMIN)
   updateReport(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('reportId') reportId: string,
+    @Param('reportId', PublicIdPipe) reportId: string,
     @Body() dto: UpdateManagementReportDto,
   ) {
     return this.managementReportService.updateReport(viewer, reportId, dto);
@@ -71,7 +72,7 @@ export class ManagementReportController {
   @RequireRoles(UserRole.ADMIN)
   submitReport(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('reportId') reportId: string,
+    @Param('reportId', PublicIdPipe) reportId: string,
   ) {
     return this.managementReportService.submitReport(viewer, reportId);
   }
@@ -80,7 +81,7 @@ export class ManagementReportController {
   @RequireRoles(UserRole.SUPER_ADMIN)
   reviewReport(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('reportId') reportId: string,
+    @Param('reportId', PublicIdPipe) reportId: string,
     @Body() dto: ReviewManagementReportDto,
   ) {
     return this.managementReportService.reviewReport(viewer, reportId, dto);

@@ -72,12 +72,16 @@ export class ManagementReportService {
     assertValidPeriod(dto.periodStart, dto.periodEnd);
 
     return runSerializableTransaction(this.prisma, async (tx) => {
-      await this.assertAdminOwnsTeam(tx, viewer.userId, dto.teamId);
+      const teamId = await this.resolveAdminTeamId(
+        tx,
+        viewer.userId,
+        dto.teamId,
+      );
 
       const report = await tx.managementReport.create({
         data: {
           adminId: viewer.userId,
-          teamId: dto.teamId,
+          teamId,
           title: dto.title,
           periodStart: dto.periodStart,
           periodEnd: dto.periodEnd,
@@ -155,7 +159,7 @@ export class ManagementReportService {
     this.assertReadRole(viewer);
     const report = await this.prisma.managementReport.findFirst({
       where: {
-        id: reportId,
+        publicId: reportId,
         AND: [buildManagementReportScopeWhere(viewer)],
       },
       select: managementReportSelect,
@@ -178,7 +182,7 @@ export class ManagementReportService {
     return runSerializableTransaction(this.prisma, async (tx) => {
       const report = await tx.managementReport.findFirst({
         where: {
-          id: reportId,
+          publicId: reportId,
           adminId: viewer.userId,
         },
         select: managementReportSelect,
@@ -200,7 +204,7 @@ export class ManagementReportService {
 
       const updated = await tx.managementReport.update({
         where: {
-          id: reportId,
+          publicId: reportId,
         },
         data: updateData,
         select: managementReportSelect,
@@ -210,7 +214,7 @@ export class ManagementReportService {
         actorId: viewer.userId,
         action: MANAGEMENT_REPORT_ACTIVITY.REPORT_UPDATED,
         entityType: 'REPORT',
-        entityId: reportId,
+        entityId: report.id,
         metadata: {
           reportId,
           changedFields: Object.keys(updateData),
@@ -231,7 +235,7 @@ export class ManagementReportService {
       return await runSerializableTransaction(this.prisma, async (tx) => {
         const report = await tx.managementReport.findFirst({
           where: {
-            id: reportId,
+            publicId: reportId,
             adminId: viewer.userId,
           },
           select: {
@@ -281,7 +285,7 @@ export class ManagementReportService {
 
         await tx.managementReportVersion.create({
           data: {
-            reportId,
+            reportId: report.id,
             version: nextVersion,
             title: report.title,
             periodStart: report.periodStart,
@@ -301,7 +305,7 @@ export class ManagementReportService {
 
         const updated = await tx.managementReport.update({
           where: {
-            id: reportId,
+            publicId: reportId,
           },
           data: {
             status: ManagementReportStatus.SUBMITTED,
@@ -315,7 +319,7 @@ export class ManagementReportService {
           actorId: viewer.userId,
           action: MANAGEMENT_REPORT_ACTIVITY.REPORT_SUBMITTED,
           entityType: 'REPORT',
-          entityId: reportId,
+          entityId: report.id,
           metadata: {
             reportId,
             version: nextVersion,
@@ -342,7 +346,7 @@ export class ManagementReportService {
             title: 'Management report submitted',
             body: 'A management report has been submitted for review.',
             targetType: 'REPORT',
-            targetId: reportId,
+            targetId: report.id,
           });
         }
 
@@ -364,7 +368,7 @@ export class ManagementReportService {
       return await runSerializableTransaction(this.prisma, async (tx) => {
         const report = await tx.managementReport.findUnique({
           where: {
-            id: reportId,
+            publicId: reportId,
           },
           select: {
             id: true,
@@ -405,7 +409,7 @@ export class ManagementReportService {
         const reviewStartedAt = new Date();
         const started = await tx.managementReport.updateMany({
           where: {
-            id: reportId,
+            publicId: reportId,
             status: ManagementReportStatus.SUBMITTED,
           },
           data: {
@@ -435,7 +439,7 @@ export class ManagementReportService {
 
         const finalized = await tx.managementReport.updateMany({
           where: {
-            id: reportId,
+            publicId: reportId,
             status: ManagementReportStatus.UNDER_REVIEW,
           },
           data: {
@@ -455,7 +459,7 @@ export class ManagementReportService {
           actorId: viewer.userId,
           action: MANAGEMENT_REPORT_ACTIVITY.REPORT_REVIEWED,
           entityType: 'REPORT',
-          entityId: reportId,
+          entityId: report.id,
           metadata: {
             reportId,
             reportVersionId: latestVersion.id,
@@ -480,12 +484,12 @@ export class ManagementReportService {
               ? 'Your management report has been approved.'
               : 'Revision has been requested for your management report.',
           targetType: 'REPORT',
-          targetId: reportId,
+          targetId: report.id,
         });
 
         const updated = await tx.managementReport.findUniqueOrThrow({
           where: {
-            id: reportId,
+            publicId: reportId,
           },
           select: managementReportSelect,
         });
@@ -519,13 +523,13 @@ export class ManagementReportService {
 
     if (query.teamId) {
       filters.push({
-        teamId: query.teamId,
+        team: { publicId: query.teamId },
       });
     }
 
     if (query.adminId) {
       filters.push({
-        adminId: query.adminId,
+        admin: { publicId: query.adminId },
       });
     }
 
@@ -543,14 +547,14 @@ export class ManagementReportService {
     };
   }
 
-  private async assertAdminOwnsTeam(
+  private async resolveAdminTeamId(
     tx: PrismaTransactionClient,
     adminId: string,
     teamId: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const team = await tx.team.findFirst({
       where: {
-        id: teamId,
+        publicId: teamId,
         adminId,
       },
       select: {
@@ -565,6 +569,7 @@ export class ManagementReportService {
         'Team not found.',
       );
     }
+    return team.id;
   }
 
   private assertReadRole(viewer: OperixViewer): void {

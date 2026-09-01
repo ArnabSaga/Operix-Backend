@@ -7,6 +7,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { ListMemberPerformanceQueryDto } from './dto/list-member-performance-query.dto.js';
 import { PerformanceService } from './performance.service.js';
 
@@ -29,7 +30,7 @@ export class PerformanceController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
   getMemberPerformance(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('memberId') memberId: string,
+    @Param('memberId', PublicIdPipe) memberId: string,
   ) {
     return this.performanceService.getMemberPerformance(viewer, memberId);
   }
@@ -38,7 +39,7 @@ export class PerformanceController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   getTeamPerformance(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('teamId') teamId: string,
+    @Param('teamId', PublicIdPipe) teamId: string,
   ) {
     return this.performanceService.getTeamPerformance(viewer, teamId);
   }

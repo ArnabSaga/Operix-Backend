@@ -13,7 +13,6 @@ export interface ExportMetadataInput {
   generatedAt: Date;
   asOf: Date;
   viewerRole: UserRole;
-  viewerId: string;
   effectiveScope: string;
   effectiveFilters: Record<string, string | number | boolean | null>;
   extra?: Record<string, string | number | boolean | null>;

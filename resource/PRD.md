@@ -2579,3 +2579,9 @@ Inventory
 The first production objective is to make the **core work lifecycle trustworthy**.
 
 Charts and advanced analytics should be built on top of accurate operational data rather than before it.
+
+# Public Record Identity
+
+Prisma primary keys are server-private implementation details. Every database-record locator or relationship reference crossing an HTTP, XLSX, Notification, Activity, or email boundary uses an immutable public UUID. Existing response names such as `id`, `teamId`, and `taskId` remain, but their values are public UUIDs. Public UUID knowledge grants no authorization.
+
+Approved business identifiers—including employee ID, task reference code, SKU, email, and human-readable names—remain valid client-facing product data. Internal authorization, relations, workflow state, calculations, and transaction logic continue using private database IDs.

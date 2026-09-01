@@ -7,6 +7,7 @@ import { OperixRoleGuard } from '../../shared/auth/operix-role.guard.js';
 import { RequireRoles } from '../../shared/auth/require-roles.decorator.js';
 import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { SubmissionService } from './submission.service.js';
 
 @ApiTags('submission-attachments')
@@ -19,7 +20,7 @@ export class SubmissionAttachmentController {
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
   listSubmissionAttachments(
     @CurrentViewer() viewer: OperixViewer,
-    @Param('submissionId') submissionId: string,
+    @Param('submissionId', PublicIdPipe) submissionId: string,
   ) {
     return this.submissionService.listSubmissionAttachments(
       viewer,

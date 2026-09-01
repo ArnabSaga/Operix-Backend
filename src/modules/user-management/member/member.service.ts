@@ -23,6 +23,7 @@ import type {
   SafeUserResponse,
 } from '../user-management.interface.js';
 import { memberSelect } from './member.select.js';
+import { mapSafeUser } from '../user-management.mapper.js';
 import { buildMemberScopeWhere } from './member-scope.policy.js';
 import type { CreateMemberDto } from './dto/create-member.dto.js';
 import type { TransferMemberDto } from './dto/transfer-member.dto.js';
@@ -84,7 +85,7 @@ export class MemberService {
       });
     }
 
-    return member;
+    return mapSafeUser(member);
   }
 
   async listMembers(
@@ -106,7 +107,7 @@ export class MemberService {
     ]);
 
     return {
-      data,
+      data: data.map(mapSafeUser),
       meta: createPaginationMeta({
         page: normalized.page,
         limit: normalized.limit,
@@ -121,7 +122,7 @@ export class MemberService {
   ): Promise<SafeUserResponse> {
     const member = await this.prisma.user.findFirst({
       where: {
-        id: memberId,
+        publicId: memberId,
         ...buildMemberScopeWhere(viewer),
       },
       select: memberSelect,
@@ -131,7 +132,7 @@ export class MemberService {
       throw this.memberNotFound();
     }
 
-    return member;
+    return mapSafeUser(member);
   }
 
   async updateMember(
@@ -147,7 +148,12 @@ export class MemberService {
       );
     }
 
-    const member = await this.getMember(viewer, memberId);
+    const memberRecord = await this.prisma.user.findFirst({
+      where: { publicId: memberId, ...buildMemberScopeWhere(viewer) },
+      select: memberSelect,
+    });
+    if (!memberRecord) throw this.memberNotFound();
+    const member = mapSafeUser(memberRecord);
     const data =
       viewer.role === UserRole.SUPER_ADMIN
         ? {
@@ -170,7 +176,7 @@ export class MemberService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const updated = await tx.user.update({
-          where: { id: memberId },
+          where: { id: memberRecord.id },
           data: updateData,
           select: memberSelect,
         });
@@ -179,13 +185,13 @@ export class MemberService {
           actorId: viewer.userId,
           action: USER_MANAGEMENT_ACTIVITY.MEMBER_UPDATED,
           entityType: 'USER',
-          entityId: memberId,
+          entityId: memberRecord.id,
           metadata: {
             memberId,
           },
         });
 
-        return updated;
+        return mapSafeUser(updated);
       });
     } catch (error) {
       throw mapMemberConflict(error);
@@ -200,7 +206,7 @@ export class MemberService {
     return this.prisma.$transaction(async (tx) => {
       const member = await tx.user.findFirst({
         where: {
-          id: memberId,
+          publicId: memberId,
           role: UserRole.MEMBER,
         },
         select: memberSelect,
@@ -211,11 +217,11 @@ export class MemberService {
       }
 
       if (member.status === dto.status) {
-        return member;
+        return mapSafeUser(member);
       }
 
       const updated = await tx.user.update({
-        where: { id: memberId },
+        where: { id: member.id },
         data: {
           status: dto.status,
         },
@@ -226,7 +232,7 @@ export class MemberService {
         actorId: viewer.userId,
         action: USER_MANAGEMENT_ACTIVITY.MEMBER_STATUS_CHANGED,
         entityType: 'USER',
-        entityId: memberId,
+        entityId: member.id,
         metadata: {
           memberId,
           previousStatus: member.status,
@@ -234,7 +240,7 @@ export class MemberService {
         },
       });
 
-      return updated;
+      return mapSafeUser(updated);
     });
   }
 
