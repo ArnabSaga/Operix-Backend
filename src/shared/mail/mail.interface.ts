@@ -23,3 +23,16 @@ export interface PasswordResetEmailInput {
   email: string;
   resetUrl: string;
 }
+
+export interface RegistrationMailInput {
+  requestId: string;
+  recipientName: string;
+  email: string;
+}
+
+export interface AccountSetupEmailInput {
+  userId: string;
+  recipientName: string;
+  email: string;
+  setupUrl: string;
+}

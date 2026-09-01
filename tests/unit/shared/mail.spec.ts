@@ -47,6 +47,10 @@ function createConfig(
       cloudinaryApiSecret: '',
       cloudinaryFolder: 'operix',
     },
+    registration: {
+      rateLimitSecret: 'registration-rate-limit-secret-32-characters',
+      cronSecret: 'registration-cron-secret-32-characters-long',
+    },
   };
 
   return new ConfigService(configuration);
@@ -157,6 +161,29 @@ describe('MailTemplateRenderer', () => {
       );
     }
   });
+
+  it.each([
+    [MAIL_TEMPLATE.REGISTRATION_RECEIVED, { recipientName: '<Applicant>' }],
+    [
+      MAIL_TEMPLATE.ACCOUNT_SETUP,
+      {
+        recipientName: '<Applicant>',
+        setupUrl: 'https://app.operix.test/setup-password?token=safe',
+      },
+    ],
+    [MAIL_TEMPLATE.REGISTRATION_REJECTED, { recipientName: '<Applicant>' }],
+  ])(
+    'renders the registration template %s safely',
+    async (template, context) => {
+      const rendered = await new MailTemplateRenderer().render(
+        template as typeof MAIL_TEMPLATE.ACCOUNT_SETUP,
+        context as never,
+      );
+      expect(rendered.html).not.toContain('<Applicant>');
+      expect(rendered.html).toContain('&lt;Applicant&gt;');
+      expect(rendered.text).toContain('<Applicant>');
+    },
+  );
 });
 
 describe('MailService', () => {

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { prismaAdapter } from '@better-auth/prisma-adapter';
 import { betterAuth } from 'better-auth';
@@ -6,6 +7,7 @@ import { createAuthMiddleware } from 'better-auth/api';
 import { customSession } from 'better-auth/plugins';
 import type { PrismaService } from '../../database/prisma.service.js';
 import type { MailService } from '../../shared/mail/mail.service.js';
+import { writeActivity } from '../../shared/activity/activity-write.js';
 import { UserStatus, type UserRole } from '../../../generated/prisma/enums.js';
 import { OPERIX_AUTH_BASE_PATH } from './auth.constant.js';
 import {
@@ -43,11 +45,20 @@ export function createOperixAuth(
   config: ConfigService,
   mailService: MailService,
 ) {
+  const logger = new Logger('OperixAuth');
   const options = {
     basePath: OPERIX_AUTH_BASE_PATH,
     baseURL: config.getOrThrow<string>('auth.baseUrl'),
     secret: config.getOrThrow<string>('auth.secret'),
     trustedOrigins: config.getOrThrow<string[]>('app.frontendOrigins'),
+    advanced: {
+      useSecureCookies: true,
+      defaultCookieAttributes: {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+      },
+    },
     disabledPaths: [
       '/list-sessions',
       '/revoke-session',
@@ -69,18 +80,70 @@ export function createOperixAuth(
     emailAndPassword: {
       enabled: true,
       disableSignUp: true,
+      resetPasswordTokenExpiresIn: 86_400,
       sendResetPassword: async ({ user, url }) => {
-        void mailService
-          .sendPasswordResetEmail({
-            userId: user.id,
-            recipientName: user.name,
-            email: user.email,
-            resetUrl: url,
-          })
-          .catch((error: unknown) => {
-            mailService.logPasswordResetDeliveryFailure(user.id, error);
-          });
+        const lifecycle = prisma.user?.findUnique
+          ? await prisma.user.findUnique({
+              where: { id: user.id },
+              select: { passwordSetupRequired: true },
+            })
+          : null;
+        const delivery = lifecycle?.passwordSetupRequired
+          ? mailService.sendAccountSetupEmail({
+              userId: user.id,
+              recipientName: user.name,
+              email: user.email,
+              setupUrl: url,
+            })
+          : mailService.sendPasswordResetEmail({
+              userId: user.id,
+              recipientName: user.name,
+              email: user.email,
+              resetUrl: url,
+            });
+        void delivery.catch((error: unknown) => {
+          mailService.logPasswordResetDeliveryFailure(user.id, error);
+        });
         await Promise.resolve();
+      },
+      onPasswordReset: async ({ user }) => {
+        try {
+          await prisma.$transaction(async (tx) => {
+            const transitioned = await tx.user.updateMany({
+              where: {
+                id: user.id,
+                status: UserStatus.INACTIVE,
+                passwordSetupRequired: true,
+                registrationRequestId: { not: null },
+              },
+              data: {
+                status: UserStatus.ACTIVE,
+                passwordSetupRequired: false,
+              },
+            });
+            if (transitioned.count !== 1) return;
+            const activated = await tx.user.findUnique({
+              where: { id: user.id },
+              select: { registrationRequestId: true },
+            });
+            if (!activated?.registrationRequestId) return;
+            await tx.registrationRequest.update({
+              where: { id: activated.registrationRequestId },
+              data: { passwordConfiguredAt: new Date() },
+            });
+            await writeActivity(tx, {
+              actorId: user.id,
+              action: 'REGISTRATION_PASSWORD_CONFIGURED',
+              entityType: 'REGISTRATION_REQUEST',
+              entityId: activated.registrationRequestId,
+            });
+          });
+        } catch (error) {
+          logger.error('Registration activation after password reset failed.', {
+            eventId: user.id,
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+          });
+        }
       },
     },
     user: {
@@ -185,6 +248,7 @@ export function createOperixProvisioningAuth(provisioningOptions: {
   baseUrl: string;
   secret: string;
   forcedRole: UserRole;
+  forcedStatus?: UserStatus;
 }) {
   let createdUserId: string | null = null;
 
@@ -210,7 +274,7 @@ export function createOperixProvisioningAuth(provisioningOptions: {
               data: {
                 ...user,
                 role: provisioningOptions.forcedRole,
-                status: UserStatus.ACTIVE,
+                status: provisioningOptions.forcedStatus ?? UserStatus.ACTIVE,
               },
             }),
           after: (user) => {

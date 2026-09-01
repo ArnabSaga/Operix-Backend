@@ -153,6 +153,10 @@ export class MailTemplateRenderer {
     if (templateName === MAIL_TEMPLATE.PASSWORD_RESET) {
       assertHttpUrl((context as PasswordResetEmailContext).resetUrl);
     }
+
+    if (templateName === MAIL_TEMPLATE.ACCOUNT_SETUP) {
+      assertHttpUrl((context as { setupUrl: string }).setupUrl);
+    }
   }
 
   private isTemplateRenderException(error: AppException): boolean {

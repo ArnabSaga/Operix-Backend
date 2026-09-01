@@ -9,6 +9,9 @@ const validEnvironment = {
   SWAGGER_ENABLED: 'false',
   BETTER_AUTH_SECRET: 'test-secret-at-least-32-characters-long',
   BETTER_AUTH_URL: 'http://localhost:3000',
+  REGISTRATION_RATE_LIMIT_SECRET:
+    'registration-rate-limit-secret-at-least-32-characters',
+  CRON_SECRET: 'cron-secret-at-least-32-characters-long',
   SMTP_ENABLED: 'false',
 };
 

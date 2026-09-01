@@ -1,0 +1,50 @@
+model RegistrationRequest {
+  id             String   @id @default(cuid())
+  publicId       String   @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
+  name           String
+  normalizedEmail String
+  status         RegistrationRequestStatus @default(PENDING)
+
+  approvalClaimId String?   @db.Uuid
+  approvalClaimedAt DateTime?
+  selectedRole UserRole?
+  selectedEmployeeId String?
+  selectedDesignation String?
+  selectedTeamId String?
+  reviewerId String?
+
+  rejectionCode String?
+  rejectionReason String?
+  reviewedAt DateTime?
+  approvedAt DateTime?
+  rejectedAt DateTime?
+  passwordConfiguredAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  selectedTeam Team? @relation(fields: [selectedTeamId], references: [id], onDelete: SetNull)
+  reviewer User? @relation("RegistrationReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  approvedUser User? @relation("ApprovedRegistrationUser")
+
+  @@index([status, createdAt])
+  @@index([normalizedEmail, createdAt])
+  @@index([approvalClaimedAt])
+  @@index([reviewerId])
+  @@index([selectedTeamId])
+  @@map("registration_request")
+}
+
+model RegistrationThrottleBucket {
+  id              String   @id @default(cuid())
+  ipHash          String
+  hourBucketStart DateTime
+  count           Int      @default(1)
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([ipHash, hourBucketStart])
+  @@index([expiresAt])
+  @@map("registration_throttle_bucket")
+}

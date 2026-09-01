@@ -36,10 +36,26 @@ export interface PasswordResetEmailContext {
   resetUrl: string;
 }
 
+export interface RegistrationReceivedEmailContext {
+  recipientName: string;
+}
+
+export interface AccountSetupEmailContext {
+  recipientName: string;
+  setupUrl: string;
+}
+
+export interface RegistrationRejectedEmailContext {
+  recipientName: string;
+}
+
 export interface MailTemplateContextMap {
   'welcome-user': WelcomeUserEmailContext;
   'notification-alert': NotificationAlertEmailContext;
   'password-reset': PasswordResetEmailContext;
+  'registration-received': RegistrationReceivedEmailContext;
+  'account-setup': AccountSetupEmailContext;
+  'registration-rejected': RegistrationRejectedEmailContext;
 }
 
 export type MailTemplateContext<TName extends MailTemplateName> =

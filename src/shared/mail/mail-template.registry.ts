@@ -21,6 +21,18 @@ export const MAIL_TEMPLATE_REGISTRY = {
     file: 'password-reset.ejs',
     requiredFields: ['recipientName', 'resetUrl'],
   },
+  [MAIL_TEMPLATE.REGISTRATION_RECEIVED]: {
+    file: 'registration-received.ejs',
+    requiredFields: ['recipientName'],
+  },
+  [MAIL_TEMPLATE.ACCOUNT_SETUP]: {
+    file: 'account-setup.ejs',
+    requiredFields: ['recipientName', 'setupUrl'],
+  },
+  [MAIL_TEMPLATE.REGISTRATION_REJECTED]: {
+    file: 'registration-rejected.ejs',
+    requiredFields: ['recipientName'],
+  },
 } as const satisfies Record<MailTemplateName, MailTemplateRegistryEntry>;
 
 export function isMailTemplateName(value: string): value is MailTemplateName {

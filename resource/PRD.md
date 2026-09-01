@@ -2585,3 +2585,9 @@ Charts and advanced analytics should be built on top of accurate operational dat
 Prisma primary keys are server-private implementation details. Every database-record locator or relationship reference crossing an HTTP, XLSX, Notification, Activity, or email boundary uses an immutable public UUID. Existing response names such as `id`, `teamId`, and `taskId` remain, but their values are public UUIDs. Public UUID knowledge grants no authorization.
 
 Approved business identifiers—including employee ID, task reference code, SKU, email, and human-readable names—remain valid client-facing product data. Internal authorization, relations, workflow state, calculations, and transaction logic continue using private database IDs.
+
+# Self Registration and Approval
+
+Operix accepts privacy safe public access requests containing applicant name and email. An applicant remains separate from the authenticated User model until a Super Admin assigns the `ADMIN` or `MEMBER` role and approves the request. Approved accounts start inactive and become active only after the applicant configures a password through Better Auth's native reset flow.
+
+Registration requests support `PENDING`, operational `APPROVING`, `APPROVED`, and `REJECTED` states. Public signup remains disabled. Receipt, setup, and generic rejection email delivery is best effort. Registration review data is retained for 90 days after rejection or completed setup, while approved setup pending requests are retained.

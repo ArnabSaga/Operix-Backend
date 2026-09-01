@@ -73,3 +73,6 @@ skills-lock.json
 
 # IDE
 .vscode
+
+# Local Netlify folder
+.vercel

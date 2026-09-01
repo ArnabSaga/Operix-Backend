@@ -19,6 +19,9 @@ export interface AccountProvisioningInput {
   employeeId?: string | null;
   designation?: string | null;
   role: Extract<UserRoleValue, 'ADMIN' | 'MEMBER'>;
+  status?: UserStatus;
+  registrationRequestId?: string | null;
+  passwordSetupRequired?: boolean;
 }
 
 @Injectable()
@@ -39,6 +42,7 @@ export class AccountProvisioningService {
       baseUrl: this.config.getOrThrow<string>('auth.baseUrl'),
       secret: this.config.getOrThrow<string>('auth.secret'),
       forcedRole: input.role,
+      forcedStatus: input.status,
     });
 
     await provisioning.auth.api.signUpEmail({
@@ -85,7 +89,9 @@ export class AccountProvisioningService {
         data: {
           employeeId: input.employeeId ?? null,
           designation: input.designation ?? null,
-          status: UserStatus.ACTIVE,
+          status: input.status ?? UserStatus.ACTIVE,
+          registrationRequestId: input.registrationRequestId ?? null,
+          passwordSetupRequired: input.passwordSetupRequired ?? false,
         },
         select: adminSelect,
       });

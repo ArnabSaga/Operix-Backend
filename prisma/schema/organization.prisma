@@ -11,6 +11,7 @@ model Team {
   tasks   Task[]
   managementReports ManagementReport[]
   inventoryItems InventoryItem[] @relation("TeamInventoryItems")
+  registrationRequests RegistrationRequest[]
 
   @@index([adminId])
   @@map("team")

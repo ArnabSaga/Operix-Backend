@@ -16,6 +16,8 @@ import type {
 import { MailTemplateRenderer } from './mail-template.renderer.js';
 import type {
   PasswordResetEmailInput,
+  RegistrationMailInput,
+  AccountSetupEmailInput,
   TaskAssignedEmailInput,
   WelcomeUserEmailInput,
 } from './mail.interface.js';
@@ -192,6 +194,39 @@ export class MailService {
       templateName: MAIL_TEMPLATE.PASSWORD_RESET,
       eventId: input.userId,
     });
+  }
+
+  async sendRegistrationReceivedEmail(
+    input: RegistrationMailInput,
+  ): Promise<void> {
+    if (!this.transporter) return;
+    await this.sendTemplatedEmail(
+      { name: input.recipientName, address: input.email },
+      'We received your Operix access request',
+      MAIL_TEMPLATE.REGISTRATION_RECEIVED,
+      { recipientName: input.recipientName },
+    );
+  }
+
+  async sendRegistrationRejectedEmail(
+    input: RegistrationMailInput,
+  ): Promise<void> {
+    if (!this.transporter) return;
+    await this.sendTemplatedEmail(
+      { name: input.recipientName, address: input.email },
+      'Operix access request update',
+      MAIL_TEMPLATE.REGISTRATION_REJECTED,
+      { recipientName: input.recipientName },
+    );
+  }
+
+  async sendAccountSetupEmail(input: AccountSetupEmailInput): Promise<void> {
+    await this.sendTemplatedEmail(
+      { name: input.recipientName, address: input.email },
+      'Set up your Operix account',
+      MAIL_TEMPLATE.ACCOUNT_SETUP,
+      { recipientName: input.recipientName, setupUrl: input.setupUrl },
+    );
   }
 
   logPasswordResetDeliveryFailure(userId: string, error: unknown): void {
