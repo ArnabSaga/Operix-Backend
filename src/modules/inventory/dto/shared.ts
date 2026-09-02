@@ -1,10 +1,14 @@
 export function trimString(value: unknown): unknown {
-  return typeof value === 'string' ? value.trim() : value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? undefined : trimmed;
+  }
+  return value;
 }
 
 export function optionalTrimString(value: unknown): unknown {
   if (value === null || value === undefined) {
-    return value;
+    return undefined;
   }
 
   return trimString(value);

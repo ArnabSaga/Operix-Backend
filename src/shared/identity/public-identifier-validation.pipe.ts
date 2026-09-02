@@ -1,4 +1,8 @@
-import { Injectable, type PipeTransform } from '@nestjs/common';
+import {
+  ArgumentMetadata,
+  Injectable,
+  type PipeTransform,
+} from '@nestjs/common';
 import { PublicIdPipe } from './public-id.pipe.js';
 
 const PUBLIC_IDENTIFIER_FIELDS = new Set([
@@ -23,7 +27,22 @@ const PUBLIC_IDENTIFIER_FIELDS = new Set([
 export class PublicIdentifierValidationPipe implements PipeTransform {
   private readonly validator = new PublicIdPipe();
 
-  transform(value: unknown): unknown {
+  transform(value: unknown, metadata?: ArgumentMetadata): unknown {
+    if (metadata?.type === 'custom') {
+      return value;
+    }
+
+    if (
+      metadata?.data &&
+      PUBLIC_IDENTIFIER_FIELDS.has(metadata.data) &&
+      typeof value === 'string'
+    ) {
+      if (value.trim().length > 0) {
+        this.validator.transform(value.trim());
+      }
+      return value;
+    }
+
     this.validate(value);
     return value;
   }
@@ -41,6 +60,9 @@ export class PublicIdentifierValidationPipe implements PipeTransform {
         entry !== null &&
         entry !== undefined
       ) {
+        if (typeof entry === 'string' && entry.trim().length === 0) {
+          continue;
+        }
         this.validator.transform(String(entry));
       } else {
         this.validate(entry);
