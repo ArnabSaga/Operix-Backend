@@ -52,14 +52,17 @@ export class MailTemplateRenderer {
         this.loadCss(),
       ]);
       const bodyHtml = bodyTemplate(context);
+      const metadata = MAIL_TEMPLATE_REGISTRY[templateName];
       const documentHtml = layoutTemplate({
         bodyHtml,
         css,
-        documentTitle: 'Operix',
+        documentTitle: metadata.documentTitle,
+        preheaderText: metadata.preheaderText,
       });
       const html = juice(documentHtml);
       const text = convert(html, {
         wordwrap: 100,
+        selectors: [{ selector: '.preheader', format: 'skip' }],
       });
 
       return { html, text };
@@ -151,11 +154,18 @@ export class MailTemplateRenderer {
     }
 
     if (templateName === MAIL_TEMPLATE.PASSWORD_RESET) {
-      assertHttpUrl((context as PasswordResetEmailContext).resetUrl);
+      const passwordReset = context as PasswordResetEmailContext;
+      assertHttpUrl(passwordReset.resetUrl);
+      assertPositiveNumber(passwordReset.expiryHours);
     }
 
     if (templateName === MAIL_TEMPLATE.ACCOUNT_SETUP) {
-      assertHttpUrl((context as { setupUrl: string }).setupUrl);
+      const accountSetup = context as {
+        setupUrl: string;
+        expiryHours: number;
+      };
+      assertHttpUrl(accountSetup.setupUrl);
+      assertPositiveNumber(accountSetup.expiryHours);
     }
   }
 
@@ -215,6 +225,12 @@ function assertHttpUrl(value: string): void {
 
 function assertEmail(value: string): void {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    throw templateRenderException();
+  }
+}
+
+function assertPositiveNumber(value: number): void {
+  if (!Number.isFinite(value) || value <= 0) {
     throw templateRenderException();
   }
 }
