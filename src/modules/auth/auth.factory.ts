@@ -95,23 +95,25 @@ export function createOperixAuth(
               select: { passwordSetupRequired: true },
             })
           : null;
-        const delivery = lifecycle?.passwordSetupRequired
-          ? mailService.sendAccountSetupEmail({
+        try {
+          if (lifecycle?.passwordSetupRequired) {
+            await mailService.sendAccountSetupEmail({
               userId: user.id,
               recipientName: user.name,
               email: user.email,
               setupUrl: url,
-            })
-          : mailService.sendPasswordResetEmail({
+            });
+          } else {
+            await mailService.sendPasswordResetEmail({
               userId: user.id,
               recipientName: user.name,
               email: user.email,
               resetUrl: url,
             });
-        void delivery.catch((error: unknown) => {
+          }
+        } catch (error: unknown) {
           mailService.logPasswordResetDeliveryFailure(user.id, error);
-        });
-        await Promise.resolve();
+        }
       },
       onPasswordReset: async ({ user }) => {
         try {
