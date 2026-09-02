@@ -359,7 +359,7 @@ export class RegistrationService {
           });
         },
       );
-      void this.authService
+      await this.authService
         .requestPasswordSetup(request.normalizedEmail)
         .catch((error: unknown) =>
           this.logMailFailure('account-setup', requestId, error),
@@ -462,7 +462,7 @@ export class RegistrationService {
         entityId: request.id,
       }),
     );
-    void this.authService
+    await this.authService
       .requestPasswordSetup(request.normalizedEmail)
       .catch((error: unknown) =>
         this.logMailFailure('account-setup', requestId, error),
@@ -697,7 +697,7 @@ export class RegistrationService {
         });
       },
     );
-    void this.authService
+    await this.authService
       .requestPasswordSetup(stale.normalizedEmail)
       .catch((error: unknown) =>
         this.logMailFailure('account-setup', requestId, error),
