@@ -178,6 +178,7 @@ export class MailService {
   }
 
   async sendPasswordResetEmail(input: PasswordResetEmailInput): Promise<void> {
+    if (!this.transporter) return;
     await this.sendTemplatedEmail(
       {
         name: input.recipientName,
@@ -223,6 +224,7 @@ export class MailService {
   }
 
   async sendAccountSetupEmail(input: AccountSetupEmailInput): Promise<void> {
+    if (!this.transporter) return;
     await this.sendTemplatedEmail(
       { name: input.recipientName, address: input.email },
       'Set up your Operix account',
