@@ -3,7 +3,11 @@ import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { PaginationQueryDto } from '../../../shared/pagination/pagination.dto.js';
 
 function trimString(value: unknown): unknown {
-  return typeof value === 'string' ? value.trim() : value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? undefined : trimmed;
+  }
+  return value;
 }
 
 export class ListMemberPerformanceQueryDto extends PaginationQueryDto {
