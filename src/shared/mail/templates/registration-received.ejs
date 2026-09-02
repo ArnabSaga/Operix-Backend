@@ -1,4 +1,34 @@
-<h1>Access request received</h1>
-<p>Hello <%= recipientName %>,</p>
-<p>We received your Operix access request. Your request will be reviewed by an administrator.</p>
-<p>You will receive another email if further action is required.</p>
+<p class="eyebrow eyebrow-info">Request received</p>
+<h1 class="heading">We have received your access request</h1>
+<p class="greeting">Hi <%= recipientName %>,</p>
+<p class="subheading">
+  Thanks for requesting access to Operix. Your request has been received and will be reviewed by an administrator.
+</p>
+
+<table class="steps-card" role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td class="step-number step-complete">01</td>
+    <td class="step-content">
+      <p class="step-title">Request received</p>
+      <p class="step-state step-state-complete">Complete</p>
+    </td>
+  </tr>
+  <tr>
+    <td class="step-number step-current">02</td>
+    <td class="step-content">
+      <p class="step-title">Administrator review</p>
+      <p class="step-state step-state-current">Next</p>
+    </td>
+  </tr>
+  <tr>
+    <td class="step-number">03</td>
+    <td class="step-content">
+      <p class="step-title">Account setup</p>
+      <p class="step-state">If your request is approved</p>
+    </td>
+  </tr>
+</table>
+
+<p class="center-note">No action is required right now.</p>
+<div class="divider"></div>
+<p class="quiet-note">You will receive another email if further action is required.</p>

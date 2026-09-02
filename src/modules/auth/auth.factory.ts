@@ -6,6 +6,7 @@ import type { BetterAuthOptions } from 'better-auth';
 import { createAuthMiddleware } from 'better-auth/api';
 import { customSession } from 'better-auth/plugins';
 import type { PrismaService } from '../../database/prisma.service.js';
+import { PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS } from '../../shared/auth/password-reset.constant.js';
 import type { MailService } from '../../shared/mail/mail.service.js';
 import { writeActivity } from '../../shared/activity/activity-write.js';
 import { UserStatus, type UserRole } from '../../../generated/prisma/enums.js';
@@ -86,7 +87,7 @@ export function createOperixAuth(
     emailAndPassword: {
       enabled: true,
       disableSignUp: true,
-      resetPasswordTokenExpiresIn: 86_400,
+      resetPasswordTokenExpiresIn: PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS,
       sendResetPassword: async ({ user, url }) => {
         const lifecycle = prisma.user?.findUnique
           ? await prisma.user.findUnique({

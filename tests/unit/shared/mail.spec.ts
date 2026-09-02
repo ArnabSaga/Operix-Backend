@@ -72,7 +72,7 @@ function getAppErrorCode(error: unknown): string | undefined {
 }
 
 describe('MailTemplateRenderer', () => {
-  it('renders escaped and inlined notification HTML with a text CTA URL', async () => {
+  it('renders the branded notification with escaped details and a text CTA URL', async () => {
     const renderer = new MailTemplateRenderer();
     const rendered = await renderer.render(MAIL_TEMPLATE.NOTIFICATION_ALERT, {
       recipientName: '<Member A>',
@@ -88,7 +88,12 @@ describe('MailTemplateRenderer', () => {
 
     expect(rendered.html).toContain('&lt;Member A&gt;');
     expect(rendered.html).toContain('Batch &lt;Review&gt;');
+    expect(rendered.html).toContain('You have a new update waiting in Operix.');
+    expect(rendered.html).toContain('Operix update');
     expect(rendered.html).toContain('style="');
+    expect(rendered.text).not.toContain(
+      'You have a new update waiting in Operix.',
+    );
     expect(rendered.text).toContain('Open Task');
     expect(rendered.text).toContain('https://app.operix.test/tasks/task-a');
     expect(rendered.text).toContain(
@@ -96,7 +101,25 @@ describe('MailTemplateRenderer', () => {
     );
   });
 
-  it('renders Welcome and password reset templates', async () => {
+  it('omits the notification CTA when no action is supplied', async () => {
+    const rendered = await new MailTemplateRenderer().render(
+      MAIL_TEMPLATE.NOTIFICATION_ALERT,
+      {
+        recipientName: 'Member A',
+        heading: 'Workflow updated',
+        message: 'Your workflow has changed.',
+        details: [],
+        actionLabel: null,
+        actionUrl: null,
+      },
+    );
+
+    expect(rendered.text).toContain('WORKFLOW UPDATED');
+    expect(rendered.text).not.toContain('Open Task');
+    expect(rendered.html).not.toContain('class="email-button"');
+  });
+
+  it('renders Welcome with safe account details and no password content', async () => {
     const renderer = new MailTemplateRenderer();
 
     const welcome = await renderer.render(MAIL_TEMPLATE.WELCOME_USER, {
@@ -105,16 +128,83 @@ describe('MailTemplateRenderer', () => {
       roleLabel: 'Admin',
       loginUrl: 'https://app.operix.test/login',
     });
-    const reset = await renderer.render(MAIL_TEMPLATE.PASSWORD_RESET, {
-      recipientName: 'Admin A',
-      resetUrl: 'https://api.operix.test/api/v1/auth/reset-password/token',
-    });
 
+    expect(welcome.text).toContain('Account created');
+    expect(welcome.text).toContain('admin@example.com');
+    expect(welcome.text).toContain('Admin');
+    expect(welcome.text).toContain('Sign In to Operix');
     expect(welcome.text).toContain('https://app.operix.test/login');
-    expect(welcome.text).not.toContain('password:');
+    expect(welcome.text.toLowerCase()).not.toContain('initialpassword');
+    expect(welcome.text.toLowerCase()).not.toContain('temporary password');
+    expect(welcome.text.toLowerCase()).not.toContain('password:');
+  });
+
+  it('renders Password Reset with expiry, fallback URL, and security guidance', async () => {
+    const reset = await new MailTemplateRenderer().render(
+      MAIL_TEMPLATE.PASSWORD_RESET,
+      {
+        recipientName: 'Admin A',
+        resetUrl: 'https://api.operix.test/api/v1/auth/reset-password/token',
+        expiryHours: 24,
+      },
+    );
+
+    expect(reset.text).toContain('Security request');
+    expect(reset.text).toContain('Reset Password');
+    expect(reset.text).toContain('24 hours');
+    expect(reset.text).toContain('Did not request this?');
     expect(reset.text).toContain(
       'https://api.operix.test/api/v1/auth/reset-password/token',
     );
+  });
+
+  it('renders Account Setup with approval, expiry, fallback URL, and security guidance', async () => {
+    const rendered = await new MailTemplateRenderer().render(
+      MAIL_TEMPLATE.ACCOUNT_SETUP,
+      {
+        recipientName: 'Applicant A',
+        setupUrl: 'https://app.operix.test/setup-password?token=safe',
+        expiryHours: 24,
+      },
+    );
+
+    expect(rendered.text).toContain('Access approved');
+    expect(rendered.text).toContain('Set Up Password');
+    expect(rendered.text).toContain('24 hours');
+    expect(rendered.text).toContain('Security notice');
+    expect(rendered.text).toContain(
+      'https://app.operix.test/setup-password?token=safe',
+    );
+    expect(rendered.text.toLowerCase()).not.toContain('bootstrap password');
+  });
+
+  it('renders Registration Received as a neutral process without a CTA', async () => {
+    const rendered = await new MailTemplateRenderer().render(
+      MAIL_TEMPLATE.REGISTRATION_RECEIVED,
+      { recipientName: 'Applicant A' },
+    );
+
+    expect(rendered.text).toContain('Request received');
+    expect(rendered.text).toContain('Administrator review');
+    expect(rendered.text).toContain('If your request is approved');
+    expect(rendered.text).toContain('No action is required right now.');
+    expect(rendered.text).not.toContain('Set Up Password');
+    expect(rendered.html).not.toContain('class="email-button"');
+  });
+
+  it('renders Registration Rejected without private reasons or a CTA', async () => {
+    const rendered = await new MailTemplateRenderer().render(
+      MAIL_TEMPLATE.REGISTRATION_REJECTED,
+      { recipientName: 'Applicant A' },
+    );
+
+    expect(rendered.text).toContain('Request update');
+    expect(rendered.text).toContain('ACCESS REQUEST UPDATE');
+    expect(rendered.text).toContain('Request review complete');
+    expect(rendered.text).toContain('organization administrator');
+    expect(rendered.text).not.toContain('EMAIL_UNAVAILABLE');
+    expect(rendered.text).not.toContain('rejection reason');
+    expect(rendered.html).not.toContain('class="email-button"');
   });
 
   it.each([
@@ -132,7 +222,20 @@ describe('MailTemplateRenderer', () => {
     [
       'invalid URL',
       MAIL_TEMPLATE.PASSWORD_RESET,
-      { recipientName: 'Admin A', resetUrl: 'javascript:alert(1)' },
+      {
+        recipientName: 'Admin A',
+        resetUrl: 'javascript:alert(1)',
+        expiryHours: 24,
+      },
+    ],
+    [
+      'invalid expiry',
+      MAIL_TEMPLATE.ACCOUNT_SETUP,
+      {
+        recipientName: 'Applicant A',
+        setupUrl: 'https://app.operix.test/setup-password?token=safe',
+        expiryHours: 0,
+      },
     ],
     [
       'invalid details',
@@ -169,6 +272,7 @@ describe('MailTemplateRenderer', () => {
       {
         recipientName: '<Applicant>',
         setupUrl: 'https://app.operix.test/setup-password?token=safe',
+        expiryHours: 24,
       },
     ],
     [MAIL_TEMPLATE.REGISTRATION_REJECTED, { recipientName: '<Applicant>' }],

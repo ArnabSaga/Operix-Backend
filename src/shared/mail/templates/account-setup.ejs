@@ -1,6 +1,47 @@
-<h1>Set up your Operix account</h1>
-<p>Hello <%= recipientName %>,</p>
-<p>Your Operix access request was approved. Choose a password to finish setting up your account.</p>
-<p><a class="button" href="<%= setupUrl %>">Set up your password</a></p>
-<p>If the button does not work, open this URL:</p>
-<p><%= setupUrl %></p>
+<p class="eyebrow eyebrow-success">Access approved</p>
+<h1 class="heading">Set up your Operix account</h1>
+<p class="greeting">Hi <%= recipientName %>,</p>
+<p class="subheading">
+  Your access request has been approved. Create your password to activate your Operix account.
+</p>
+
+<table class="info-card success-card" role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td>
+      <p class="info-card-title">Your account is approved</p>
+      <p class="info-card-copy">
+        Complete password setup to activate your Operix access.
+      </p>
+    </td>
+  </tr>
+</table>
+
+<table class="cta-row" role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center">
+      <a class="email-button" href="<%= setupUrl %>">Set Up Password</a>
+    </td>
+  </tr>
+</table>
+
+<p class="expiry-text">This setup link expires in <%= expiryHours %> hours.</p>
+
+<div class="link-fallback">
+  <p class="link-fallback-label">
+    If the button does not work, copy and paste this link into your browser:
+  </p>
+  <a class="link-fallback-url" href="<%= setupUrl %>"><%= setupUrl %></a>
+</div>
+
+<div class="divider"></div>
+
+<table class="security-card" role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <tr>
+    <td>
+      <p class="info-card-title">Security notice</p>
+      <p class="notice-line">This link expires in <%= expiryHours %> hours.</p>
+      <p class="notice-line">This link is intended only for your account.</p>
+      <p class="notice-line">Operix will never ask you to send your password by email.</p>
+    </td>
+  </tr>
+</table>

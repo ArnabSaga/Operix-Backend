@@ -34,6 +34,7 @@ export interface NotificationAlertEmailContext {
 export interface PasswordResetEmailContext {
   recipientName: string;
   resetUrl: string;
+  expiryHours: number;
 }
 
 export interface RegistrationReceivedEmailContext {
@@ -43,6 +44,7 @@ export interface RegistrationReceivedEmailContext {
 export interface AccountSetupEmailContext {
   recipientName: string;
   setupUrl: string;
+  expiryHours: number;
 }
 
 export interface RegistrationRejectedEmailContext {

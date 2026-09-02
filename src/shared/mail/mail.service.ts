@@ -2,6 +2,7 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { type Transporter } from 'nodemailer';
 import type { ApplicationConfiguration } from '../../config/configuration.js';
+import { PASSWORD_RESET_TOKEN_EXPIRES_IN_HOURS } from '../auth/password-reset.constant.js';
 import { APP_ERROR_CODE } from '../errors/app-error-code.constant.js';
 import { AppException } from '../errors/app.exception.js';
 import { SMTP_TIMEOUT_MS } from './mail.constant.js';
@@ -187,6 +188,7 @@ export class MailService {
       {
         recipientName: input.recipientName,
         resetUrl: input.resetUrl,
+        expiryHours: PASSWORD_RESET_TOKEN_EXPIRES_IN_HOURS,
       },
     );
 
@@ -225,7 +227,11 @@ export class MailService {
       { name: input.recipientName, address: input.email },
       'Set up your Operix account',
       MAIL_TEMPLATE.ACCOUNT_SETUP,
-      { recipientName: input.recipientName, setupUrl: input.setupUrl },
+      {
+        recipientName: input.recipientName,
+        setupUrl: input.setupUrl,
+        expiryHours: PASSWORD_RESET_TOKEN_EXPIRES_IN_HOURS,
+      },
     );
   }
 
