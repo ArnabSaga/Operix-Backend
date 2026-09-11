@@ -684,6 +684,25 @@ Reminder = one persisted reminder per recurring occurrence
 
 Admin creation remains limited to the Admin's current Team; Super Admin may create for any Team. Responsibility may cross Teams. Global Task visibility does not grant mutation, artifact, submission, review, Dashboard, report, Activity, or Inventory access. Recurrence uses stable business-local anchors and creates independent historical Task occurrences. Overdue remains derived and never becomes a persisted Task status.
 
+## 20.2 Team and Global Task Classification
+
+Every Task has one organization classification:
+
+```text
+TEAM
+→ belongs to exactly one Team
+
+GLOBAL
+→ organization level
+→ has no Team
+→ created only by SUPER_ADMIN
+→ uses DIRECT completion
+```
+
+A one time GLOBAL Task may remain unassigned. A recurring GLOBAL Task requires an active Responsible User. Distribution is optional and creates organization wide in app awareness without changing Task ownership, responsibility, or visibility. Active recipients are resolved when a distribution is sent. Recurring broadcast settings apply only to future occurrences, and every enabled occurrence owns one persisted distribution.
+
+GLOBAL Task attachments are readable by active authenticated users. Attachment upload and deletion remain limited to the immutable Task Owner or a Super Admin, only before execution begins. A sent GLOBAL distribution locks its Task attachments. TEAM and submission artifact authorization remain unchanged.
+
 ---
 
 # 21. Work Queue

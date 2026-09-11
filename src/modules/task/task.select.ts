@@ -7,6 +7,7 @@ export const taskSelect = {
   remarks: true,
   priority: true,
   status: true,
+  scope: true,
   dueAt: true,
   startedAt: true,
   completedAt: true,
@@ -51,6 +52,9 @@ export const taskSelect = {
     },
   },
   reminder: {
+    select: { status: true, scheduledAt: true, sentAt: true },
+  },
+  distribution: {
     select: { status: true, scheduledAt: true, sentAt: true },
   },
   createdAt: true,

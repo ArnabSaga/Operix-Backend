@@ -14,7 +14,10 @@ export function mapAttachmentResponse(
       originalName: attachment.file.originalName,
       mimeType: attachment.file.mimeType,
       sizeBytes: attachment.file.sizeBytes,
-      uploadedById: attachment.file.uploadedBy.publicId,
+      uploadedBy: {
+        id: attachment.file.uploadedBy.publicId,
+        name: attachment.file.uploadedBy.name,
+      },
       createdAt: attachment.file.createdAt,
     },
     downloadUrl: `/api/v1/files/${attachment.file.publicId}/download`,

@@ -5,6 +5,7 @@ import {
   TaskCompletionMode,
   TaskPriority,
   TaskReminderStatus,
+  TaskScope,
   TaskStatus,
   UserRole,
   UserStatus,
@@ -48,6 +49,7 @@ import { mapTaskResponse } from './task.mapper.js';
 import { buildTaskListWhere, getTaskOrderBy } from './task-query.js';
 import { generateTaskReferenceCode } from './task-reference.js';
 import { TaskRecurrenceService } from './task-recurrence.service.js';
+import { TaskDistributionService } from './task-distribution.service.js';
 import { taskSelect } from './task.select.js';
 
 @Injectable()
@@ -59,6 +61,7 @@ export class TaskService {
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
     private readonly recurrenceService?: TaskRecurrenceService,
+    private readonly distributionService?: TaskDistributionService,
     configService?: ConfigService<ApplicationConfiguration, true>,
   ) {
     this.businessTimezone =
@@ -72,11 +75,17 @@ export class TaskService {
   ): Promise<SafeTaskResponse> {
     this.assertCreationRole(viewer);
     const now = new Date();
+    const scope = dto.scope ?? TaskScope.TEAM;
     const completionMode = this.resolveCompletionMode(dto);
+    this.validateScopeInput(viewer, dto, scope, completionMode);
+    this.validateDistributionInput(dto, scope);
     this.validateRecurrenceInput(dto, completionMode, now);
 
     const result = await runSerializableTransaction(this.prisma, async (tx) => {
-      const teamId = await this.resolveCreationTeamId(tx, viewer, dto.teamId);
+      const teamId =
+        scope === TaskScope.TEAM
+          ? await this.resolveCreationTeamId(tx, viewer, dto.teamId!)
+          : null;
       const categoryId = await this.resolveCategoryId(tx, dto.categoryId);
       const responsible = dto.responsibleUserId
         ? await this.resolveResponsibleUser(
@@ -103,6 +112,7 @@ export class TaskService {
         const recurrence = await tx.taskRecurrence.create({
           data: {
             frequency: dto.recurrence.frequency,
+            scope,
             createdById: viewer.userId,
             defaultResponsibleUserId: responsible.id,
             teamId,
@@ -117,6 +127,8 @@ export class TaskService {
             anchorLocalTime: anchor.anchorLocalTime,
             nextOccurrenceAt,
             reminderLeadMinutes: dto.recurrence.reminderLeadMinutes ?? 1_440,
+            broadcastAll: dto.distribution !== undefined,
+            distributionLeadMinutes: dto.distribution?.leadMinutes ?? null,
           },
           select: { id: true },
         });
@@ -135,6 +147,7 @@ export class TaskService {
           remarks: dto.remarks ?? null,
           priority: dto.priority ?? TaskPriority.MEDIUM,
           status: initialStatus,
+          scope,
           dueAt: dto.dueAt ?? null,
           completionMode,
           recurrenceId,
@@ -195,6 +208,28 @@ export class TaskService {
         });
       }
 
+      let distributionId: string | null = null;
+      let distributionScheduledAt: Date | null = null;
+      if (dto.distribution) {
+        const scheduledAt = dto.recurrence
+          ? new Date(
+              dto.dueAt!.getTime() - dto.distribution.leadMinutes! * 60_000,
+            )
+          : (dto.distribution.scheduledAt ?? now);
+        distributionScheduledAt = scheduledAt;
+        const distribution = await tx.taskDistribution.create({
+          data: { taskId: task.id, scheduledAt },
+          select: { id: true },
+        });
+        distributionId = distribution.id;
+        await writeActivity(tx, {
+          actorId: viewer.userId,
+          action: TASK_ACTIVITY.TASK_DISTRIBUTION_SCHEDULED,
+          entityType: 'TASK',
+          entityId: task.id,
+        });
+      }
+
       const mail = responsible
         ? await this.createAssignmentSideEffects(
             tx,
@@ -205,17 +240,35 @@ export class TaskService {
           )
         : null;
 
-      const selected = responsible
-        ? await tx.task.findFirst({
-            where: { id: task.id },
-            select: taskSelect,
-          })
-        : task;
+      const selected =
+        responsible || distributionId
+          ? await tx.task.findFirst({
+              where: { id: task.id },
+              select: taskSelect,
+            })
+          : task;
       if (!selected) throw this.taskNotFound();
-      return { task: mapTaskResponse(selected, now), mail };
+      return {
+        task: mapTaskResponse(selected, now),
+        mail,
+        immediateDistributionId:
+          distributionId && distributionScheduledAt! <= now
+            ? distributionId
+            : null,
+      };
     });
 
     await this.sendAssignmentBestEffort(result.mail);
+    if (result.immediateDistributionId) {
+      await this.distributionService
+        ?.processDistribution(result.immediateDistributionId, new Date())
+        .catch((error: unknown) => {
+          this.logger.warn('Immediate task distribution failed.', {
+            eventId: result.task.id,
+            errorName: getErrorName(error),
+          });
+        });
+    }
     return result.task;
   }
 
@@ -223,6 +276,7 @@ export class TaskService {
     viewer: OperixViewer,
     query: ListTaskQueryDto,
   ): Promise<PaginatedTaskResponse> {
+    this.validateListFilters(query);
     const normalized = normalizePagination(query);
     const now = new Date();
     const where = buildTaskListWhere(viewer, query, now);
@@ -249,6 +303,7 @@ export class TaskService {
     now: Date,
     take: number,
   ): Promise<SafeTaskResponse[]> {
+    this.validateListFilters(query);
     const tasks = await this.prisma.task.findMany({
       where: buildTaskListWhere(viewer, query, now),
       select: taskSelect,
@@ -544,6 +599,16 @@ export class TaskService {
   }
 
   private resolveCompletionMode(dto: CreateTaskDto): TaskCompletionMode {
+    if (dto.scope === TaskScope.GLOBAL) {
+      if (dto.completionMode === TaskCompletionMode.REVIEW_REQUIRED) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          TASK_ERROR_CODE.INVALID_TASK_SCOPE,
+          'Global tasks must use direct completion.',
+        );
+      }
+      return TaskCompletionMode.DIRECT;
+    }
     if (dto.recurrence) {
       if (dto.completionMode === TaskCompletionMode.REVIEW_REQUIRED) {
         throw new AppException(
@@ -555,6 +620,67 @@ export class TaskService {
       return TaskCompletionMode.DIRECT;
     }
     return dto.completionMode ?? TaskCompletionMode.REVIEW_REQUIRED;
+  }
+
+  private validateScopeInput(
+    viewer: OperixViewer,
+    dto: CreateTaskDto,
+    scope: TaskScope,
+    completionMode: TaskCompletionMode,
+  ): void {
+    const invalidTeam = scope === TaskScope.TEAM && !dto.teamId;
+    const invalidGlobal = scope === TaskScope.GLOBAL && dto.teamId != null;
+    const unauthorizedGlobal =
+      scope === TaskScope.GLOBAL && viewer.role !== UserRole.SUPER_ADMIN;
+    if (
+      invalidTeam ||
+      invalidGlobal ||
+      unauthorizedGlobal ||
+      (scope === TaskScope.GLOBAL &&
+        completionMode !== TaskCompletionMode.DIRECT)
+    ) {
+      throw new AppException(
+        unauthorizedGlobal ? HttpStatus.FORBIDDEN : HttpStatus.BAD_REQUEST,
+        unauthorizedGlobal
+          ? APP_ERROR_CODE.FORBIDDEN
+          : TASK_ERROR_CODE.INVALID_TASK_SCOPE,
+        unauthorizedGlobal
+          ? 'Only a Super Admin may create a global task.'
+          : 'Task scope and Team selection are invalid.',
+      );
+    }
+  }
+
+  private validateDistributionInput(
+    dto: CreateTaskDto,
+    scope: TaskScope,
+  ): void {
+    if (!dto.distribution) return;
+    const invalidScope = scope !== TaskScope.GLOBAL;
+    const recurring = dto.recurrence !== undefined;
+    const invalidRecurring =
+      recurring &&
+      (dto.distribution.leadMinutes === undefined ||
+        dto.distribution.scheduledAt !== undefined);
+    const invalidOneTime =
+      !recurring && dto.distribution.leadMinutes !== undefined;
+    if (invalidScope || invalidRecurring || invalidOneTime) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        TASK_ERROR_CODE.INVALID_TASK_DISTRIBUTION,
+        'Task distribution timing is invalid.',
+      );
+    }
+  }
+
+  private validateListFilters(query: ListTaskQueryDto): void {
+    if (query.scope === TaskScope.GLOBAL && query.teamId) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        APP_ERROR_CODE.VALIDATION_ERROR,
+        'A global Task filter cannot include a Team.',
+      );
+    }
   }
 
   private validateRecurrenceInput(

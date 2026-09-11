@@ -1,0 +1,102 @@
+{
+  "info": {
+    "name": "Operix Team and Global Tasks",
+    "description": "Coordinated backend contract for GLOBAL Tasks, distribution management, filtering, and attachment access.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api/v1"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "taskId",
+      "value": ""
+    },
+    {
+      "key": "responsibleUserId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Immediate Global Task",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Organization policy acknowledgement\",\n  \"scope\": \"GLOBAL\",\n  \"distribution\": {\n    \"notifyAll\": true\n  }\n}"
+        },
+        "url": "{{baseUrl}}/tasks"
+      }
+    },
+    {
+      "name": "Create Recurring Global Task",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Publish organization status\",\n  \"scope\": \"GLOBAL\",\n  \"dueAt\": \"2026-10-25T17:00:00+06:00\",\n  \"responsibleUserId\": \"{{responsibleUserId}}\",\n  \"recurrence\": {\n    \"frequency\": \"MONTHLY\"\n  },\n  \"distribution\": {\n    \"notifyAll\": true,\n    \"leadMinutes\": 1440\n  }\n}"
+        },
+        "url": "{{baseUrl}}/tasks"
+      }
+    },
+    {
+      "name": "List Global Tasks",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/tasks?scope=GLOBAL"
+      }
+    },
+    {
+      "name": "Reschedule Pending Distribution",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"scheduledAt\": \"2026-09-15T08:30:00+06:00\"\n}"
+        },
+        "url": "{{baseUrl}}/tasks/{{taskId}}/distribution"
+      }
+    },
+    {
+      "name": "Cancel Pending Distribution",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/tasks/{{taskId}}/distribution/cancel"
+      }
+    }
+  ]
+}

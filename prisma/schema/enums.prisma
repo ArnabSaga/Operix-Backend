@@ -56,12 +56,23 @@ enum TaskCompletionMode {
   DIRECT
 }
 
+enum TaskScope {
+  TEAM
+  GLOBAL
+}
+
 enum TaskRecurrenceFrequency {
   WEEKLY
   MONTHLY
 }
 
 enum TaskReminderStatus {
+  PENDING
+  SENT
+  CANCELLED
+}
+
+enum TaskDistributionStatus {
   PENDING
   SENT
   CANCELLED

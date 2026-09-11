@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { memoryStorage } from 'multer';
 import { UserRole } from '../../../generated/prisma/enums.js';
 import { AccountStatusGuard } from '../../shared/auth/account-status.guard.js';
@@ -32,7 +33,8 @@ export class TaskAttachmentController {
   constructor(private readonly taskAttachmentService: TaskAttachmentService) {}
 
   @Post()
-  @RequireRoles(UserRole.ADMIN)
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @UseInterceptors(
     FilesInterceptor('files', MAX_ATTACHMENT_FILES, {
       storage: memoryStorage(),
@@ -64,7 +66,8 @@ export class TaskAttachmentController {
   }
 
   @Delete(':attachmentId')
-  @RequireRoles(UserRole.ADMIN)
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   deleteTaskAttachment(
     @CurrentViewer() viewer: OperixViewer,
     @Param('taskId', PublicIdPipe) taskId: string,

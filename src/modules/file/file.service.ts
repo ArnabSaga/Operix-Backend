@@ -7,7 +7,7 @@ import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
 import { AppException } from '../../shared/errors/app.exception.js';
 import { FileStorageService } from '../../shared/file-storage/file-storage.service.js';
 import { buildSubmissionScopeWhere } from '../submission/policies/submission-scope.policy.js';
-import { buildTaskScopeWhere } from '../task/policies/task-scope.policy.js';
+import { buildTaskArtifactScopeWhere } from '../task/policies/task-scope.policy.js';
 
 export interface AuthorizedFileDownload {
   stream: Readable;
@@ -78,7 +78,7 @@ export class FileService {
       const task = await this.prisma.task.findFirst({
         where: {
           id: attachment.taskId,
-          AND: [buildTaskScopeWhere(viewer)],
+          AND: [buildTaskArtifactScopeWhere(viewer)],
         },
         select: {
           id: true,

@@ -39,7 +39,8 @@ export function mapTaskResponse(
     completionMode: task.completionMode,
     completionNote: task.completionNote,
     occurrenceKey: task.occurrenceKey,
-    team: { id: task.team.publicId, name: task.team.name },
+    scope: task.scope,
+    team: task.team ? { id: task.team.publicId, name: task.team.name } : null,
     categoryId: task.category?.publicId ?? null,
     owner: {
       id: task.createdBy.publicId,
@@ -67,6 +68,7 @@ export function mapTaskResponse(
         }
       : null,
     reminder: task.reminder,
+    distribution: task.distribution,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     isOverdue: isTaskOverdue(task, now),

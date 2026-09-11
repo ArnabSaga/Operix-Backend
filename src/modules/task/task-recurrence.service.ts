@@ -5,6 +5,7 @@ import {
   TaskCompletionMode,
   TaskRecurrenceBlockedReason,
   TaskStatus,
+  TaskScope,
   UserRole,
   UserStatus,
 } from '../../../generated/prisma/enums.js';
@@ -43,6 +44,7 @@ const recurrenceSelect = {
   id: true,
   publicId: true,
   frequency: true,
+  scope: true,
   title: true,
   description: true,
   remarks: true,
@@ -54,6 +56,8 @@ const recurrenceSelect = {
   nextOccurrenceAt: true,
   reminderLeadMinutes: true,
   isActive: true,
+  broadcastAll: true,
+  distributionLeadMinutes: true,
   createdAt: true,
   updatedAt: true,
   createdBy: {
@@ -138,6 +142,7 @@ export class TaskRecurrenceService {
           anchorLocalWeekday: true,
           anchorLocalTime: true,
           nextOccurrenceAt: true,
+          scope: true,
         },
       });
       if (!existing) throw this.notFound();
@@ -169,6 +174,17 @@ export class TaskRecurrenceService {
         }
         responsibleUserId = responsible.id;
       }
+      if (
+        dto.distributionLeadMinutes !== undefined &&
+        dto.distributionLeadMinutes !== null &&
+        existing.scope !== TaskScope.GLOBAL
+      ) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          TASK_ERROR_CODE.INVALID_TASK_DISTRIBUTION,
+          'Only global recurrences may enable broadcast distribution.',
+        );
+      }
       const isResuming = existing.isActive === false && dto.isActive === true;
       const anchor = createRecurrenceAnchor(
         existing.anchorDueAt,
@@ -184,7 +200,10 @@ export class TaskRecurrenceService {
             anchor,
           )
         : undefined;
-      const clearsBlockedState = responsibleUserId !== undefined || isResuming;
+      const clearsBlockedState =
+        responsibleUserId !== undefined ||
+        isResuming ||
+        dto.distributionLeadMinutes !== undefined;
       const updated = await tx.taskRecurrence.update({
         where: { id: existing.id },
         data: {
@@ -194,6 +213,12 @@ export class TaskRecurrenceService {
             : {}),
           ...(dto.reminderLeadMinutes !== undefined
             ? { reminderLeadMinutes: dto.reminderLeadMinutes }
+            : {}),
+          ...(dto.distributionLeadMinutes !== undefined
+            ? {
+                broadcastAll: dto.distributionLeadMinutes !== null,
+                distributionLeadMinutes: dto.distributionLeadMinutes,
+              }
             : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
           ...(nextOccurrenceAt ? { nextOccurrenceAt } : {}),
@@ -289,6 +314,15 @@ export class TaskRecurrenceService {
             select: { id: true },
           });
           if (existing) return 'noop' as const;
+          if (recurrence.scope === TaskScope.TEAM && recurrence.team === null) {
+            await this.recordBlocked(
+              tx,
+              recurrence,
+              occurrenceKey,
+              TaskRecurrenceBlockedReason.TEAM_NOT_AVAILABLE,
+            );
+            return 'blocked' as const;
+          }
           if (recurrence.defaultResponsibleUser.status !== UserStatus.ACTIVE) {
             await this.recordBlocked(
               tx,
@@ -319,6 +353,7 @@ export class TaskRecurrenceService {
               status: TaskStatus.ASSIGNED,
               dueAt,
               completionMode: TaskCompletionMode.DIRECT,
+              scope: recurrence.scope,
               recurrenceId,
               occurrenceKey,
               teamId: recurrence.teamId,
@@ -337,6 +372,19 @@ export class TaskRecurrenceService {
                   ),
                 },
               },
+              ...(recurrence.broadcastAll &&
+              recurrence.distributionLeadMinutes !== null
+                ? {
+                    distribution: {
+                      create: {
+                        scheduledAt: new Date(
+                          dueAt.getTime() -
+                            recurrence.distributionLeadMinutes * 60_000,
+                        ),
+                      },
+                    },
+                  }
+                : {}),
             },
             select: {
               id: true,
@@ -372,6 +420,17 @@ export class TaskRecurrenceService {
             entityId: task.id,
             metadata: { occurrenceKey },
           });
+          if (
+            recurrence.broadcastAll &&
+            recurrence.distributionLeadMinutes !== null
+          ) {
+            await writeActivity(tx, {
+              actorId: null,
+              action: TASK_ACTIVITY.TASK_DISTRIBUTION_SCHEDULED,
+              entityType: 'TASK',
+              entityId: task.id,
+            });
+          }
           await createNotification(tx, {
             receiverId: recurrence.defaultResponsibleUserId,
             actorId: null,
@@ -503,11 +562,15 @@ export class TaskRecurrenceService {
         employeeId: recurrence.defaultResponsibleUser.employeeId,
         designation: recurrence.defaultResponsibleUser.designation,
       },
-      team: { id: recurrence.team.publicId, name: recurrence.team.name },
+      team: recurrence.team
+        ? { id: recurrence.team.publicId, name: recurrence.team.name }
+        : null,
+      scope: recurrence.scope,
       categoryId: recurrence.category?.publicId ?? null,
       anchorDueAt: recurrence.anchorDueAt,
       nextOccurrenceAt: recurrence.nextOccurrenceAt,
       reminderLeadMinutes: recurrence.reminderLeadMinutes,
+      distributionLeadMinutes: recurrence.distributionLeadMinutes,
       isActive: recurrence.isActive,
       createdAt: recurrence.createdAt,
       updatedAt: recurrence.updatedAt,

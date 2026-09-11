@@ -2,7 +2,10 @@ import { HttpStatus } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import {
+  TaskCompletionMode,
+  TaskDistributionStatus,
   TaskPriority,
+  TaskScope,
   TaskStatus,
   UserRole,
   UserStatus,
@@ -15,6 +18,7 @@ import {
   TaskSort,
 } from '../../../src/modules/task/task.constant';
 import { ListTaskQueryDto } from '../../../src/modules/task/dto/list-task-query.dto';
+import { CreateTaskDto } from '../../../src/modules/task/dto/create-task.dto';
 import { buildTaskScopeWhere } from '../../../src/modules/task/policies/task-scope.policy';
 import type { SafeTaskResponse } from '../../../src/modules/task/task.interface';
 import { isTaskOverdue } from '../../../src/modules/task/task.mapper';
@@ -23,6 +27,7 @@ import {
   getTaskOrderBy,
 } from '../../../src/modules/task/task-query';
 import { TaskService } from '../../../src/modules/task/task.service';
+import { APP_ERROR_CODE } from '../../../src/shared/errors/app-error-code.constant';
 import type { OperixViewer } from '../../../src/shared/auth/viewer.interface';
 
 const jestApi = import.meta.jest;
@@ -67,10 +72,12 @@ function createTask(
     ...baseTask(),
     ...overrides,
   };
-  Object.defineProperty(task.team, 'publicId', {
-    value: task.team.id,
-    enumerable: false,
-  });
+  if (task.team) {
+    Object.defineProperty(task.team, 'publicId', {
+      value: task.team.id,
+      enumerable: false,
+    });
+  }
   Object.defineProperties(task, {
     publicId: { value: task.id, enumerable: false },
     category: {
@@ -101,6 +108,7 @@ function baseTask(): SafeTaskResponse {
     remarks: null,
     priority: TaskPriority.MEDIUM,
     status: TaskStatus.PENDING,
+    scope: TaskScope.TEAM,
     dueAt: null,
     startedAt: null,
     completedAt: null,
@@ -121,6 +129,7 @@ function baseTask(): SafeTaskResponse {
     occurrenceKey: null,
     recurrence: null,
     reminder: null,
+    distribution: null,
     createdAt: fixedDate,
     updatedAt: fixedDate,
     isOverdue: false,
@@ -211,6 +220,30 @@ describe('ListTaskQueryDto', () => {
   });
 });
 
+describe('CreateTaskDto distribution validation', () => {
+  it('requires notifyAll to be true and validates the lead range', () => {
+    const valid = plainToInstance(CreateTaskDto, {
+      title: 'Global recurring task',
+      scope: TaskScope.GLOBAL,
+      distribution: { notifyAll: true, leadMinutes: 1_440 },
+    });
+    const disabled = plainToInstance(CreateTaskDto, {
+      title: 'Global task',
+      scope: TaskScope.GLOBAL,
+      distribution: { notifyAll: false },
+    });
+    const excessiveLead = plainToInstance(CreateTaskDto, {
+      title: 'Global task',
+      scope: TaskScope.GLOBAL,
+      distribution: { notifyAll: true, leadMinutes: 10_081 },
+    });
+
+    expect(validateSync(valid)).toHaveLength(0);
+    expect(validateSync(disabled)).not.toHaveLength(0);
+    expect(validateSync(excessiveLead)).not.toHaveLength(0);
+  });
+});
+
 describe('TaskService', () => {
   it('rejects Member task creation', async () => {
     const service = createTaskService({} as PrismaService);
@@ -227,6 +260,224 @@ describe('TaskService', () => {
         code: 'FORBIDDEN',
       });
     }
+  });
+
+  it('rejects GLOBAL creation by an Admin before database access', async () => {
+    const prisma = { $transaction: jestApi.fn() };
+    const service = createTaskService(prisma as unknown as PrismaService);
+
+    try {
+      await service.createTask(createViewer(UserRole.ADMIN), {
+        title: 'Organization notice',
+        scope: TaskScope.GLOBAL,
+      });
+      throw new Error('Expected GLOBAL creation to fail.');
+    } catch (error) {
+      expectAppException(error, {
+        status: HttpStatus.FORBIDDEN,
+        code: APP_ERROR_CODE.FORBIDDEN,
+      });
+    }
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects REVIEW_REQUIRED and Team identity for GLOBAL tasks', async () => {
+    const prisma = { $transaction: jestApi.fn() };
+    const service = createTaskService(prisma as unknown as PrismaService);
+    const chief = createViewer(UserRole.SUPER_ADMIN);
+
+    try {
+      await service.createTask(chief, {
+        title: 'Reviewed global work',
+        scope: TaskScope.GLOBAL,
+        completionMode: TaskCompletionMode.REVIEW_REQUIRED,
+      });
+      throw new Error('Expected reviewed GLOBAL creation to fail.');
+    } catch (error) {
+      expectAppException(error, {
+        status: HttpStatus.BAD_REQUEST,
+        code: TASK_ERROR_CODE.INVALID_TASK_SCOPE,
+      });
+    }
+    try {
+      await service.createTask(chief, {
+        title: 'Global with Team',
+        scope: TaskScope.GLOBAL,
+        teamId: 'team-public',
+      });
+      throw new Error('Expected GLOBAL Team identity to fail.');
+    } catch (error) {
+      expectAppException(error, {
+        status: HttpStatus.BAD_REQUEST,
+        code: TASK_ERROR_CODE.INVALID_TASK_SCOPE,
+      });
+    }
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('creates an unassigned immediate GLOBAL distribution independently', async () => {
+    const task = createTask({
+      scope: TaskScope.GLOBAL,
+      team: null,
+      completionMode: TaskCompletionMode.DIRECT,
+      distribution: {
+        status: TaskDistributionStatus.PENDING,
+        scheduledAt: fixedDate,
+        sentAt: null,
+      },
+    });
+    const tx = {
+      task: {
+        create: jestApi.fn().mockResolvedValue(task),
+        findFirst: jestApi.fn().mockResolvedValue(task),
+      },
+      taskDistribution: {
+        create: jestApi.fn().mockResolvedValue({ id: 'distribution-db' }),
+      },
+      taskStatusHistory: {
+        create: jestApi.fn().mockResolvedValue({ id: 'history-a' }),
+      },
+      activityLog: {
+        create: jestApi.fn().mockResolvedValue({ id: 'activity-a' }),
+      },
+    };
+    const prisma = {
+      $transaction: jestApi.fn(
+        (callback: (transaction: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      ),
+    } as unknown as PrismaService;
+    const processDistribution = jestApi.fn().mockResolvedValue({
+      state: 'sent',
+      recipients: 3,
+    });
+    const service = new TaskService(
+      prisma,
+      { sendTaskAssignedEmail: jestApi.fn() } as never,
+      undefined,
+      { processDistribution } as never,
+    );
+
+    const result = await service.createTask(
+      createViewer(UserRole.SUPER_ADMIN),
+      {
+        title: 'Organization notice',
+        scope: TaskScope.GLOBAL,
+        distribution: { notifyAll: true },
+      },
+    );
+
+    expect(result.scope).toBe(TaskScope.GLOBAL);
+    expect(result.team).toBeNull();
+    expect(tx.task.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        scope: TaskScope.GLOBAL,
+        teamId: null,
+        status: TaskStatus.PENDING,
+        completionMode: TaskCompletionMode.DIRECT,
+      }) as Record<string, unknown>,
+      select: expect.any(Object) as object,
+    });
+    expect(tx.taskDistribution.create).toHaveBeenCalledTimes(1);
+    expect(processDistribution).toHaveBeenCalledWith(
+      'distribution-db',
+      expect.any(Date),
+    );
+  });
+
+  it('uses the submitted recurring GLOBAL Task as the single first occurrence', async () => {
+    const dueAt = new Date('2099-09-25T11:00:00.000Z');
+    const selected = createTask({
+      scope: TaskScope.GLOBAL,
+      team: null,
+      status: TaskStatus.ASSIGNED,
+      completionMode: TaskCompletionMode.DIRECT,
+      dueAt,
+      occurrenceKey: '2099-09-25',
+      recurrence: {
+        id: '44444444-4444-4444-8444-444444444444',
+        frequency: 'MONTHLY',
+        nextOccurrenceAt: new Date('2099-10-25T11:00:00.000Z'),
+        reminderLeadMinutes: 1_440,
+        isActive: true,
+      },
+      distribution: {
+        status: TaskDistributionStatus.PENDING,
+        scheduledAt: new Date('2099-09-24T11:00:00.000Z'),
+        sentAt: null,
+      },
+    });
+    const tx = {
+      taskRecurrence: {
+        create: jestApi.fn().mockResolvedValue({ id: 'recurrence-db' }),
+      },
+      task: {
+        create: jestApi.fn().mockResolvedValue(selected),
+        findFirst: jestApi.fn().mockResolvedValue(selected),
+      },
+      taskAssignment: {
+        create: jestApi.fn().mockResolvedValue({ id: 'assignment-db' }),
+      },
+      taskReminder: {
+        create: jestApi.fn().mockResolvedValue({ id: 'reminder-db' }),
+      },
+      taskDistribution: {
+        create: jestApi.fn().mockResolvedValue({ id: 'distribution-db' }),
+      },
+      taskStatusHistory: {
+        create: jestApi.fn().mockResolvedValue({ id: 'history-db' }),
+      },
+      activityLog: {
+        create: jestApi.fn().mockResolvedValue({ id: 'activity-db' }),
+      },
+      notification: {
+        create: jestApi.fn().mockResolvedValue({ id: 'notification-db' }),
+      },
+      user: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'responsible-db',
+          name: 'Responsible User',
+          email: 'responsible@example.com',
+        }),
+      },
+    };
+    const prisma = {
+      $transaction: jestApi.fn(
+        (callback: (transaction: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      ),
+    } as unknown as PrismaService;
+    const service = createTaskService(prisma);
+
+    await service.createTask(createViewer(UserRole.SUPER_ADMIN), {
+      title: 'Publish monthly status',
+      scope: TaskScope.GLOBAL,
+      dueAt,
+      responsibleUserId: '44444444-4444-4444-8444-444444444444',
+      recurrence: { frequency: 'MONTHLY' },
+      distribution: { notifyAll: true, leadMinutes: 1_440 },
+    });
+
+    expect(tx.taskRecurrence.create).toHaveBeenCalledTimes(1);
+    expect(tx.task.create).toHaveBeenCalledTimes(1);
+    expect(tx.taskDistribution.create).toHaveBeenCalledTimes(1);
+    expect(tx.taskReminder.create).toHaveBeenCalledTimes(1);
+    expect(tx.task.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        recurrenceId: 'recurrence-db',
+        occurrenceKey: '2099-09-25',
+        scope: TaskScope.GLOBAL,
+        teamId: null,
+      }) as Record<string, unknown>,
+      select: expect.any(Object) as object,
+    });
+    expect(tx.taskDistribution.create).toHaveBeenCalledWith({
+      data: {
+        taskId: selected.id,
+        scheduledAt: new Date('2099-09-24T11:00:00.000Z'),
+      },
+      select: { id: true },
+    });
   });
 
   it('creates a pending task with status history and activity', async () => {
@@ -811,7 +1062,9 @@ describe('task query helpers', () => {
         { teamId: 'team-b' },
         fixedDate,
       ),
-    ).toEqual({ AND: [{ team: { publicId: 'team-b' } }] });
+    ).toEqual({
+      AND: [{ scope: TaskScope.TEAM }, { team: { publicId: 'team-b' } }],
+    });
 
     expect(
       buildTaskListWhere(

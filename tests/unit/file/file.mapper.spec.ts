@@ -17,6 +17,7 @@ describe('file mapper', () => {
           uploadedById: 'admin-a',
           uploadedBy: {
             publicId: '22222222-2222-4222-8222-222222222222',
+            name: 'Admin A',
           },
           createdAt: new Date('2026-08-22T00:00:00.000Z'),
         },
@@ -28,7 +29,10 @@ describe('file mapper', () => {
         originalName: 'document.pdf',
         mimeType: 'application/pdf',
         sizeBytes: 123,
-        uploadedById: '22222222-2222-4222-8222-222222222222',
+        uploadedBy: {
+          id: '22222222-2222-4222-8222-222222222222',
+          name: 'Admin A',
+        },
         createdAt: new Date('2026-08-22T00:00:00.000Z'),
       },
       downloadUrl:

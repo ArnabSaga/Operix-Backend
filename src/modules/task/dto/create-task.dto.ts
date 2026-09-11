@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  Equals,
+  IsBoolean,
   IsDate,
   IsEnum,
   IsOptional,
@@ -15,6 +17,7 @@ import {
   TaskCompletionMode,
   TaskPriority,
   TaskRecurrenceFrequency,
+  TaskScope,
 } from '../../../../generated/prisma/enums.js';
 
 export class CreateTaskRecurrenceDto {
@@ -27,6 +30,24 @@ export class CreateTaskRecurrenceDto {
   @Min(0)
   @Max(10_080)
   reminderLeadMinutes?: number;
+}
+
+export class CreateTaskDistributionDto {
+  @IsBoolean()
+  @Equals(true)
+  notifyAll!: true;
+
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  scheduledAt?: Date;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10_080)
+  leadMinutes?: number;
 }
 
 export class CreateTaskDto {
@@ -54,9 +75,14 @@ export class CreateTaskDto {
   @IsDate()
   dueAt?: Date;
 
+  @IsOptional()
+  @IsEnum(TaskScope)
+  scope?: TaskScope;
+
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  teamId!: string;
+  teamId?: string | null;
 
   @IsOptional()
   @IsString()
@@ -76,4 +102,9 @@ export class CreateTaskDto {
   @ValidateNested()
   @Type(() => CreateTaskRecurrenceDto)
   recurrence?: CreateTaskRecurrenceDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateTaskDistributionDto)
+  distribution?: CreateTaskDistributionDto;
 }

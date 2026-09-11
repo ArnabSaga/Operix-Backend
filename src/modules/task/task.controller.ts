@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -23,12 +24,17 @@ import { CreateTaskDto } from './dto/create-task.dto.js';
 import { CompleteTaskDto } from './dto/complete-task.dto.js';
 import { ListTaskQueryDto } from './dto/list-task-query.dto.js';
 import { TaskService } from './task.service.js';
+import { TaskDistributionService } from './task-distribution.service.js';
+import { RescheduleTaskDistributionDto } from './dto/reschedule-task-distribution.dto.js';
 
 @ApiTags('tasks')
 @Controller('tasks')
 @UseGuards(ViewerContextGuard, AccountStatusGuard, OperixRoleGuard)
 export class TaskController {
-  constructor(private readonly taskService: TaskService) {}
+  constructor(
+    private readonly taskService: TaskService,
+    private readonly taskDistributionService: TaskDistributionService,
+  ) {}
 
   @Post()
   @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
@@ -98,5 +104,28 @@ export class TaskController {
     @Body() dto: CompleteTaskDto,
   ) {
     return this.taskService.completeTask(viewer, taskId, dto);
+  }
+
+  @Patch(':taskId/distribution')
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  rescheduleDistribution(
+    @CurrentViewer() viewer: OperixViewer,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: RescheduleTaskDistributionDto,
+  ) {
+    return this.taskDistributionService.reschedule(
+      viewer,
+      taskId,
+      dto.scheduledAt,
+    );
+  }
+
+  @Post(':taskId/distribution/cancel')
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  cancelDistribution(
+    @CurrentViewer() viewer: OperixViewer,
+    @Param('taskId', PublicIdPipe) taskId: string,
+  ) {
+    return this.taskDistributionService.cancel(viewer, taskId);
   }
 }

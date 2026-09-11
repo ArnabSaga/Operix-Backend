@@ -1,5 +1,6 @@
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { TaskStatus } from '../../../generated/prisma/enums.js';
+import { TaskScope } from '../../../generated/prisma/enums.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import type { ListTaskQueryDto } from './dto/list-task-query.dto.js';
 import { TaskSort } from './task.constant.js';
@@ -41,6 +42,12 @@ function buildTaskFilterConditions(
   now: Date,
 ): Prisma.TaskWhereInput[] {
   const conditions: Prisma.TaskWhereInput[] = [];
+
+  if (query.scope) {
+    conditions.push({ scope: query.scope });
+  } else if (query.teamId) {
+    conditions.push({ scope: TaskScope.TEAM });
+  }
 
   if (query.status) {
     conditions.push({

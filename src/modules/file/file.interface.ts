@@ -3,7 +3,7 @@ export interface SafeFileResponse {
   originalName: string;
   mimeType: string;
   sizeBytes: number;
-  uploadedById: string;
+  uploadedBy: { id: string; name: string };
   createdAt: Date;
 }
 
@@ -25,7 +25,7 @@ export interface SafeFileSource {
   mimeType: string;
   sizeBytes: number;
   uploadedById: string;
-  uploadedBy: { publicId: string };
+  uploadedBy: { publicId: string; name: string };
   createdAt: Date;
 }
 
