@@ -38,6 +38,7 @@ export function mapTaskResponse(
     scheduledStartAt: task.scheduledStartAt,
     completionMode: task.completionMode,
     completionNote: task.completionNote,
+    allowSelfClaim: task.allowSelfClaim,
     occurrenceKey: task.occurrenceKey,
     scope: task.scope,
     team: task.team ? { id: task.team.publicId, name: task.team.name } : null,

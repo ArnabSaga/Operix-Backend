@@ -1,9 +1,5 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import {
-  TaskDistributionStatus,
-  TaskStatus,
-  UserRole,
-} from '../../../generated/prisma/enums.js';
+import { UserRole } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { writeActivity } from '../../shared/activity/activity-write.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
@@ -18,6 +14,7 @@ import { safeAttachmentSelect } from '../file/file.select.js';
 import type { SafeAttachmentResponse } from '../file/file.interface.js';
 import { buildTaskArtifactScopeWhere } from './policies/task-scope.policy.js';
 import { TASK_ACTIVITY, TASK_ERROR_CODE } from './task.constant.js';
+import { canMutateTaskAttachments } from './policies/task-attachment.policy.js';
 
 @Injectable()
 export class TaskAttachmentService {
@@ -276,23 +273,15 @@ export class TaskAttachmentService {
     if (!task) {
       throw this.taskNotFound();
     }
-    if (
-      viewer.role !== UserRole.SUPER_ADMIN &&
-      task.createdById !== viewer.userId
-    ) {
+    const decision = canMutateTaskAttachments(viewer, task);
+    if (!decision.allowed && decision.reason === 'FORBIDDEN') {
       throw new AppException(
         HttpStatus.FORBIDDEN,
         APP_ERROR_CODE.FORBIDDEN,
         'You do not have access to this action.',
       );
     }
-    const editableByState =
-      task.status === TaskStatus.PENDING ||
-      (task.status === TaskStatus.ASSIGNED && task.startedAt === null);
-    if (
-      !editableByState ||
-      task.distribution?.status === TaskDistributionStatus.SENT
-    ) {
+    if (!decision.allowed) {
       throw new AppException(
         HttpStatus.CONFLICT,
         TASK_ERROR_CODE.TASK_ATTACHMENTS_NOT_EDITABLE,

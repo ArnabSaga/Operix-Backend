@@ -14,6 +14,7 @@ export const taskSelect = {
   cancelledAt: true,
   completionMode: true,
   completionNote: true,
+  allowSelfClaim: true,
   scheduledStartAt: true,
   occurrenceKey: true,
   team: { select: { publicId: true, name: true } },

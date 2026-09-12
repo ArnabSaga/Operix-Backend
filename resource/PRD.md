@@ -703,6 +703,8 @@ A one time GLOBAL Task may remain unassigned. A recurring GLOBAL Task requires a
 
 GLOBAL Task attachments are readable by active authenticated users. Attachment upload and deletion remain limited to the immutable Task Owner or a Super Admin, only before execution begins. A sent GLOBAL distribution locks its Task attachments. TEAM and submission artifact authorization remain unchanged.
 
+Task Owners and Super Admins may optionally make a one time, unassigned Task available for Member self claim. Self claim is available to active Members across Team boundaries and remains separate from general assignment. Recurring Tasks cannot enable self claim. A successful claim creates the normal responsibility and Task history, moves the Task from PENDING to ASSIGNED, and notifies only the claimant and Owner.
+
 ---
 
 # 21. Work Queue

@@ -4,11 +4,14 @@ import { HttpStatus } from '@nestjs/common';
 import { fileTypeFromBuffer } from 'file-type';
 import {
   ALLOWED_FILE_MIME_TYPES,
+  CANONICAL_MIME_TYPE_ALIASES,
   EXTENSIONS_BY_MIME_TYPE,
+  GENERIC_OFFICE_MIME_TYPES,
   MAX_ATTACHMENT_FILES,
   MAX_FILE_SIZE_BYTES,
   MAX_ORIGINAL_NAME_LENGTH,
   MIME_TYPE_BY_FILE_TYPE_EXTENSION,
+  OFFICE_MIME_TYPE_BY_EXTENSION,
 } from './file-storage.constant.js';
 import type { ValidatedUploadFile } from './file-storage.interface.js';
 import { APP_ERROR_CODE } from '../errors/app-error-code.constant.js';
@@ -69,32 +72,51 @@ export async function validateUploadFile(
   }
 
   const originalName = normalizeOriginalFilename(file.originalname);
-  const declaredMimeType = file.mimetype;
+  const declaredMimeType = canonicalizeDeclaredMimeType(file.mimetype);
   const extension = path.extname(originalName).toLowerCase();
+  const genericOfficeDeclaration =
+    GENERIC_OFFICE_MIME_TYPES.has(declaredMimeType);
+  const expectedOfficeMimeType = OFFICE_MIME_TYPE_BY_EXTENSION[extension];
 
-  if (!ALLOWED_FILE_MIME_TYPES.has(declaredMimeType)) {
+  if (genericOfficeDeclaration && !expectedOfficeMimeType) {
+    throw fileTypeNotAllowed();
+  }
+  if (
+    !genericOfficeDeclaration &&
+    (!ALLOWED_FILE_MIME_TYPES.has(declaredMimeType) ||
+      !EXTENSIONS_BY_MIME_TYPE[declaredMimeType]?.includes(extension))
+  ) {
     throw fileTypeNotAllowed();
   }
 
-  if (!EXTENSIONS_BY_MIME_TYPE[declaredMimeType]?.includes(extension)) {
+  let detected: Awaited<ReturnType<typeof fileTypeFromBuffer>>;
+  try {
+    detected = await fileTypeFromBuffer(file.buffer);
+  } catch {
     throw fileTypeNotAllowed();
   }
-
-  const detected = await fileTypeFromBuffer(file.buffer);
   const detectedMimeType = detected
     ? (MIME_TYPE_BY_FILE_TYPE_EXTENSION[detected.ext] ?? detected.mime)
     : null;
+  const canonicalMimeType = genericOfficeDeclaration
+    ? expectedOfficeMimeType
+    : declaredMimeType;
 
-  if (detectedMimeType !== declaredMimeType) {
+  if (detectedMimeType !== canonicalMimeType) {
     throw fileTypeNotAllowed();
   }
 
   return {
     originalName,
-    mimeType: declaredMimeType,
+    mimeType: canonicalMimeType,
     sizeBytes: file.size,
     buffer: file.buffer,
   };
+}
+
+export function canonicalizeDeclaredMimeType(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  return CANONICAL_MIME_TYPE_ALIASES[normalized] ?? normalized;
 }
 
 export function normalizeOriginalFilename(value: string): string {

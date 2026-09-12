@@ -99,6 +99,10 @@ export class CreateTaskDto {
   completionMode?: TaskCompletionMode;
 
   @IsOptional()
+  @IsBoolean()
+  allowSelfClaim?: boolean;
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => CreateTaskRecurrenceDto)
   recurrence?: CreateTaskRecurrenceDto;

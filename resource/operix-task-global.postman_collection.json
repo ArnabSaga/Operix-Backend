@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Operix Team and Global Tasks",
-    "description": "Coordinated backend contract for GLOBAL Tasks, distribution management, filtering, and attachment access.",
+    "description": "Coordinated backend contract for GLOBAL Tasks, distribution management, attachment access, and Member self claim.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -96,6 +96,30 @@
       "request": {
         "method": "POST",
         "url": "{{baseUrl}}/tasks/{{taskId}}/distribution/cancel"
+      }
+    },
+    {
+      "name": "Enable Member Self Claim",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"enabled\": true\n}"
+        },
+        "url": "{{baseUrl}}/tasks/{{taskId}}/self-claim"
+      }
+    },
+    {
+      "name": "Claim Task as Member",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/tasks/{{taskId}}/claim"
       }
     }
   ]

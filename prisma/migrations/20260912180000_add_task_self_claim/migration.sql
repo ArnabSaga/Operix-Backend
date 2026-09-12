@@ -1,0 +1,2 @@
+ALTER TABLE "task"
+  ADD COLUMN "allowSelfClaim" BOOLEAN NOT NULL DEFAULT false;

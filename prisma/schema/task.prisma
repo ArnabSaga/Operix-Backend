@@ -29,6 +29,7 @@ model Task {
   cancelledAt      DateTime?
   completionMode   TaskCompletionMode @default(REVIEW_REQUIRED)
   completionNote   String?
+  allowSelfClaim   Boolean            @default(false)
   scheduledStartAt DateTime?
   recurrenceId     String?
   occurrenceKey    String?

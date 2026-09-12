@@ -41,6 +41,7 @@ export type SafeTaskResponse = Pick<
   scheduledStartAt: Date | null;
   completionMode: TaskCompletionMode;
   completionNote: string | null;
+  allowSelfClaim: boolean;
   occurrenceKey: string | null;
   recurrence: {
     id: string;

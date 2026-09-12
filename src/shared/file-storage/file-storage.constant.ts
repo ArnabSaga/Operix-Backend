@@ -12,6 +12,15 @@ export const ALLOWED_FILE_MIME_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 ]);
 
+export const GENERIC_OFFICE_MIME_TYPES = new Set([
+  'application/octet-stream',
+  'application/zip',
+]);
+
+export const CANONICAL_MIME_TYPE_ALIASES: Readonly<Record<string, string>> = {
+  'image/jpg': 'image/jpeg',
+};
+
 export const EXTENSIONS_BY_MIME_TYPE: Record<string, readonly string[]> = {
   'application/pdf': ['.pdf'],
   'image/jpeg': ['.jpg', '.jpeg'],
@@ -36,6 +45,14 @@ export const MIME_TYPE_BY_FILE_TYPE_EXTENSION: Record<string, string> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+};
+
+export const OFFICE_MIME_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = {
+  '.docx':
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.pptx':
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 };
 
 export const FILE_STORAGE_ADAPTER = Symbol('FILE_STORAGE_ADAPTER');

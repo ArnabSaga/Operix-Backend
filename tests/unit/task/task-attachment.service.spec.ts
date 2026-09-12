@@ -9,9 +9,52 @@ import {
 import { PrismaService } from '../../../src/database/prisma.service';
 import { TaskAttachmentService } from '../../../src/modules/task/task-attachment.service';
 import { TASK_ERROR_CODE } from '../../../src/modules/task/task.constant';
+import { canMutateTaskAttachments } from '../../../src/modules/task/policies/task-attachment.policy';
 import type { OperixViewer } from '../../../src/shared/auth/viewer.interface';
 
 const jestApi = import.meta.jest;
+
+describe('canMutateTaskAttachments', () => {
+  const baseTask = {
+    createdById: 'owner-db',
+    status: TaskStatus.PENDING,
+    startedAt: null,
+    distribution: null,
+  };
+
+  it('allows the Owner and Super Admin before execution', () => {
+    expect(
+      canMutateTaskAttachments(viewer(UserRole.ADMIN, 'owner-db'), baseTask),
+    ).toEqual({ allowed: true });
+    expect(
+      canMutateTaskAttachments(viewer(UserRole.SUPER_ADMIN, 'chief-db'), {
+        ...baseTask,
+        status: TaskStatus.ASSIGNED,
+      }),
+    ).toEqual({ allowed: true });
+  });
+
+  it('separates authority failures from lifecycle and broadcast locks', () => {
+    expect(
+      canMutateTaskAttachments(
+        viewer(UserRole.ADMIN, 'unrelated-admin'),
+        baseTask,
+      ),
+    ).toEqual({ allowed: false, reason: 'FORBIDDEN' });
+    expect(
+      canMutateTaskAttachments(viewer(UserRole.ADMIN, 'owner-db'), {
+        ...baseTask,
+        status: TaskStatus.IN_PROGRESS,
+      }),
+    ).toEqual({ allowed: false, reason: 'LOCKED' });
+    expect(
+      canMutateTaskAttachments(viewer(UserRole.ADMIN, 'owner-db'), {
+        ...baseTask,
+        distribution: { status: TaskDistributionStatus.SENT },
+      }),
+    ).toEqual({ allowed: false, reason: 'LOCKED' });
+  });
+});
 
 function viewer(role: UserRole, userId: string): OperixViewer {
   return {

@@ -26,6 +26,7 @@ import { ListTaskQueryDto } from './dto/list-task-query.dto.js';
 import { TaskService } from './task.service.js';
 import { TaskDistributionService } from './task-distribution.service.js';
 import { RescheduleTaskDistributionDto } from './dto/reschedule-task-distribution.dto.js';
+import { UpdateTaskSelfClaimDto } from './dto/update-task-self-claim.dto.js';
 
 @ApiTags('tasks')
 @Controller('tasks')
@@ -83,6 +84,27 @@ export class TaskController {
     @Body() dto: AssignTaskDto,
   ) {
     return this.taskService.assignTask(viewer, taskId, dto);
+  }
+
+  @Patch(':taskId/self-claim')
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  updateSelfClaim(
+    @CurrentViewer() viewer: OperixViewer,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: UpdateTaskSelfClaimDto,
+  ) {
+    return this.taskService.updateSelfClaim(viewer, taskId, dto.enabled);
+  }
+
+  @Post(':taskId/claim')
+  @RequireRoles(UserRole.MEMBER)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  claimTask(
+    @CurrentViewer() viewer: OperixViewer,
+    @Param('taskId', PublicIdPipe) taskId: string,
+  ) {
+    return this.taskService.claimTask(viewer, taskId);
   }
 
   @Post(':taskId/start')

@@ -1,6 +1,6 @@
 # Operix Team and Global Task API
 
-This document records the coordinated Task API contract for Team classification, Global classification, in app distribution, and attachment access.
+This document records the coordinated Task API contract for Team classification, Global classification, in app distribution, attachment access, and opt in Member self claim.
 
 ## Create a Task
 
@@ -115,6 +115,54 @@ uploadedBy: {
 
 The uploader ID is a public User UUID. Private User IDs and Cloudinary storage identifiers are never returned.
 
+The upload validator canonicalizes `image/jpg` to `image/jpeg` and still requires JPEG binary content. DOCX, XLSX, and PPTX files declared as `application/zip` or `application/octet-stream` are accepted only when binary package inspection identifies the matching OOXML subtype and the filename extension agrees. Generic ZIP files and renamed Office packages are rejected.
+
+## Member Self Claim
+
+Task creation accepts `allowSelfClaim`, which defaults to `false`. Enabling it requires a one time Task without an initial Responsible User. Recurring Tasks cannot enable self claim.
+
+The Task Owner or a Super Admin may enable or disable self claim while the Task is PENDING, unassigned, and non recurring:
+
+```http
+PATCH /api/v1/tasks/:taskId/self-claim
+Content-Type: application/json
+
+{
+  "enabled": true
+}
+```
+
+An active Member may claim an eligible Task, including a TEAM Task outside the Member's Team:
+
+```http
+POST /api/v1/tasks/:taskId/claim
+```
+
+The claim creates the normal responsibility and status history, returns the canonical Task with the claimant as `responsible`, and sends the assignment email after commit. Exactly one concurrent claimant succeeds. Other concurrent claim attempts receive `409 TASK_CLAIM_CONFLICT` without winner information.
+
+Self claim notifies the claimant and Task Owner only. It never triggers GLOBAL distribution fan out.
+
+Task responses expose:
+
+```ts
+allowSelfClaim: boolean;
+```
+
+The client derives claimability from an active Member viewer, `allowSelfClaim=true`, `status=PENDING`, and `responsible=null`. The backend always revalidates these conditions.
+
+## Frontend Error Guide
+
+| Result | Meaning |
+| --- | --- |
+| `403` upload | Viewer is not the Task Owner or a Super Admin |
+| `409 TASK_ATTACHMENTS_NOT_EDITABLE` | Task execution or a sent broadcast locked attachments |
+| `503 FILE_STORAGE_UNAVAILABLE` | Backend storage is disabled or unavailable |
+| `400 FILE_TYPE_NOT_ALLOWED` | MIME, filename extension, or binary validation failed |
+| `413 FILE_TOO_LARGE` | File exceeds the configured maximum |
+| `409 TASK_CLAIM_CONFLICT` | Another Member claimed the Task first |
+
+Frontend Task contracts must replace `teamId`, `createdById`, `assignedMemberId`, Task assignment `memberId`, and `uploadedById` with `scope` plus `team`, `owner`, `responsible`, `responsibleUserId`, and `uploadedBy`. General assignment requests send `responsibleUserId`.
+
 ## Coordinated Release
 
-The frontend must migrate with this backend because `team` is now nullable, Task responses add `scope` and `distribution`, and file responses replace `uploadedById` with `uploadedBy`.
+The frontend must migrate with this backend because `team` is nullable, Task responses include `scope`, `distribution`, and `allowSelfClaim`, assignment uses `responsibleUserId`, and file responses use `uploadedBy`.
