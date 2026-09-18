@@ -17,6 +17,15 @@ interface SafeTaskUserResponse {
   designation: string | null;
 }
 
+export interface TaskRecurrenceSummary {
+  id: string;
+  frequency: TaskRecurrenceFrequency;
+  nextOccurrenceAt: Date;
+  reminderLeadMinutes: number;
+  distributionLeadMinutes: number | null;
+  isActive: boolean;
+}
+
 export type SafeTaskResponse = Pick<
   Task,
   | 'referenceCode'
@@ -43,13 +52,7 @@ export type SafeTaskResponse = Pick<
   completionNote: string | null;
   allowSelfClaim: boolean;
   occurrenceKey: string | null;
-  recurrence: {
-    id: string;
-    frequency: TaskRecurrenceFrequency;
-    nextOccurrenceAt: Date;
-    reminderLeadMinutes: number;
-    isActive: boolean;
-  } | null;
+  recurrence: TaskRecurrenceSummary | null;
   reminder: {
     status: TaskReminderStatus;
     scheduledAt: Date;

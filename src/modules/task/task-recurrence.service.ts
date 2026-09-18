@@ -33,7 +33,7 @@ import {
   TASK_NOTIFICATION,
 } from './task.constant.js';
 import type { SafeTaskResponse } from './task.interface.js';
-import { mapTaskResponse } from './task.mapper.js';
+import { mapTaskRecurrenceSummary, mapTaskResponse } from './task.mapper.js';
 import { shouldMaterializeNextOccurrence } from './task-recurrence.policy.js';
 import { generateTaskReferenceCode } from './task-reference.js';
 import { taskSelect } from './task.select.js';
@@ -541,9 +541,10 @@ export class TaskRecurrenceService {
       select: typeof recurrenceSelect;
     }>,
   ) {
+    const summary = mapTaskRecurrenceSummary(recurrence);
+
     return {
-      id: recurrence.publicId,
-      frequency: recurrence.frequency,
+      ...summary,
       title: recurrence.title,
       description: recurrence.description,
       remarks: recurrence.remarks,
@@ -568,10 +569,6 @@ export class TaskRecurrenceService {
       scope: recurrence.scope,
       categoryId: recurrence.category?.publicId ?? null,
       anchorDueAt: recurrence.anchorDueAt,
-      nextOccurrenceAt: recurrence.nextOccurrenceAt,
-      reminderLeadMinutes: recurrence.reminderLeadMinutes,
-      distributionLeadMinutes: recurrence.distributionLeadMinutes,
-      isActive: recurrence.isActive,
       createdAt: recurrence.createdAt,
       updatedAt: recurrence.updatedAt,
     };

@@ -38,6 +38,30 @@ describe('business recurrence time', () => {
     expect(march.toISOString()).toBe('2027-03-31T11:00:00.000Z');
   });
 
+  it('preserves the fifth at the same business-local time across months', () => {
+    const october = new Date('2026-10-05T03:00:00.000Z');
+    const anchor = createRecurrenceAnchor(
+      october,
+      timezone,
+      TaskRecurrenceFrequency.MONTHLY,
+    );
+    const november = getNextOccurrence(
+      october,
+      timezone,
+      TaskRecurrenceFrequency.MONTHLY,
+      anchor,
+    );
+    const december = getNextOccurrence(
+      november,
+      timezone,
+      TaskRecurrenceFrequency.MONTHLY,
+      anchor,
+    );
+
+    expect(november.toISOString()).toBe('2026-11-05T03:00:00.000Z');
+    expect(december.toISOString()).toBe('2026-12-05T03:00:00.000Z');
+  });
+
   it('preserves weekly business-local time and calculates semantic keys', () => {
     const monday = new Date('2026-09-07T10:30:00.000Z');
     const anchor = createRecurrenceAnchor(
@@ -110,6 +134,21 @@ describe('recurrence materialization horizon', () => {
         ],
         new Date('2026-11-25T11:00:00.000Z'),
         now,
+      ),
+    ).toBe(true);
+  });
+
+  it('allows a later cycle when the latest occurrence is overdue', () => {
+    expect(
+      shouldMaterializeNextOccurrence(
+        [
+          {
+            dueAt: new Date('2026-09-25T11:00:00.000Z'),
+            status: TaskStatus.IN_PROGRESS,
+          },
+        ],
+        new Date('2026-10-25T11:00:00.000Z'),
+        new Date('2026-10-25T11:00:00.000Z'),
       ),
     ).toBe(true);
   });

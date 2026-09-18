@@ -61,6 +61,94 @@ A recurring GLOBAL Task requires `dueAt`, `responsibleUserId`, and a distributio
 }
 ```
 
+## Recurring Task Contract
+
+Recurring Tasks use the first `dueAt` value as their calendar anchor. The submitted Task is the first occurrence; the frontend never creates later occurrences.
+
+For a TEAM Task that repeats monthly on the fifth at 9:00 AM in the Operix business timezone:
+
+```json
+{
+  "title": "Submit Bank Balance",
+  "scope": "TEAM",
+  "teamId": "<team-public-uuid>",
+  "responsibleUserId": "<user-public-uuid>",
+  "dueAt": "2026-10-05T09:00:00+06:00",
+  "recurrence": {
+    "frequency": "MONTHLY",
+    "reminderLeadMinutes": 1440
+  }
+}
+```
+
+The server owns the resulting schedule:
+
+```text
+Initial occurrence  → 5 Oct 2026, 09:00
+Next occurrence     → 5 Nov 2026, 09:00
+Following occurrence → 5 Dec 2026, 09:00
+```
+
+For a GLOBAL recurrence with both Responsible User reminder and organization broadcast timing:
+
+```json
+{
+  "title": "Monthly Financial Submission",
+  "scope": "GLOBAL",
+  "responsibleUserId": "<user-public-uuid>",
+  "dueAt": "2026-10-05T09:00:00+06:00",
+  "recurrence": {
+    "frequency": "MONTHLY",
+    "reminderLeadMinutes": 1440
+  },
+  "distribution": {
+    "notifyAll": true,
+    "leadMinutes": 720
+  }
+}
+```
+
+```text
+Responsible reminder   → 4 Oct 2026, 09:00
+Organization broadcast → 4 Oct 2026, 21:00
+Task due               → 5 Oct 2026, 09:00
+```
+
+Canonical Task responses embed this recurrence summary:
+
+```ts
+recurrence: {
+  id: string;
+  frequency: "WEEKLY" | "MONTHLY";
+  nextOccurrenceAt: string;
+  reminderLeadMinutes: number;
+  distributionLeadMinutes: number | null;
+  isActive: boolean;
+} | null;
+```
+
+`nextOccurrenceAt` is the next scheduled Task occurrence that has not yet been materialized. It is not a reminder, broadcast, or cron timestamp.
+
+`distributionLeadMinutes` has these exact meanings:
+
+```text
+null      → recurring organization broadcast disabled
+0         → broadcast at the occurrence due time
+1..10080  → broadcast that many minutes before the occurrence is due
+```
+
+The dedicated recurrence resource uses the same six common fields as the embedded summary:
+
+```http
+GET /api/v1/task-recurrences/:recurrenceId
+GET /api/v1/task-recurrences/:recurrenceId/occurrences
+PATCH /api/v1/task-recurrences/:recurrenceId
+```
+
+PATCH changes future series defaults only. Existing Tasks, reminders, and distributions remain unchanged. Setting `distributionLeadMinutes` to `null` disables broadcasts on future occurrences. Pausing stops future generation; resuming selects the next future anchor without backfilling intentionally paused periods. Older overdue occurrences do not block later cycles.
+
+The backend remains authoritative for `nextOccurrenceAt`, occurrence keys, month-end clamping, pause/resume behavior, and Task generation. Clients may display a preview but must not create future Tasks or expose cron-expression terminology.
+
 ## Read and Filter
 
 Task responses include `scope`, nullable `team`, and nullable `distribution`.
@@ -152,17 +240,36 @@ The client derives claimability from an active Member viewer, `allowSelfClaim=tr
 
 ## Frontend Error Guide
 
-| Result | Meaning |
-| --- | --- |
-| `403` upload | Viewer is not the Task Owner or a Super Admin |
+| Result                              | Meaning                                               |
+| ----------------------------------- | ----------------------------------------------------- |
+| `403` upload                        | Viewer is not the Task Owner or a Super Admin         |
 | `409 TASK_ATTACHMENTS_NOT_EDITABLE` | Task execution or a sent broadcast locked attachments |
-| `503 FILE_STORAGE_UNAVAILABLE` | Backend storage is disabled or unavailable |
-| `400 FILE_TYPE_NOT_ALLOWED` | MIME, filename extension, or binary validation failed |
-| `413 FILE_TOO_LARGE` | File exceeds the configured maximum |
-| `409 TASK_CLAIM_CONFLICT` | Another Member claimed the Task first |
+| `503 FILE_STORAGE_UNAVAILABLE`      | Backend storage is disabled or unavailable            |
+| `400 FILE_TYPE_NOT_ALLOWED`         | MIME, filename extension, or binary validation failed |
+| `413 FILE_TOO_LARGE`                | File exceeds the configured maximum                   |
+| `409 TASK_CLAIM_CONFLICT`           | Another Member claimed the Task first                 |
 
 Frontend Task contracts must replace `teamId`, `createdById`, `assignedMemberId`, Task assignment `memberId`, and `uploadedById` with `scope` plus `team`, `owner`, `responsible`, `responsibleUserId`, and `uploadedBy`. General assignment requests send `responsibleUserId`.
 
+## Recurrence Frontend Handoff
+
+Use product language in Task creation and detail views:
+
+```text
+Repeat
+Does not repeat
+Weekly
+Monthly
+First due date
+Reminder before due
+Broadcast before due
+Next scheduled Task occurrence
+```
+
+When recurrence is enabled, require a future first due date and a Responsible User, use DIRECT completion, and hide or disable Member self claim. GLOBAL recurrence may optionally configure an organization broadcast lead separately from the Responsible User reminder lead.
+
+The frontend may preview text such as `Repeats monthly on the 5th at 9:00 AM`, but it must never generate or persist later occurrences. It reads `nextOccurrenceAt` from the backend, uses the recurrence APIs for pause, resume, future-series edits, and occurrence history, and treats each occurrence as a normal Task. Do not expose cron, cron expressions, RRULE, or scheduler rule terminology.
+
 ## Coordinated Release
 
-The frontend must migrate with this backend because `team` is nullable, Task responses include `scope`, `distribution`, and `allowSelfClaim`, assignment uses `responsibleUserId`, and file responses use `uploadedBy`.
+The recurrence summary addition is backward compatible, so the backend may deploy before a frontend that starts using `distributionLeadMinutes`. The wider Task contract still uses nullable `team`, `scope`, `distribution`, `allowSelfClaim`, `responsibleUserId`, and `uploadedBy` as documented above.

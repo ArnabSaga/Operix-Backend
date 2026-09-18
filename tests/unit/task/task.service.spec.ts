@@ -415,6 +415,7 @@ describe('TaskService', () => {
         frequency: 'MONTHLY',
         nextOccurrenceAt: new Date('2099-10-25T11:00:00.000Z'),
         reminderLeadMinutes: 1_440,
+        distributionLeadMinutes: 1_440,
         isActive: true,
       },
       distribution: {

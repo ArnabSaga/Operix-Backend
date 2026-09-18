@@ -49,6 +49,7 @@ export const taskSelect = {
       frequency: true,
       nextOccurrenceAt: true,
       reminderLeadMinutes: true,
+      distributionLeadMinutes: true,
       isActive: true,
     },
   },

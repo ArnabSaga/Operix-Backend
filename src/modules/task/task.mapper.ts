@@ -1,11 +1,36 @@
 import type { Prisma, Task } from '../../../generated/prisma/client.js';
 import { TaskStatus } from '../../../generated/prisma/enums.js';
-import type { SafeTaskResponse } from './task.interface.js';
+import type {
+  SafeTaskResponse,
+  TaskRecurrenceSummary,
+} from './task.interface.js';
 
 import { taskSelect } from './task.select.js';
 export type TaskResponseSource = Prisma.TaskGetPayload<{
   select: typeof taskSelect;
 }>;
+
+export interface TaskRecurrenceSummarySource {
+  publicId: string;
+  frequency: TaskRecurrenceSummary['frequency'];
+  nextOccurrenceAt: Date;
+  reminderLeadMinutes: number;
+  distributionLeadMinutes: number | null;
+  isActive: boolean;
+}
+
+export function mapTaskRecurrenceSummary(
+  recurrence: TaskRecurrenceSummarySource,
+): TaskRecurrenceSummary {
+  return {
+    id: recurrence.publicId,
+    frequency: recurrence.frequency,
+    nextOccurrenceAt: recurrence.nextOccurrenceAt,
+    reminderLeadMinutes: recurrence.reminderLeadMinutes,
+    distributionLeadMinutes: recurrence.distributionLeadMinutes ?? null,
+    isActive: recurrence.isActive,
+  };
+}
 
 export function isTaskOverdue(
   task: Pick<Task, 'dueAt' | 'status'>,
@@ -60,13 +85,7 @@ export function mapTaskResponse(
         }
       : null,
     recurrence: task.recurrence
-      ? {
-          id: task.recurrence.publicId,
-          frequency: task.recurrence.frequency,
-          nextOccurrenceAt: task.recurrence.nextOccurrenceAt,
-          reminderLeadMinutes: task.recurrence.reminderLeadMinutes,
-          isActive: task.recurrence.isActive,
-        }
+      ? mapTaskRecurrenceSummary(task.recurrence)
       : null,
     reminder: task.reminder,
     distribution: task.distribution,
