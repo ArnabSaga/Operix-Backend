@@ -4,7 +4,7 @@
 
 ### Pharmaceutical Workload and Operations Management Platform
 
-**A production grade NestJS backend for replacing spreadsheet driven operations with secure workflows, audit trails, analytics, file evidence, Excel migration, and Team scoped inventory.**
+**A production grade NestJS backend for replacing spreadsheet driven operations with secure workflows, Task recurrence, global work distribution, private Todos, audit trails, analytics, file evidence, Excel migration, and Team scoped inventory.**
 
 <br />
 
@@ -45,7 +45,7 @@ _Preview placeholder for workload, performance, inventory, and reporting analyti
 
 **Operix** is a backend platform for pharmaceutical workload and operations management. It replaces fragmented Excel trackers with a centralized, role scoped system where operational work moves through defined workflows, every important action is audited, and analytics are derived from real business data.
 
-The platform is designed for organizations that need more than basic task CRUD. It supports Admin and Member responsibility boundaries, task assignment and submission review, immutable activity history, management report approval, file evidence, Excel migration, dynamic XLSX exports, and Inventory V1.
+The platform is designed for organizations that need more than basic task CRUD. It supports Admin and Member responsibility boundaries, Task ownership and responsibility separation, TEAM and GLOBAL work classification, recurring DIRECT Tasks, opt in Member self claim, management report approval, file evidence, Excel migration, dynamic XLSX exports, private Todo checklists, and Inventory V1.
 
 At its core, Operix follows one product principle:
 
@@ -64,6 +64,7 @@ Operix turns that workflow into a backend system with:
 - strict role isolation across `SUPER_ADMIN`, `ADMIN`, and `MEMBER`;
 - deterministic Task and Management Report workflows;
 - immutable submission, review, Activity, and Inventory ledgers;
+- recurring Task occurrences, reminders, and optional GLOBAL in app distribution;
 - derived dashboards and performance metrics from the database source of truth;
 - controlled Excel import and export without making Excel a parallel database.
 
@@ -135,9 +136,9 @@ Auth → Viewer Context → Team Scope
   ↓
 Users and Teams
   ↓
-Tasks → Responsibility → Direct Completion or Submission/Review → Activity
+Tasks → Owner → Responsibility → Direct Completion or Submission/Review → Activity
   ↓
-Recurring Task Series → Occurrences → Reminders
+Recurring Task Series → Occurrences → Reminders and GLOBAL Distribution
   ↓
 Performance and Dashboard Analytics
   ↓
@@ -202,8 +203,12 @@ Native Better Auth password reset routes include:
 | `GET`    | `/tasks/:taskId`                              | Get Task detail                        |
 | `GET`    | `/tasks/:taskId/history`                      | Get Task status history                |
 | `POST`   | `/tasks/:taskId/assignments`                  | Assign/reassign Responsible User       |
+| `PATCH`  | `/tasks/:taskId/self-claim`                   | Owner/Super Admin toggles self claim   |
+| `POST`   | `/tasks/:taskId/claim`                        | Member claims eligible unassigned Task |
 | `POST`   | `/tasks/:taskId/start`                        | Responsible User starts Task           |
 | `POST`   | `/tasks/:taskId/complete`                     | Responsible User completes DIRECT Task |
+| `PATCH`  | `/tasks/:taskId/distribution`                 | Reschedule pending GLOBAL distribution |
+| `POST`   | `/tasks/:taskId/distribution/cancel`          | Cancel pending GLOBAL distribution     |
 | `GET`    | `/task-recurrences/:recurrenceId`             | Get recurring series                   |
 | `PATCH`  | `/task-recurrences/:recurrenceId`             | Update future series defaults          |
 | `GET`    | `/task-recurrences/:recurrenceId/occurrences` | List series occurrences                |
@@ -216,7 +221,27 @@ Native Better Auth password reset routes include:
 | `GET`    | `/submissions/:submissionId/attachments`      | List Submission attachments            |
 | `GET`    | `/files/:fileId/download`                     | Authorized proxied file download       |
 
-Task metadata and lifecycle history are visible to every active authenticated role. Attachment, file, submission, review, Dashboard, report, Activity, and Inventory authorization remains independently scoped. `Task.createdById` is the immutable Owner; `TaskAssignment.responsibleUserId` is the current executor. Recurring Tasks are DIRECT weekly/monthly series with one persisted reminder per occurrence.
+Task metadata and lifecycle history are visible to every active authenticated role. Attachment, file, submission, review, Dashboard, report, Activity, and Inventory authorization remains independently scoped. `Task.createdById` is the immutable Owner; `TaskAssignment.responsibleUserId` is the current executor.
+
+Tasks may be `TEAM` scoped with a Team, or `GLOBAL` with no Team. GLOBAL Tasks are Super Admin created, DIRECT only, and may optionally distribute in app Notifications to active users. Recurring Tasks are DIRECT weekly/monthly series with one persisted reminder per occurrence. Recurring GLOBAL Tasks can also create one distribution per occurrence. Member self claim is opt in, one time only, unassigned only, and never recurring.
+
+Task attachments are Owner or Super Admin managed reference files. Members do not gain attachment mutation rights merely by being Responsible. GLOBAL Task attachments are readable by active users; TEAM and Submission artifact scopes remain isolated.
+
+### Todo
+
+| Method   | Route                     | Purpose                                  |
+| -------- | ------------------------- | ---------------------------------------- |
+| `POST`   | `/todos`                  | Create private Todo for Super/Admin user |
+| `GET`    | `/todos`                  | List own Todos with filters and sorting  |
+| `GET`    | `/todos/summary`          | Own Todo summary counts                  |
+| `GET`    | `/todos/:todoId`          | Get own Todo detail                      |
+| `PATCH`  | `/todos/:todoId`          | Update own Todo                          |
+| `POST`   | `/todos/:todoId/complete` | Idempotently complete Todo               |
+| `POST`   | `/todos/:todoId/reopen`   | Idempotently reopen Todo                 |
+| `DELETE` | `/todos/completed`        | Clear own completed Todos                |
+| `DELETE` | `/todos/:todoId`          | Delete own Todo                          |
+
+Todos are private PostgreSQL backed checklist items for active `SUPER_ADMIN` and `ADMIN` users only. They never create Activity, Notification, email, recurrence, or Task records.
 
 ### Activity, Notifications, Performance, Dashboard
 
@@ -313,8 +338,13 @@ Frontend state update
 ### Workflow and Operations
 
 - **Task lifecycle engine** with assignment, start, submission, review, revision, completion, and cancellation.
+- **TEAM and GLOBAL Task model** with global metadata visibility but independent mutation, artifact, and analytics policies.
+- **Direct completion and recurring Task series** with weekly/monthly anchors, per occurrence reminders, and future only recurrence updates.
+- **GLOBAL Task distribution** for in app organization wide awareness, including immediate, scheduled, and recurring occurrence broadcasts.
+- **Member self claim** for opt in one time unassigned TEAM or GLOBAL Tasks.
 - **Submission versioning** that preserves each submitted attempt.
 - **Admin submitted Management Reports** with immutable submitted versions and Super Admin review.
+- **Private Todo system** for Super Admin/Admin personal checklist work, isolated from Tasks and audit streams.
 - **Inventory V1** with stock movements, returnable assignments, returns, and immutable ledger history.
 
 ### Security and Governance
@@ -335,8 +365,15 @@ Frontend state update
 
 - **Authenticated file storage** through a provider neutral storage abstraction.
 - **Proxied downloads** that never expose storage credentials.
+- **Task attachment hardening** with Owner/Super Admin mutation, pre execution edit windows, sent distribution locks, safe uploader objects, JPEG alias normalization, and OOXML binary validation.
 - **Excel migration previews and error reports** for legacy Member and historical Task workbooks.
 - **Formula safe spreadsheet output** to protect generated workbooks.
+
+### Rate Limiting and Automation
+
+- **Standardized `RATE_LIMITED` responses** with positive `Retry-After` headers.
+- **PostgreSQL backed distributed limits** for selected authenticated Todo mutations.
+- **Protected internal automation** for registration cleanup and Task automation, including reminders, recurrence reconciliation, and due GLOBAL distribution fan out.
 
 ---
 
@@ -421,35 +458,39 @@ when `SWAGGER_ENABLED=true`.
 
 ## Environment Variables
 
-| Variable                    | Purpose                                | Example                                             |
-| --------------------------- | -------------------------------------- | --------------------------------------------------- |
-| `NODE_ENV`                  | Runtime mode                           | `development`                                       |
-| `PORT`                      | API server port                        | `5000`                                              |
-| `DATABASE_URL`              | PostgreSQL connection string           | `postgresql://user:pass@localhost:5432/operix`      |
-| `TEST_DATABASE_URL`         | Isolated integration test database     | `postgresql://user:pass@localhost:5432/operix_test` |
-| `BETTER_AUTH_SECRET`        | Better Auth secret, 32 plus characters | `replace_with_secure_secret`                        |
-| `BETTER_AUTH_URL`           | Backend canonical auth URL             | `http://localhost:5000`                             |
-| `FRONTEND_URL`              | Trusted CORS origin                    | `http://localhost:3000`                             |
-| `FRONTEND_APP_URL`          | Browser deep link and email URL        | `http://localhost:3000`                             |
-| `SWAGGER_ENABLED`           | Enables Swagger docs                   | `true`                                              |
-| `SMTP_ENABLED`              | Enables explicit SMTP delivery events  | `false`                                             |
-| `SMTP_HOST`                 | SMTP host when email is enabled        | `smtp.example.com`                                  |
-| `SMTP_PORT`                 | SMTP port                              | `587`                                               |
-| `SMTP_SECURE`               | SMTP TLS mode                          | `false`                                             |
-| `SMTP_USER`                 | SMTP username                          | `mailer@example.com`                                |
-| `SMTP_PASS`                 | SMTP password                          | `********`                                          |
-| `SMTP_FROM_EMAIL`           | Sender email                           | `noreply@example.com`                               |
-| `SMTP_FROM_NAME`            | Sender display name                    | `Operix`                                            |
-| `SEED_SUPER_ADMIN_EMAIL`    | Seed Super Admin email                 | `chief@example.com`                                 |
-| `SEED_SUPER_ADMIN_PASSWORD` | Seed Super Admin password              | `ChangeMe123!`                                      |
-| `SEED_SUPER_ADMIN_NAME`     | Seed Super Admin name                  | `Chief Admin`                                       |
-| `THROTTLE_TTL_MS`           | Rate limit window in milliseconds      | `60000`                                             |
-| `THROTTLE_LIMIT`            | Requests per throttle window           | `100`                                               |
-| `FILE_STORAGE_ENABLED`      | Enables Cloudinary backed file storage | `false`                                             |
-| `CLOUDINARY_CLOUD_NAME`     | Cloudinary cloud name                  | `operix-cloud`                                      |
-| `CLOUDINARY_API_KEY`        | Cloudinary API key                     | `1234567890`                                        |
-| `CLOUDINARY_API_SECRET`     | Cloudinary API secret                  | `********`                                          |
-| `CLOUDINARY_FOLDER`         | Cloudinary folder prefix               | `operix`                                            |
+| Variable                         | Purpose                                | Example                                             |
+| -------------------------------- | -------------------------------------- | --------------------------------------------------- |
+| `NODE_ENV`                       | Runtime mode                           | `development`                                       |
+| `PORT`                           | API server port                        | `5000`                                              |
+| `DATABASE_URL`                   | PostgreSQL connection string           | `postgresql://user:pass@localhost:5432/operix`      |
+| `TEST_DATABASE_URL`              | Isolated integration test database     | `postgresql://user:pass@localhost:5432/operix_test` |
+| `BETTER_AUTH_SECRET`             | Better Auth secret, 32 plus characters | `replace_with_secure_secret`                        |
+| `BETTER_AUTH_URL`                | Backend canonical auth URL             | `http://localhost:5000`                             |
+| `FRONTEND_URL`                   | Trusted CORS origin                    | `http://localhost:3000`                             |
+| `FRONTEND_APP_URL`               | Browser deep link and email URL        | `http://localhost:3000`                             |
+| `SWAGGER_ENABLED`                | Enables Swagger docs                   | `true`                                              |
+| `SMTP_ENABLED`                   | Enables explicit SMTP delivery events  | `false`                                             |
+| `SMTP_HOST`                      | SMTP host when email is enabled        | `smtp.example.com`                                  |
+| `SMTP_PORT`                      | SMTP port                              | `587`                                               |
+| `SMTP_SECURE`                    | SMTP TLS mode                          | `false`                                             |
+| `SMTP_USER`                      | SMTP username                          | `mailer@example.com`                                |
+| `SMTP_PASS`                      | SMTP password                          | `********`                                          |
+| `SMTP_FROM_EMAIL`                | Sender email                           | `noreply@example.com`                               |
+| `SMTP_FROM_NAME`                 | Sender display name                    | `Operix`                                            |
+| `SEED_SUPER_ADMIN_EMAIL`         | Seed Super Admin email                 | `chief@example.com`                                 |
+| `SEED_SUPER_ADMIN_PASSWORD`      | Seed Super Admin password              | `ChangeMe123!`                                      |
+| `SEED_SUPER_ADMIN_NAME`          | Seed Super Admin name                  | `Chief Admin`                                       |
+| `THROTTLE_TTL_MS`                | Rate limit window in milliseconds      | `60000`                                             |
+| `THROTTLE_LIMIT`                 | Requests per throttle window           | `100`                                               |
+| `FILE_STORAGE_ENABLED`           | Enables Cloudinary backed file storage | `false`                                             |
+| `CLOUDINARY_CLOUD_NAME`          | Cloudinary cloud name                  | `operix-cloud`                                      |
+| `CLOUDINARY_API_KEY`             | Cloudinary API key                     | `1234567890`                                        |
+| `CLOUDINARY_API_SECRET`          | Cloudinary API secret                  | `********`                                          |
+| `CLOUDINARY_FOLDER`              | Cloudinary folder prefix               | `operix`                                            |
+| `OPERIX_BUSINESS_TIMEZONE`       | Business timezone for recurrence dates | `Asia/Dhaka`                                        |
+| `CRON_SECRET`                    | Internal cron bearer secret            | `replace_with_secure_secret`                        |
+| `API_RATE_LIMIT_SECRET`          | Generic rate-limit HMAC secret         | `replace_with_32_plus_character_secret`             |
+| `REGISTRATION_RATE_LIMIT_SECRET` | Registration HMAC rate-limit secret    | `replace_with_32_plus_character_secret`             |
 
 > Keep real `.env` files local. Do not commit runtime secrets.
 
@@ -474,6 +515,7 @@ Operix-Backend/
  ┃ ┃ ┣ user-management/      # Admin and Member management
  ┃ ┃ ┣ team/                 # Team and TeamMember ownership
  ┃ ┃ ┣ task/                 # Task lifecycle and attachments
+ ┃ ┃ ┣ todo/                 # Private Todo checklist APIs
  ┃ ┃ ┣ submission/           # Submissions, reviews, and submission files
  ┃ ┃ ┣ activity/             # Activity feed
  ┃ ┃ ┣ notification/         # Notification inbox
@@ -555,8 +597,12 @@ Never run destructive integration tests against a development or production data
 - Admin and Member management
 - Teams and Team membership
 - Task lifecycle and assignment
+- TEAM and GLOBAL Tasks with optional distribution
+- Weekly/monthly recurring DIRECT Tasks and reminders
+- Member self claim for eligible one time Tasks
 - Submission and review workflow
 - Task and Submission attachments
+- Private Admin/Super Admin Todos
 - Activity and Notifications
 - EJS email templates for Task assignment, account Welcome, and password reset
 - Performance and Dashboard analytics
@@ -564,6 +610,7 @@ Never run destructive integration tests against a development or production data
 - Excel import previews, error reports, and controlled imports
 - Dynamic XLSX exports
 - Inventory V1
+- Standardized local and selected distributed rate limiting
 
 ### Deferred
 

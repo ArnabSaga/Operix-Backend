@@ -1,5 +1,4 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { UserRole } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { writeActivity } from '../../shared/activity/activity-write.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
@@ -14,7 +13,7 @@ import { safeAttachmentSelect } from '../file/file.select.js';
 import type { SafeAttachmentResponse } from '../file/file.interface.js';
 import { buildTaskArtifactScopeWhere } from './policies/task-scope.policy.js';
 import { TASK_ACTIVITY, TASK_ERROR_CODE } from './task.constant.js';
-import { canMutateTaskAttachments } from './policies/task-attachment.policy.js';
+import { getTaskAttachmentMutationDecision } from './policies/task-attachment.policy.js';
 
 @Injectable()
 export class TaskAttachmentService {
@@ -30,17 +29,16 @@ export class TaskAttachmentService {
     taskId: string,
     files: Express.Multer.File[] | undefined,
   ): Promise<SafeAttachmentResponse[]> {
-    this.assertMutationRole(viewer);
-
-    const validatedFiles = await this.storage.validateFiles(files, {
-      requireAtLeastOne: true,
-    });
-
     const taskDbId = await this.resolveTaskCanMutateAttachments(
       this.prisma,
       viewer,
       taskId,
     );
+
+    const validatedFiles = await this.storage.validateFiles(files, {
+      requireAtLeastOne: true,
+    });
+
     await this.assertTaskAttachmentCapacity(
       this.prisma,
       taskDbId,
@@ -149,9 +147,6 @@ export class TaskAttachmentService {
     taskId: string,
     attachmentId: string,
   ): Promise<{ id: string }> {
-    this.assertMutationRole(viewer);
-    this.storage.assertEnabled();
-
     const deleted = await runSerializableTransaction(
       this.prisma,
       async (tx) => {
@@ -160,6 +155,7 @@ export class TaskAttachmentService {
           viewer,
           taskId,
         );
+        this.storage.assertEnabled();
 
         const attachment = await tx.taskAttachment.findFirst({
           where: {
@@ -273,7 +269,7 @@ export class TaskAttachmentService {
     if (!task) {
       throw this.taskNotFound();
     }
-    const decision = canMutateTaskAttachments(viewer, task);
+    const decision = getTaskAttachmentMutationDecision(viewer, task);
     if (!decision.allowed && decision.reason === 'FORBIDDEN') {
       throw new AppException(
         HttpStatus.FORBIDDEN,
@@ -307,19 +303,6 @@ export class TaskAttachmentService {
         HttpStatus.CONFLICT,
         TASK_ERROR_CODE.ATTACHMENT_LIMIT_REACHED,
         'Attachment limit reached.',
-      );
-    }
-  }
-
-  private assertMutationRole(viewer: OperixViewer): void {
-    if (
-      viewer.role !== UserRole.ADMIN &&
-      viewer.role !== UserRole.SUPER_ADMIN
-    ) {
-      throw new AppException(
-        HttpStatus.FORBIDDEN,
-        APP_ERROR_CODE.FORBIDDEN,
-        'You do not have access to this resource.',
       );
     }
   }

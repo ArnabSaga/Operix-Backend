@@ -9,7 +9,11 @@ import {
 import { PrismaService } from '../../../src/database/prisma.service';
 import { TaskAttachmentService } from '../../../src/modules/task/task-attachment.service';
 import { TASK_ERROR_CODE } from '../../../src/modules/task/task.constant';
-import { canMutateTaskAttachments } from '../../../src/modules/task/policies/task-attachment.policy';
+import {
+  areTaskAttachmentsEditable,
+  canMutateTaskAttachments,
+  getTaskAttachmentMutationDecision,
+} from '../../../src/modules/task/policies/task-attachment.policy';
 import type { OperixViewer } from '../../../src/shared/auth/viewer.interface';
 
 const jestApi = import.meta.jest;
@@ -22,37 +26,69 @@ describe('canMutateTaskAttachments', () => {
     distribution: null,
   };
 
-  it('allows the Owner and Super Admin before execution', () => {
+  it('allows only Super Admin or the Owner Admin', () => {
     expect(
       canMutateTaskAttachments(viewer(UserRole.ADMIN, 'owner-db'), baseTask),
-    ).toEqual({ allowed: true });
+    ).toBe(true);
     expect(
-      canMutateTaskAttachments(viewer(UserRole.SUPER_ADMIN, 'chief-db'), {
-        ...baseTask,
-        status: TaskStatus.ASSIGNED,
-      }),
-    ).toEqual({ allowed: true });
-  });
-
-  it('separates authority failures from lifecycle and broadcast locks', () => {
+      canMutateTaskAttachments(
+        viewer(UserRole.SUPER_ADMIN, 'chief-db'),
+        baseTask,
+      ),
+    ).toBe(true);
     expect(
       canMutateTaskAttachments(
         viewer(UserRole.ADMIN, 'unrelated-admin'),
         baseTask,
       ),
+    ).toBe(false);
+    expect(
+      canMutateTaskAttachments(viewer(UserRole.MEMBER, 'owner-db'), baseTask),
+    ).toBe(false);
+  });
+
+  it('separates authority failures from lifecycle and broadcast locks', () => {
+    expect(
+      getTaskAttachmentMutationDecision(
+        viewer(UserRole.ADMIN, 'unrelated-admin'),
+        baseTask,
+      ),
     ).toEqual({ allowed: false, reason: 'FORBIDDEN' });
     expect(
-      canMutateTaskAttachments(viewer(UserRole.ADMIN, 'owner-db'), {
+      getTaskAttachmentMutationDecision(viewer(UserRole.ADMIN, 'owner-db'), {
         ...baseTask,
         status: TaskStatus.IN_PROGRESS,
       }),
     ).toEqual({ allowed: false, reason: 'LOCKED' });
     expect(
-      canMutateTaskAttachments(viewer(UserRole.ADMIN, 'owner-db'), {
+      getTaskAttachmentMutationDecision(viewer(UserRole.ADMIN, 'owner-db'), {
         ...baseTask,
         distribution: { status: TaskDistributionStatus.SENT },
       }),
     ).toEqual({ allowed: false, reason: 'LOCKED' });
+  });
+
+  it('treats pending and unstarted assigned Tasks as editable', () => {
+    expect(areTaskAttachmentsEditable(baseTask)).toBe(true);
+    expect(
+      areTaskAttachmentsEditable({
+        ...baseTask,
+        status: TaskStatus.ASSIGNED,
+      }),
+    ).toBe(true);
+    expect(
+      areTaskAttachmentsEditable({
+        ...baseTask,
+        status: TaskStatus.ASSIGNED,
+        startedAt: new Date('2026-09-28T00:00:00.000Z'),
+      }),
+    ).toBe(false);
+    expect(
+      areTaskAttachmentsEditable({
+        ...baseTask,
+        distribution: { status: TaskDistributionStatus.CANCELLED },
+      }),
+    ).toBe(true);
   });
 });
 
@@ -87,6 +123,33 @@ function createService(tx: Record<string, unknown>) {
 }
 
 describe('TaskAttachmentService mutation policy', () => {
+  it('routes upload through the shared policy before file validation', async () => {
+    const prisma = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          status: TaskStatus.PENDING,
+          startedAt: null,
+          createdById: 'owner-db',
+          distribution: null,
+        }),
+      },
+    } as unknown as PrismaService;
+    const storage = {
+      validateFiles: jestApi.fn(),
+    };
+    const service = new TaskAttachmentService(prisma, storage as never);
+
+    await expect(
+      service.uploadTaskAttachments(
+        viewer(UserRole.MEMBER, 'member-db'),
+        '11111111-1111-4111-8111-111111111111',
+        [],
+      ),
+    ).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN });
+    expect(storage.validateFiles).not.toHaveBeenCalled();
+  });
+
   it('denies an unrelated Admin even when the Task is visible', async () => {
     const tx = {
       task: {
@@ -105,6 +168,56 @@ describe('TaskAttachmentService mutation policy', () => {
     await expect(
       service.deleteTaskAttachment(
         viewer(UserRole.ADMIN, 'other-admin-db'),
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ),
+    ).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN });
+    expect(tx.taskAttachment.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('denies a responsible Member before delete lookup', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          status: TaskStatus.PENDING,
+          startedAt: null,
+          createdById: 'owner-db',
+          distribution: null,
+        }),
+      },
+      taskAttachment: { findFirst: jestApi.fn() },
+    };
+    const { service } = createService(tx);
+
+    await expect(
+      service.deleteTaskAttachment(
+        viewer(UserRole.MEMBER, 'member-db'),
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ),
+    ).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN });
+    expect(tx.taskAttachment.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('denies a Member even if the fixture makes them the creator', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          status: TaskStatus.PENDING,
+          startedAt: null,
+          createdById: 'member-db',
+          distribution: null,
+        }),
+      },
+      taskAttachment: { findFirst: jestApi.fn() },
+    };
+    const { service } = createService(tx);
+
+    await expect(
+      service.deleteTaskAttachment(
+        viewer(UserRole.MEMBER, 'member-db'),
         '11111111-1111-4111-8111-111111111111',
         '22222222-2222-4222-8222-222222222222',
       ),
@@ -181,6 +294,34 @@ describe('TaskAttachmentService mutation policy', () => {
       ),
     ).resolves.toEqual({ id: '22222222-2222-4222-8222-222222222222' });
     expect(storage.destroy).toHaveBeenCalledWith('private/storage-key');
+  });
+
+  it('locks attachment mutation after execution starts', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          status: TaskStatus.IN_PROGRESS,
+          startedAt: new Date('2026-09-28T00:00:00.000Z'),
+          createdById: 'owner-db',
+          distribution: null,
+        }),
+      },
+      taskAttachment: { findFirst: jestApi.fn() },
+    };
+    const { service } = createService(tx);
+
+    await expect(
+      service.deleteTaskAttachment(
+        viewer(UserRole.ADMIN, 'owner-db'),
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ),
+    ).rejects.toMatchObject({
+      status: HttpStatus.CONFLICT,
+      response: { code: TASK_ERROR_CODE.TASK_ATTACHMENTS_NOT_EDITABLE },
+    });
+    expect(tx.taskAttachment.findFirst).not.toHaveBeenCalled();
   });
 });
 

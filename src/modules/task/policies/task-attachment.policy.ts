@@ -8,8 +8,11 @@ import type { OperixViewer } from '../../../shared/auth/viewer.interface.js';
 export type TaskAttachmentMutationDecision =
   { allowed: true } | { allowed: false; reason: 'FORBIDDEN' | 'LOCKED' };
 
-interface TaskAttachmentMutationSource {
+interface TaskAttachmentAuthoritySource {
   createdById: string;
+}
+
+interface TaskAttachmentEditabilitySource {
   status: TaskStatus;
   startedAt: Date | null;
   distribution: { status: TaskDistributionStatus } | null;
@@ -17,22 +20,40 @@ interface TaskAttachmentMutationSource {
 
 export function canMutateTaskAttachments(
   viewer: OperixViewer,
-  task: TaskAttachmentMutationSource,
-): TaskAttachmentMutationDecision {
-  if (
-    viewer.role !== UserRole.SUPER_ADMIN &&
-    task.createdById !== viewer.userId
-  ) {
-    return { allowed: false, reason: 'FORBIDDEN' };
+  task: TaskAttachmentAuthoritySource,
+): boolean {
+  if (viewer.role === UserRole.SUPER_ADMIN) {
+    return true;
   }
 
+  if (viewer.role === UserRole.ADMIN && task.createdById === viewer.userId) {
+    return true;
+  }
+
+  return false;
+}
+
+export function areTaskAttachmentsEditable(
+  task: TaskAttachmentEditabilitySource,
+): boolean {
   const editableByState =
     task.status === TaskStatus.PENDING ||
     (task.status === TaskStatus.ASSIGNED && task.startedAt === null);
-  if (
-    !editableByState ||
-    task.distribution?.status === TaskDistributionStatus.SENT
-  ) {
+
+  return (
+    editableByState && task.distribution?.status !== TaskDistributionStatus.SENT
+  );
+}
+
+export function getTaskAttachmentMutationDecision(
+  viewer: OperixViewer,
+  task: TaskAttachmentAuthoritySource & TaskAttachmentEditabilitySource,
+): TaskAttachmentMutationDecision {
+  if (!canMutateTaskAttachments(viewer, task)) {
+    return { allowed: false, reason: 'FORBIDDEN' };
+  }
+
+  if (!areTaskAttachmentsEditable(task)) {
     return { allowed: false, reason: 'LOCKED' };
   }
 

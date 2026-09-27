@@ -192,6 +192,25 @@ Task attachment upload and deletion require the Task Owner or a Super Admin. Mut
 
 GLOBAL Task attachments are readable by every active authenticated role. TEAM Task and submission attachment authorization remain unchanged.
 
+Frontend attachment controls should use the same authority and editability split:
+
+```ts
+const hasAuthority =
+  viewer.role === "SUPER_ADMIN" ||
+  (viewer.role === "ADMIN" && viewer.id === task.owner.id);
+
+const lifecycleEditable =
+  task.status === "PENDING" ||
+  (task.status === "ASSIGNED" && task.startedAt === null);
+
+const distributionUnlocked = task.distribution?.status !== "SENT";
+
+const canManageTaskAttachments =
+  hasAuthority && lifecycleEditable && distributionUnlocked;
+```
+
+Do not use `task.responsible` for attachment mutation authority. Responsible Members may execute, submit, or complete Tasks according to the workflow, but they do not manage Task reference attachments in this release.
+
 Attachment responses expose:
 
 ```ts
@@ -236,7 +255,17 @@ Task responses expose:
 allowSelfClaim: boolean;
 ```
 
-The client derives claimability from an active Member viewer, `allowSelfClaim=true`, `status=PENDING`, and `responsible=null`. The backend always revalidates these conditions.
+The client derives claimability from:
+
+```ts
+viewer.role === "MEMBER" &&
+task.allowSelfClaim === true &&
+task.status === "PENDING" &&
+task.responsible === null &&
+task.recurrence === null;
+```
+
+The backend always revalidates these conditions.
 
 ## Frontend Error Guide
 
@@ -267,6 +296,17 @@ Next scheduled Task occurrence
 ```
 
 When recurrence is enabled, require a future first due date and a Responsible User, use DIRECT completion, and hide or disable Member self claim. GLOBAL recurrence may optionally configure an organization broadcast lead separately from the Responsible User reminder lead.
+
+Recurring reminder configuration is nested under `recurrence`:
+
+```ts
+recurrence: {
+  frequency,
+  reminderLeadMinutes,
+}
+```
+
+Do not send a root-level `reminderLeadMinutes` field.
 
 The frontend may preview text such as `Repeats monthly on the 5th at 9:00 AM`, but it must never generate or persist later occurrences. It reads `nextOccurrenceAt` from the backend, uses the recurrence APIs for pause, resume, future-series edits, and occurrence history, and treats each occurrence as a normal Task. Do not expose cron, cron expressions, RRULE, or scheduler rule terminology.
 

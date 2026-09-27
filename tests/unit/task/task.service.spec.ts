@@ -260,6 +260,39 @@ describe('CreateTaskDto distribution validation', () => {
   });
 });
 
+describe('CreateTaskDto recurrence validation', () => {
+  it('keeps reminderLeadMinutes under recurrence only', () => {
+    const rootReminder = plainToInstance(CreateTaskDto, {
+      title: 'Task with stale reminder payload',
+      teamId: 'team-a',
+      reminderLeadMinutes: 1_440,
+    });
+    const nestedReminder = plainToInstance(CreateTaskDto, {
+      title: 'Recurring task',
+      teamId: 'team-a',
+      dueAt: '2099-09-25T11:00:00.000Z',
+      responsibleUserId: 'member-a',
+      recurrence: {
+        frequency: 'MONTHLY',
+        reminderLeadMinutes: 1_440,
+      },
+    });
+
+    expect(Object.hasOwn(rootReminder, 'reminderLeadMinutes')).toBe(true);
+    expect(
+      validateSync(rootReminder, {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ property: 'reminderLeadMinutes' }),
+      ]),
+    );
+    expect(validateSync(nestedReminder)).toHaveLength(0);
+  });
+});
+
 describe('TaskService', () => {
   it('rejects Member task creation', async () => {
     const service = createTaskService({} as PrismaService);
