@@ -10,6 +10,7 @@ export type TaskAttachmentMutationDecision =
 
 interface TaskAttachmentAuthoritySource {
   createdById: string;
+  responsibleUserId: string | null;
 }
 
 interface TaskAttachmentEditabilitySource {
@@ -27,6 +28,13 @@ export function canMutateTaskAttachments(
   }
 
   if (viewer.role === UserRole.ADMIN && task.createdById === viewer.userId) {
+    return true;
+  }
+
+  if (
+    viewer.role === UserRole.MEMBER &&
+    task.responsibleUserId === viewer.userId
+  ) {
     return true;
   }
 

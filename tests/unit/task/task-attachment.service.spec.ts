@@ -21,12 +21,13 @@ const jestApi = import.meta.jest;
 describe('canMutateTaskAttachments', () => {
   const baseTask = {
     createdById: 'owner-db',
+    responsibleUserId: null,
     status: TaskStatus.PENDING,
     startedAt: null,
     distribution: null,
   };
 
-  it('allows only Super Admin or the Owner Admin', () => {
+  it('allows Super Admin, the Owner Admin, or the current Responsible Member', () => {
     expect(
       canMutateTaskAttachments(viewer(UserRole.ADMIN, 'owner-db'), baseTask),
     ).toBe(true);
@@ -44,6 +45,18 @@ describe('canMutateTaskAttachments', () => {
     ).toBe(false);
     expect(
       canMutateTaskAttachments(viewer(UserRole.MEMBER, 'owner-db'), baseTask),
+    ).toBe(false);
+    expect(
+      canMutateTaskAttachments(viewer(UserRole.MEMBER, 'member-db'), {
+        ...baseTask,
+        responsibleUserId: 'member-db',
+      }),
+    ).toBe(true);
+    expect(
+      canMutateTaskAttachments(viewer(UserRole.ADMIN, 'other-admin-db'), {
+        ...baseTask,
+        responsibleUserId: 'other-admin-db',
+      }),
     ).toBe(false);
   });
 
@@ -132,6 +145,7 @@ describe('TaskAttachmentService mutation policy', () => {
           startedAt: null,
           createdById: 'owner-db',
           distribution: null,
+          assignments: [],
         }),
       },
     } as unknown as PrismaService;
@@ -150,6 +164,35 @@ describe('TaskAttachmentService mutation policy', () => {
     expect(storage.validateFiles).not.toHaveBeenCalled();
   });
 
+  it('allows the current Responsible Member to reach service-level upload validation', async () => {
+    const validationError = new Error('validation reached');
+    const prisma = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          status: TaskStatus.ASSIGNED,
+          startedAt: null,
+          createdById: 'owner-db',
+          distribution: null,
+          assignments: [{ responsibleUserId: 'member-db' }],
+        }),
+      },
+    } as unknown as PrismaService;
+    const storage = {
+      validateFiles: jestApi.fn().mockRejectedValue(validationError),
+    };
+    const service = new TaskAttachmentService(prisma, storage as never);
+
+    await expect(
+      service.uploadTaskAttachments(
+        viewer(UserRole.MEMBER, 'member-db'),
+        '11111111-1111-4111-8111-111111111111',
+        [],
+      ),
+    ).rejects.toBe(validationError);
+    expect(storage.validateFiles).toHaveBeenCalledTimes(1);
+  });
+
   it('denies an unrelated Admin even when the Task is visible', async () => {
     const tx = {
       task: {
@@ -159,6 +202,7 @@ describe('TaskAttachmentService mutation policy', () => {
           startedAt: null,
           createdById: 'owner-db',
           distribution: null,
+          assignments: [],
         }),
       },
       taskAttachment: { findFirst: jestApi.fn() },
@@ -175,7 +219,33 @@ describe('TaskAttachmentService mutation policy', () => {
     expect(tx.taskAttachment.findFirst).not.toHaveBeenCalled();
   });
 
-  it('denies a responsible Member before delete lookup', async () => {
+  it('denies a responsible non-owner Admin before delete lookup', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          status: TaskStatus.ASSIGNED,
+          startedAt: null,
+          createdById: 'owner-db',
+          distribution: null,
+          assignments: [{ responsibleUserId: 'other-admin-db' }],
+        }),
+      },
+      taskAttachment: { findFirst: jestApi.fn() },
+    };
+    const { service } = createService(tx);
+
+    await expect(
+      service.deleteTaskAttachment(
+        viewer(UserRole.ADMIN, 'other-admin-db'),
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ),
+    ).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN });
+    expect(tx.taskAttachment.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('denies an unrelated Member before delete lookup', async () => {
     const tx = {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
@@ -184,6 +254,7 @@ describe('TaskAttachmentService mutation policy', () => {
           startedAt: null,
           createdById: 'owner-db',
           distribution: null,
+          assignments: [{ responsibleUserId: 'other-member-db' }],
         }),
       },
       taskAttachment: { findFirst: jestApi.fn() },
@@ -209,6 +280,7 @@ describe('TaskAttachmentService mutation policy', () => {
           startedAt: null,
           createdById: 'member-db',
           distribution: null,
+          assignments: [],
         }),
       },
       taskAttachment: { findFirst: jestApi.fn() },
@@ -234,6 +306,7 @@ describe('TaskAttachmentService mutation policy', () => {
           startedAt: null,
           createdById: 'owner-db',
           distribution: { status: TaskDistributionStatus.SENT },
+          assignments: [],
         }),
       },
       taskAttachment: { findFirst: jestApi.fn() },
@@ -262,6 +335,7 @@ describe('TaskAttachmentService mutation policy', () => {
           startedAt: null,
           createdById: 'owner-db',
           distribution: { status: TaskDistributionStatus.CANCELLED },
+          assignments: [],
         }),
         findUnique: jestApi.fn().mockResolvedValue({
           publicId: '11111111-1111-4111-8111-111111111111',
@@ -274,6 +348,7 @@ describe('TaskAttachmentService mutation policy', () => {
           fileId: 'file-db',
           file: {
             publicId: '33333333-3333-4333-8333-333333333333',
+            uploadedById: 'owner-db',
             storageKey: 'private/storage-key',
           },
         }),
@@ -296,6 +371,178 @@ describe('TaskAttachmentService mutation policy', () => {
     expect(storage.destroy).toHaveBeenCalledWith('private/storage-key');
   });
 
+  it('allows the current Responsible Member to delete their own upload', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          status: TaskStatus.ASSIGNED,
+          startedAt: null,
+          createdById: 'owner-db',
+          distribution: null,
+          assignments: [{ responsibleUserId: 'member-db' }],
+        }),
+      },
+      taskAttachment: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'attachment-db',
+          publicId: '22222222-2222-4222-8222-222222222222',
+          fileId: 'file-db',
+          file: {
+            publicId: '33333333-3333-4333-8333-333333333333',
+            uploadedById: 'member-db',
+            storageKey: 'private/member-storage-key',
+          },
+        }),
+        count: jestApi.fn().mockResolvedValue(1),
+        delete: jestApi.fn().mockResolvedValue({}),
+      },
+      submissionAttachment: { count: jestApi.fn().mockResolvedValue(0) },
+      fileAsset: { delete: jestApi.fn().mockResolvedValue({}) },
+      activityLog: { create: jestApi.fn().mockResolvedValue({}) },
+    };
+    const { service, storage } = createService(tx);
+
+    await expect(
+      service.deleteTaskAttachment(
+        viewer(UserRole.MEMBER, 'member-db'),
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ),
+    ).resolves.toEqual({ id: '22222222-2222-4222-8222-222222222222' });
+    expect(storage.destroy).toHaveBeenCalledWith('private/member-storage-key');
+  });
+
+  it('denies the current Responsible Member deleting an Admin upload', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          status: TaskStatus.ASSIGNED,
+          startedAt: null,
+          createdById: 'owner-db',
+          distribution: null,
+          assignments: [{ responsibleUserId: 'member-db' }],
+        }),
+      },
+      taskAttachment: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'attachment-db',
+          publicId: '22222222-2222-4222-8222-222222222222',
+          fileId: 'file-db',
+          file: {
+            publicId: '33333333-3333-4333-8333-333333333333',
+            uploadedById: 'owner-db',
+            storageKey: 'private/admin-storage-key',
+          },
+        }),
+        delete: jestApi.fn(),
+      },
+      submissionAttachment: { count: jestApi.fn() },
+      fileAsset: { delete: jestApi.fn() },
+      activityLog: { create: jestApi.fn() },
+    };
+    const { service, storage } = createService(tx);
+
+    await expect(
+      service.deleteTaskAttachment(
+        viewer(UserRole.MEMBER, 'member-db'),
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ),
+    ).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN });
+    expect(storage.assertEnabled).not.toHaveBeenCalled();
+    expect(tx.taskAttachment.delete).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 for a current Responsible Member when the attachment is missing on that Task', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          status: TaskStatus.ASSIGNED,
+          startedAt: null,
+          createdById: 'owner-db',
+          distribution: null,
+          assignments: [{ responsibleUserId: 'member-db' }],
+        }),
+      },
+      taskAttachment: { findFirst: jestApi.fn().mockResolvedValue(null) },
+    };
+    const { service } = createService(tx);
+
+    await expect(
+      service.deleteTaskAttachment(
+        viewer(UserRole.MEMBER, 'member-db'),
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ),
+    ).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND });
+    expect(tx.taskAttachment.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          publicId: '22222222-2222-4222-8222-222222222222',
+          taskId: 'task-db',
+        },
+      }),
+    );
+  });
+
+  it('revokes a former Responsible Member immediately after reassignment', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          status: TaskStatus.ASSIGNED,
+          startedAt: null,
+          createdById: 'owner-db',
+          distribution: null,
+          assignments: [{ responsibleUserId: 'new-member-db' }],
+        }),
+      },
+      taskAttachment: { findFirst: jestApi.fn() },
+    };
+    const { service } = createService(tx);
+
+    await expect(
+      service.deleteTaskAttachment(
+        viewer(UserRole.MEMBER, 'old-member-db'),
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ),
+    ).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN });
+    expect(tx.taskAttachment.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('locks an authorized Responsible Member after execution starts', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          status: TaskStatus.IN_PROGRESS,
+          startedAt: new Date('2026-09-28T00:00:00.000Z'),
+          createdById: 'owner-db',
+          distribution: null,
+          assignments: [{ responsibleUserId: 'member-db' }],
+        }),
+      },
+      taskAttachment: { findFirst: jestApi.fn() },
+    };
+    const { service } = createService(tx);
+
+    await expect(
+      service.deleteTaskAttachment(
+        viewer(UserRole.MEMBER, 'member-db'),
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ),
+    ).rejects.toMatchObject({
+      status: HttpStatus.CONFLICT,
+      response: { code: TASK_ERROR_CODE.TASK_ATTACHMENTS_NOT_EDITABLE },
+    });
+    expect(tx.taskAttachment.findFirst).not.toHaveBeenCalled();
+  });
+
   it('locks attachment mutation after execution starts', async () => {
     const tx = {
       task: {
@@ -305,6 +552,7 @@ describe('TaskAttachmentService mutation policy', () => {
           startedAt: new Date('2026-09-28T00:00:00.000Z'),
           createdById: 'owner-db',
           distribution: null,
+          assignments: [],
         }),
       },
       taskAttachment: { findFirst: jestApi.fn() },

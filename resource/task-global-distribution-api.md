@@ -188,16 +188,26 @@ SENT and CANCELLED distributions are immutable. Cancelling one recurring occurre
 
 ## Attachment Contract
 
-Task attachment upload and deletion require the Task Owner or a Super Admin. Mutation is allowed only while PENDING or ASSIGNED and not started. A SENT GLOBAL distribution locks attachment mutation.
+Task attachment upload requires a Super Admin, the Owner Admin, or the current Responsible Member. Task attachment deletion requires a Super Admin, the Owner Admin, or the current Responsible Member deleting an attachment they personally uploaded. Mutation is allowed only while PENDING or ASSIGNED and not started. A SENT GLOBAL distribution locks attachment mutation for everyone.
 
 GLOBAL Task attachments are readable by every active authenticated role. TEAM Task and submission attachment authorization remain unchanged.
 
 Frontend attachment controls should use the same authority and editability split:
 
 ```ts
-const hasAuthority =
+const hasAttachmentUploadAuthority =
   viewer.role === "SUPER_ADMIN" ||
-  (viewer.role === "ADMIN" && viewer.id === task.owner.id);
+  (viewer.role === "ADMIN" && viewer.id === task.owner.id) ||
+  (viewer.role === "MEMBER" && viewer.id === task.responsible?.id);
+
+const hasAttachmentDeleteAuthority =
+  viewer.role === "SUPER_ADMIN" ||
+  (viewer.role === "ADMIN" && viewer.id === task.owner.id) ||
+  (
+    viewer.role === "MEMBER" &&
+    viewer.id === task.responsible?.id &&
+    viewer.id === attachment.uploadedBy.id
+  );
 
 const lifecycleEditable =
   task.status === "PENDING" ||
@@ -205,11 +215,14 @@ const lifecycleEditable =
 
 const distributionUnlocked = task.distribution?.status !== "SENT";
 
-const canManageTaskAttachments =
-  hasAuthority && lifecycleEditable && distributionUnlocked;
+const canUploadTaskAttachments =
+  hasAttachmentUploadAuthority && lifecycleEditable && distributionUnlocked;
+
+const canDeleteTaskAttachment =
+  hasAttachmentDeleteAuthority && lifecycleEditable && distributionUnlocked;
 ```
 
-Do not use `task.responsible` for attachment mutation authority. Responsible Members may execute, submit, or complete Tasks according to the workflow, but they do not manage Task reference attachments in this release.
+Responsible Member mutation is limited to the current Responsible User during the pre execution edit window. Members may delete only attachments they uploaded. Owner Admins and Super Admins may delete any TaskAttachment on an eligible Task. DIRECT completion evidence remains a separate future artifact concept.
 
 Attachment responses expose:
 
@@ -271,7 +284,8 @@ The backend always revalidates these conditions.
 
 | Result                              | Meaning                                               |
 | ----------------------------------- | ----------------------------------------------------- |
-| `403` upload                        | Viewer is not the Task Owner or a Super Admin         |
+| `403` upload                        | Viewer is not a Super Admin, Owner Admin, or current Responsible Member |
+| `403` delete                        | Viewer lacks Task authority, or a Responsible Member is deleting somebody else's upload |
 | `409 TASK_ATTACHMENTS_NOT_EDITABLE` | Task execution or a sent broadcast locked attachments |
 | `503 FILE_STORAGE_UNAVAILABLE`      | Backend storage is disabled or unavailable            |
 | `400 FILE_TYPE_NOT_ALLOWED`         | MIME, filename extension, or binary validation failed |

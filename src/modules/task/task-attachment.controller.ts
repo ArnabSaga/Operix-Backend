@@ -33,7 +33,7 @@ export class TaskAttachmentController {
   constructor(private readonly taskAttachmentService: TaskAttachmentService) {}
 
   @Post()
-  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @UseInterceptors(
     FilesInterceptor('files', MAX_ATTACHMENT_FILES, {
@@ -66,7 +66,7 @@ export class TaskAttachmentController {
   }
 
   @Delete(':attachmentId')
-  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   deleteTaskAttachment(
     @CurrentViewer() viewer: OperixViewer,

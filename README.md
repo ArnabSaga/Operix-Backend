@@ -225,7 +225,7 @@ Task metadata and lifecycle history are visible to every active authenticated ro
 
 Tasks may be `TEAM` scoped with a Team, or `GLOBAL` with no Team. GLOBAL Tasks are Super Admin created, DIRECT only, and may optionally distribute in app Notifications to active users. Recurring Tasks are DIRECT weekly/monthly series with one persisted reminder per occurrence. Recurring GLOBAL Tasks can also create one distribution per occurrence. Member self claim is opt in, one time only, unassigned only, and never recurring.
 
-Task attachments are Owner or Super Admin managed reference files. Members do not gain attachment mutation rights merely by being Responsible. GLOBAL Task attachments are readable by active users; TEAM and Submission artifact scopes remain isolated.
+Task attachments are shared Task reference files. Super Admins and Owner Admins may upload or delete eligible Task attachments. The current Responsible Member may upload during the pre execution edit window and may delete only files they uploaded. GLOBAL Task attachments are readable by active users; TEAM and Submission artifact scopes remain isolated.
 
 ### Todo
 
@@ -365,7 +365,7 @@ Frontend state update
 
 - **Authenticated file storage** through a provider neutral storage abstraction.
 - **Proxied downloads** that never expose storage credentials.
-- **Task attachment hardening** with Owner/Super Admin mutation, pre execution edit windows, sent distribution locks, safe uploader objects, JPEG alias normalization, and OOXML binary validation.
+- **Task attachment hardening** with Super Admin, Owner Admin, and current Responsible Member upload authority, Member own upload deletion, pre execution edit windows, sent distribution locks, safe uploader objects, JPEG alias normalization, and OOXML binary validation.
 - **Excel migration previews and error reports** for legacy Member and historical Task workbooks.
 - **Formula safe spreadsheet output** to protect generated workbooks.
 
