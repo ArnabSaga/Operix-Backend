@@ -206,7 +206,7 @@ Native Better Auth password reset routes include:
 | `PATCH`  | `/tasks/:taskId/self-claim`                   | Owner/Super Admin toggles self claim   |
 | `POST`   | `/tasks/:taskId/claim`                        | Member claims eligible unassigned Task |
 | `POST`   | `/tasks/:taskId/start`                        | Responsible User starts Task           |
-| `POST`   | `/tasks/:taskId/complete`                     | Responsible User completes DIRECT Task |
+| `POST`   | `/tasks/:taskId/complete`                     | Complete DIRECT Task                   |
 | `PATCH`  | `/tasks/:taskId/distribution`                 | Reschedule pending GLOBAL distribution |
 | `POST`   | `/tasks/:taskId/distribution/cancel`          | Cancel pending GLOBAL distribution     |
 | `GET`    | `/task-recurrences/:recurrenceId`             | Get recurring series                   |
@@ -222,6 +222,8 @@ Native Better Auth password reset routes include:
 | `GET`    | `/files/:fileId/download`                     | Authorized proxied file download       |
 
 Task metadata and lifecycle history are visible to every active authenticated role. Attachment, file, submission, review, Dashboard, report, Activity, and Inventory authorization remains independently scoped. `Task.createdById` is the immutable Owner; `TaskAssignment.responsibleUserId` is the current executor.
+
+Only the current Responsible User may start a Task. A DIRECT Task in `IN_PROGRESS` with a current active assignment may be completed by the Responsible User, by a Super Admin through administrative override, or by the current Team Admin for a TEAM Task. Team Admin override does not apply to GLOBAL Tasks, and administrative completion does not change Task responsibility.
 
 Tasks may be `TEAM` scoped with a Team, or `GLOBAL` with no Team. GLOBAL Tasks are Super Admin created, DIRECT only, and may optionally distribute in app Notifications to active users. Recurring Tasks are DIRECT weekly/monthly series with one persisted reminder per occurrence. Recurring GLOBAL Tasks can also create one distribution per occurrence. Member self claim is opt in, one time only, unassigned only, and never recurring.
 

@@ -61,6 +61,20 @@ A recurring GLOBAL Task requires `dueAt`, `responsibleUserId`, and a distributio
 }
 ```
 
+## Task Execution Authority
+
+Only the current Responsible User may start a Task.
+
+A DIRECT Task in `IN_PROGRESS` with a current active assignment may be completed by:
+
+```text
+Current Responsible User
+Super Admin administrative override
+Current Team Admin administrative override for TEAM Tasks
+```
+
+Team Admin override does not apply to GLOBAL Tasks. Administrative completion records the actual actor in history and Activity, but it does not transfer or modify Task responsibility.
+
 ## Recurring Task Contract
 
 Recurring Tasks use the first `dueAt` value as their calendar anchor. The submitted Task is the first occurrence; the frontend never creates later occurrences.

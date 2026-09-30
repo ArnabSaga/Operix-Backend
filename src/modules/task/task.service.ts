@@ -52,6 +52,15 @@ import { TaskRecurrenceService } from './task-recurrence.service.js';
 import { TaskDistributionService } from './task-distribution.service.js';
 import { taskSelect } from './task.select.js';
 
+const DIRECT_COMPLETION_AUTHORITY = {
+  RESPONSIBLE: 'RESPONSIBLE',
+  SUPER_ADMIN_OVERRIDE: 'SUPER_ADMIN_OVERRIDE',
+  TEAM_ADMIN_OVERRIDE: 'TEAM_ADMIN_OVERRIDE',
+} as const;
+
+type DirectCompletionAuthority =
+  (typeof DIRECT_COMPLETION_AUTHORITY)[keyof typeof DIRECT_COMPLETION_AUTHORITY];
+
 @Injectable()
 export class TaskService {
   private readonly logger = new Logger(TaskService.name);
@@ -729,15 +738,22 @@ export class TaskService {
         select: {
           id: true,
           status: true,
+          scope: true,
           completionMode: true,
           recurrenceId: true,
+          team: { select: { adminId: true } },
         },
       });
       if (!task) throw this.taskNotFound();
       const assignment = await this.findCurrentAssignment(tx, task.id);
-      if (assignment?.responsibleUserId !== viewer.userId) {
+      if (!assignment) {
         throw this.notResponsible();
       }
+      const authority = this.assertCanDirectCompleteTask(
+        viewer,
+        task,
+        assignment,
+      );
       if (task.status === TaskStatus.COMPLETED) {
         throw new AppException(
           HttpStatus.CONFLICT,
@@ -779,7 +795,10 @@ export class TaskService {
           fromStatus: TaskStatus.IN_PROGRESS,
           toStatus: TaskStatus.COMPLETED,
           changedById: viewer.userId,
-          notes: 'Task completed directly.',
+          notes:
+            authority === DIRECT_COMPLETION_AUTHORITY.RESPONSIBLE
+              ? 'Task completed directly.'
+              : 'Task completed directly by administrative override.',
         },
       });
       await writeActivity(tx, {
@@ -1056,6 +1075,37 @@ export class TaskService {
       where: { taskId, unassignedAt: null },
       select: { id: true, responsibleUserId: true },
     });
+  }
+
+  private assertCanDirectCompleteTask(
+    viewer: OperixViewer,
+    task: {
+      scope: TaskScope;
+      team: { adminId: string } | null;
+    },
+    assignment: { responsibleUserId: string },
+  ): DirectCompletionAuthority {
+    if (assignment.responsibleUserId === viewer.userId) {
+      return DIRECT_COMPLETION_AUTHORITY.RESPONSIBLE;
+    }
+
+    if (viewer.role === UserRole.SUPER_ADMIN) {
+      return DIRECT_COMPLETION_AUTHORITY.SUPER_ADMIN_OVERRIDE;
+    }
+
+    if (
+      viewer.role === UserRole.ADMIN &&
+      task.scope === TaskScope.TEAM &&
+      task.team?.adminId === viewer.userId
+    ) {
+      return DIRECT_COMPLETION_AUTHORITY.TEAM_ADMIN_OVERRIDE;
+    }
+
+    if (viewer.role === UserRole.MEMBER) {
+      throw this.notResponsible();
+    }
+
+    throw this.forbidden();
   }
 
   private async sendAssignmentBestEffort(
