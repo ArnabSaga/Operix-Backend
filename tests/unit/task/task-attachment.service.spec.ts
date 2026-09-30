@@ -22,6 +22,7 @@ describe('canMutateTaskAttachments', () => {
   const baseTask = {
     createdById: 'owner-db',
     responsibleUserId: null,
+    scope: TaskScope.TEAM,
     status: TaskStatus.PENDING,
     startedAt: null,
     distribution: null,
@@ -76,6 +77,26 @@ describe('canMutateTaskAttachments', () => {
     expect(
       getTaskAttachmentMutationDecision(viewer(UserRole.ADMIN, 'owner-db'), {
         ...baseTask,
+        distribution: { status: TaskDistributionStatus.SENT },
+      }),
+    ).toEqual({ allowed: false, reason: 'LOCKED' });
+    expect(
+      getTaskAttachmentMutationDecision(viewer(UserRole.MEMBER, 'member-db'), {
+        ...baseTask,
+        scope: TaskScope.GLOBAL,
+        responsibleUserId: 'member-db',
+        status: TaskStatus.ASSIGNED,
+        distribution: { status: TaskDistributionStatus.SENT },
+      }),
+    ).toEqual({
+      allowed: true,
+      authority: 'RESPONSIBLE_MEMBER',
+    });
+    expect(
+      getTaskAttachmentMutationDecision(viewer(UserRole.MEMBER, 'member-db'), {
+        ...baseTask,
+        responsibleUserId: 'member-db',
+        status: TaskStatus.ASSIGNED,
         distribution: { status: TaskDistributionStatus.SENT },
       }),
     ).toEqual({ allowed: false, reason: 'LOCKED' });
@@ -141,6 +162,7 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.PENDING,
           startedAt: null,
           createdById: 'owner-db',
@@ -170,10 +192,41 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.ASSIGNED,
           startedAt: null,
           createdById: 'owner-db',
           distribution: null,
+          assignments: [{ responsibleUserId: 'member-db' }],
+        }),
+      },
+    } as unknown as PrismaService;
+    const storage = {
+      validateFiles: jestApi.fn().mockRejectedValue(validationError),
+    };
+    const service = new TaskAttachmentService(prisma, storage as never);
+
+    await expect(
+      service.uploadTaskAttachments(
+        viewer(UserRole.MEMBER, 'member-db'),
+        '11111111-1111-4111-8111-111111111111',
+        [],
+      ),
+    ).rejects.toBe(validationError);
+    expect(storage.validateFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows the current Responsible Member to upload on a sent GLOBAL Task before execution starts', async () => {
+    const validationError = new Error('validation reached');
+    const prisma = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          scope: TaskScope.GLOBAL,
+          status: TaskStatus.ASSIGNED,
+          startedAt: null,
+          createdById: 'owner-db',
+          distribution: { status: TaskDistributionStatus.SENT },
           assignments: [{ responsibleUserId: 'member-db' }],
         }),
       },
@@ -198,6 +251,7 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.PENDING,
           startedAt: null,
           createdById: 'owner-db',
@@ -224,6 +278,7 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.ASSIGNED,
           startedAt: null,
           createdById: 'owner-db',
@@ -250,6 +305,7 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.PENDING,
           startedAt: null,
           createdById: 'owner-db',
@@ -276,6 +332,7 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.PENDING,
           startedAt: null,
           createdById: 'member-db',
@@ -302,6 +359,7 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.GLOBAL,
           status: TaskStatus.PENDING,
           startedAt: null,
           createdById: 'owner-db',
@@ -326,11 +384,42 @@ describe('TaskAttachmentService mutation policy', () => {
     expect(tx.taskAttachment.findFirst).not.toHaveBeenCalled();
   });
 
+  it('locks a malformed TEAM Task that has a sent distribution', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          scope: TaskScope.TEAM,
+          status: TaskStatus.ASSIGNED,
+          startedAt: null,
+          createdById: 'owner-db',
+          distribution: { status: TaskDistributionStatus.SENT },
+          assignments: [{ responsibleUserId: 'member-db' }],
+        }),
+      },
+      taskAttachment: { findFirst: jestApi.fn() },
+    };
+    const { service } = createService(tx);
+
+    await expect(
+      service.deleteTaskAttachment(
+        viewer(UserRole.MEMBER, 'member-db'),
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ),
+    ).rejects.toMatchObject({
+      status: HttpStatus.CONFLICT,
+      response: { code: TASK_ERROR_CODE.TASK_ATTACHMENTS_NOT_EDITABLE },
+    });
+    expect(tx.taskAttachment.findFirst).not.toHaveBeenCalled();
+  });
+
   it('allows a Super Admin to mutate an unstarted assigned Task', async () => {
     const tx = {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.ASSIGNED,
           startedAt: null,
           createdById: 'owner-db',
@@ -376,10 +465,54 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.ASSIGNED,
           startedAt: null,
           createdById: 'owner-db',
           distribution: null,
+          assignments: [{ responsibleUserId: 'member-db' }],
+        }),
+      },
+      taskAttachment: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'attachment-db',
+          publicId: '22222222-2222-4222-8222-222222222222',
+          fileId: 'file-db',
+          file: {
+            publicId: '33333333-3333-4333-8333-333333333333',
+            uploadedById: 'member-db',
+            storageKey: 'private/member-storage-key',
+          },
+        }),
+        count: jestApi.fn().mockResolvedValue(1),
+        delete: jestApi.fn().mockResolvedValue({}),
+      },
+      submissionAttachment: { count: jestApi.fn().mockResolvedValue(0) },
+      fileAsset: { delete: jestApi.fn().mockResolvedValue({}) },
+      activityLog: { create: jestApi.fn().mockResolvedValue({}) },
+    };
+    const { service, storage } = createService(tx);
+
+    await expect(
+      service.deleteTaskAttachment(
+        viewer(UserRole.MEMBER, 'member-db'),
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ),
+    ).resolves.toEqual({ id: '22222222-2222-4222-8222-222222222222' });
+    expect(storage.destroy).toHaveBeenCalledWith('private/member-storage-key');
+  });
+
+  it('allows the current Responsible Member to delete their own upload on a sent GLOBAL Task', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-db',
+          scope: TaskScope.GLOBAL,
+          status: TaskStatus.ASSIGNED,
+          startedAt: null,
+          createdById: 'owner-db',
+          distribution: { status: TaskDistributionStatus.SENT },
           assignments: [{ responsibleUserId: 'member-db' }],
         }),
       },
@@ -418,6 +551,7 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.ASSIGNED,
           startedAt: null,
           createdById: 'owner-db',
@@ -460,6 +594,7 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.ASSIGNED,
           startedAt: null,
           createdById: 'owner-db',
@@ -493,6 +628,7 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.ASSIGNED,
           startedAt: null,
           createdById: 'owner-db',
@@ -519,6 +655,7 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.IN_PROGRESS,
           startedAt: new Date('2026-09-28T00:00:00.000Z'),
           createdById: 'owner-db',
@@ -548,6 +685,7 @@ describe('TaskAttachmentService mutation policy', () => {
       task: {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-db',
+          scope: TaskScope.TEAM,
           status: TaskStatus.IN_PROGRESS,
           startedAt: new Date('2026-09-28T00:00:00.000Z'),
           createdById: 'owner-db',

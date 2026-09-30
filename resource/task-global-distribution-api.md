@@ -202,7 +202,7 @@ SENT and CANCELLED distributions are immutable. Cancelling one recurring occurre
 
 ## Attachment Contract
 
-Task attachment upload requires a Super Admin, the Owner Admin, or the current Responsible Member. Task attachment deletion requires a Super Admin, the Owner Admin, or the current Responsible Member deleting an attachment they personally uploaded. Mutation is allowed only while PENDING or ASSIGNED and not started. A SENT GLOBAL distribution locks attachment mutation for everyone.
+Task attachment upload requires a Super Admin, the Owner Admin, or the current Responsible Member. Task attachment deletion requires a Super Admin, the Owner Admin, or the current Responsible Member deleting an attachment they personally uploaded. Mutation is allowed only while PENDING or ASSIGNED and not started. A SENT GLOBAL distribution locks Owner Admin and Super Admin mutation, but the current Responsible Member may still upload and delete only their own uploads until execution starts. This exception is GLOBAL only and does not apply to TEAM Tasks.
 
 GLOBAL Task attachments are readable by every active authenticated role. TEAM Task and submission attachment authorization remain unchanged.
 
@@ -227,16 +227,29 @@ const lifecycleEditable =
   task.status === "PENDING" ||
   (task.status === "ASSIGNED" && task.startedAt === null);
 
-const distributionUnlocked = task.distribution?.status !== "SENT";
+const sentGlobalDistribution =
+  task.scope === "GLOBAL" && task.distribution?.status === "SENT";
+
+const distributionAllowsUpload =
+  !sentGlobalDistribution ||
+  (viewer.role === "MEMBER" && viewer.id === task.responsible?.id);
+
+const distributionAllowsDelete =
+  !sentGlobalDistribution ||
+  (
+    viewer.role === "MEMBER" &&
+    viewer.id === task.responsible?.id &&
+    viewer.id === attachment.uploadedBy.id
+  );
 
 const canUploadTaskAttachments =
-  hasAttachmentUploadAuthority && lifecycleEditable && distributionUnlocked;
+  hasAttachmentUploadAuthority && lifecycleEditable && distributionAllowsUpload;
 
 const canDeleteTaskAttachment =
-  hasAttachmentDeleteAuthority && lifecycleEditable && distributionUnlocked;
+  hasAttachmentDeleteAuthority && lifecycleEditable && distributionAllowsDelete;
 ```
 
-Responsible Member mutation is limited to the current Responsible User during the pre execution edit window. Members may delete only attachments they uploaded. Owner Admins and Super Admins may delete any TaskAttachment on an eligible Task. DIRECT completion evidence remains a separate future artifact concept.
+Responsible Member mutation is limited to the current Responsible User during the pre execution edit window. Members may delete only attachments they uploaded. Owner Admins and Super Admins may delete any TaskAttachment on an eligible Task, except after a GLOBAL distribution has been sent. DIRECT completion evidence remains a separate future artifact concept.
 
 Attachment responses expose:
 

@@ -227,7 +227,7 @@ Only the current Responsible User may start a Task. A DIRECT Task in `IN_PROGRES
 
 Tasks may be `TEAM` scoped with a Team, or `GLOBAL` with no Team. GLOBAL Tasks are Super Admin created, DIRECT only, and may optionally distribute in app Notifications to active users. Recurring Tasks are DIRECT weekly/monthly series with one persisted reminder per occurrence. Recurring GLOBAL Tasks can also create one distribution per occurrence. Member self claim is opt in, one time only, unassigned only, and never recurring.
 
-Task attachments are shared Task reference files. Super Admins and Owner Admins may upload or delete eligible Task attachments. The current Responsible Member may upload during the pre execution edit window and may delete only files they uploaded. GLOBAL Task attachments are readable by active users; TEAM and Submission artifact scopes remain isolated.
+Task attachments are shared Task reference files. Super Admins and Owner Admins may upload or delete eligible Task attachments. The current Responsible Member may upload during the pre execution edit window and may delete only files they uploaded. After a GLOBAL distribution is sent, Owner Admin and Super Admin reference file mutation remains locked, while the current Responsible Member may still manage only their own uploads until execution starts. GLOBAL Task attachments are readable by active users; TEAM and Submission artifact scopes remain isolated.
 
 ### Todo
 

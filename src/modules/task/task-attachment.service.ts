@@ -268,6 +268,7 @@ export class TaskAttachmentService {
       },
       select: {
         id: true,
+        scope: true,
         status: true,
         startedAt: true,
         createdById: true,
