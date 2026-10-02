@@ -684,6 +684,29 @@ Reminder = one persisted reminder per recurring occurrence
 
 Admin creation remains limited to the Admin's current Team; Super Admin may create for any Team. Responsibility may cross Teams. Global Task visibility does not grant mutation, artifact, submission, review, Dashboard, report, Activity, or Inventory access. Recurrence uses stable business-local anchors and creates independent historical Task occurrences. Overdue remains derived and never becomes a persisted Task status.
 
+## 20.2 Team and Global Task Classification
+
+Every Task has one organization classification:
+
+```text
+TEAM
+→ belongs to exactly one Team
+
+GLOBAL
+→ organization level
+→ has no Team
+→ created only by SUPER_ADMIN
+→ uses DIRECT completion
+```
+
+A one time GLOBAL Task may remain unassigned. A recurring GLOBAL Task requires an active Responsible User. Distribution is optional and creates organization wide in app awareness without changing Task ownership, responsibility, or visibility. Active recipients are resolved when a distribution is sent. Recurring broadcast settings apply only to future occurrences, and every enabled occurrence owns one persisted distribution.
+
+Only the current Responsible User may start a Task. A DIRECT Task in `IN_PROGRESS` with a current active assignment may be completed by the current Responsible User, by a Super Admin through organization wide administrative override, or by the current Team Admin for a TEAM Task. Team Admin override does not apply to GLOBAL Tasks. Administrative completion records the actual actor but does not transfer or modify Task responsibility.
+
+GLOBAL Task attachments are readable by active authenticated users. Attachment upload and deletion are limited to the immutable Task Owner, a Super Admin, or the current Responsible Member before execution begins. Members may delete only their own uploads. After a GLOBAL distribution is sent, Owner Admin and Super Admin mutation is locked, while the current Responsible Member may still manage their own uploads until execution starts. TEAM and submission artifact authorization remain unchanged.
+
+Task Owners and Super Admins may optionally make a one time, unassigned Task available for Member self claim. Self claim is available to active Members across Team boundaries and remains separate from general assignment. Recurring Tasks cannot enable self claim. A successful claim creates the normal responsibility and Task history, moves the Task from PENDING to ASSIGNED, and notifies only the claimant and Owner.
+
 ---
 
 # 21. Work Queue

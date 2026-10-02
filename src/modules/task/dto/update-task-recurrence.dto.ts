@@ -32,6 +32,12 @@ export class UpdateTaskRecurrenceDto {
   reminderLeadMinutes?: number;
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10_080)
+  distributionLeadMinutes?: number | null;
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 }

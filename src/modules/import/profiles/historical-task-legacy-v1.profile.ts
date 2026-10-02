@@ -122,7 +122,7 @@ export interface HistoricalTaskExisting {
   remarks: string | null;
   priority: TaskPriority;
   status: TaskStatus;
-  teamId: string;
+  teamId: string | null;
   createdById: string;
   createdAt: Date;
   startedAt: Date | null;

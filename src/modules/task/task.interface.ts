@@ -3,6 +3,8 @@ import type {
   TaskCompletionMode,
   TaskRecurrenceFrequency,
   TaskReminderStatus,
+  TaskDistributionStatus,
+  TaskScope,
   UserRole,
 } from '../../../generated/prisma/enums.js';
 import type { PaginationMeta } from '../../shared/pagination/pagination.interface.js';
@@ -13,6 +15,15 @@ interface SafeTaskUserResponse {
   role: UserRole;
   employeeId: string | null;
   designation: string | null;
+}
+
+export interface TaskRecurrenceSummary {
+  id: string;
+  frequency: TaskRecurrenceFrequency;
+  nextOccurrenceAt: Date;
+  reminderLeadMinutes: number;
+  distributionLeadMinutes: number | null;
+  isActive: boolean;
 }
 
 export type SafeTaskResponse = Pick<
@@ -33,21 +44,22 @@ export type SafeTaskResponse = Pick<
   id: string;
   owner: SafeTaskUserResponse;
   responsible: SafeTaskUserResponse | null;
-  team: { id: string; name: string };
+  scope: TaskScope;
+  team: { id: string; name: string } | null;
   categoryId: string | null;
   scheduledStartAt: Date | null;
   completionMode: TaskCompletionMode;
   completionNote: string | null;
+  allowSelfClaim: boolean;
   occurrenceKey: string | null;
-  recurrence: {
-    id: string;
-    frequency: TaskRecurrenceFrequency;
-    nextOccurrenceAt: Date;
-    reminderLeadMinutes: number;
-    isActive: boolean;
-  } | null;
+  recurrence: TaskRecurrenceSummary | null;
   reminder: {
     status: TaskReminderStatus;
+    scheduledAt: Date;
+    sentAt: Date | null;
+  } | null;
+  distribution: {
+    status: TaskDistributionStatus;
     scheduledAt: Date;
     sentAt: Date | null;
   } | null;

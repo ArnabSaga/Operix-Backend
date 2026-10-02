@@ -5,7 +5,7 @@ export const safeFileSelect = {
   mimeType: true,
   sizeBytes: true,
   uploadedById: true,
-  uploadedBy: { select: { publicId: true } },
+  uploadedBy: { select: { publicId: true, name: true } },
   createdAt: true,
 } as const;
 

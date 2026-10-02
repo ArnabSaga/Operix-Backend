@@ -114,6 +114,10 @@ export class SubmissionService {
             );
           }
 
+          if (!task.team) {
+            throw this.submissionNotAllowed();
+          }
+
           if (
             task.status !== TaskStatus.IN_PROGRESS &&
             task.status !== TaskStatus.REVISION_REQUIRED

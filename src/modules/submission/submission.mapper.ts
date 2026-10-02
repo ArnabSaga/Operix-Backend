@@ -21,7 +21,7 @@ export interface SubmissionResponseSource {
       mimeType: string;
       sizeBytes: number;
       uploadedById: string;
-      uploadedBy: { publicId: string };
+      uploadedBy: { publicId: string; name: string };
       createdAt: Date;
     };
   }[];

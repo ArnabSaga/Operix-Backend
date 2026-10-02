@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { TaskStatus, UserRole } from '../../../generated/prisma/enums.js';
+import { UserRole } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { writeActivity } from '../../shared/activity/activity-write.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
@@ -12,8 +12,9 @@ import { FileStorageService } from '../../shared/file-storage/file-storage.servi
 import { mapAttachmentResponse } from '../file/file.mapper.js';
 import { safeAttachmentSelect } from '../file/file.select.js';
 import type { SafeAttachmentResponse } from '../file/file.interface.js';
-import { buildTaskScopeWhere } from './policies/task-scope.policy.js';
+import { buildTaskArtifactScopeWhere } from './policies/task-scope.policy.js';
 import { TASK_ACTIVITY, TASK_ERROR_CODE } from './task.constant.js';
+import { getTaskAttachmentMutationDecision } from './policies/task-attachment.policy.js';
 
 @Injectable()
 export class TaskAttachmentService {
@@ -29,20 +30,19 @@ export class TaskAttachmentService {
     taskId: string,
     files: Express.Multer.File[] | undefined,
   ): Promise<SafeAttachmentResponse[]> {
-    this.assertRole(viewer, UserRole.ADMIN);
+    const task = await this.resolveTaskCanMutateAttachments(
+      this.prisma,
+      viewer,
+      taskId,
+    );
 
     const validatedFiles = await this.storage.validateFiles(files, {
       requireAtLeastOne: true,
     });
 
-    const taskDbId = await this.resolveTaskCanMutateAttachments(
-      this.prisma,
-      viewer.userId,
-      taskId,
-    );
     await this.assertTaskAttachmentCapacity(
       this.prisma,
-      taskDbId,
+      task.id,
       validatedFiles.length,
     );
 
@@ -53,14 +53,14 @@ export class TaskAttachmentService {
 
     try {
       return await runSerializableTransaction(this.prisma, async (tx) => {
-        const currentTaskId = await this.resolveTaskCanMutateAttachments(
+        const currentTask = await this.resolveTaskCanMutateAttachments(
           tx,
-          viewer.userId,
+          viewer,
           taskId,
         );
         await this.assertTaskAttachmentCapacity(
           tx,
-          currentTaskId,
+          currentTask.id,
           uploaded.length,
         );
 
@@ -83,7 +83,7 @@ export class TaskAttachmentService {
 
           const attachment = await tx.taskAttachment.create({
             data: {
-              taskId: currentTaskId,
+              taskId: currentTask.id,
               fileId: fileAsset.id,
             },
             select: safeAttachmentSelect,
@@ -96,7 +96,7 @@ export class TaskAttachmentService {
           actorId: viewer.userId,
           action: TASK_ACTIVITY.TASK_ATTACHMENTS_ADDED,
           entityType: 'TASK',
-          entityId: currentTaskId,
+          entityId: currentTask.id,
           metadata: {
             taskId,
             fileCount: uploaded.length,
@@ -121,7 +121,7 @@ export class TaskAttachmentService {
     const task = await this.prisma.task.findFirst({
       where: {
         publicId: taskId,
-        AND: [buildTaskScopeWhere(viewer)],
+        AND: [buildTaskArtifactScopeWhere(viewer)],
       },
       select: {
         id: true,
@@ -148,22 +148,19 @@ export class TaskAttachmentService {
     taskId: string,
     attachmentId: string,
   ): Promise<{ id: string }> {
-    this.assertRole(viewer, UserRole.ADMIN);
-    this.storage.assertEnabled();
-
     const deleted = await runSerializableTransaction(
       this.prisma,
       async (tx) => {
-        const taskDbId = await this.resolveTaskCanMutateAttachments(
+        const task = await this.resolveTaskCanMutateAttachments(
           tx,
-          viewer.userId,
+          viewer,
           taskId,
         );
 
         const attachment = await tx.taskAttachment.findFirst({
           where: {
             publicId: attachmentId,
-            taskId: taskDbId,
+            taskId: task.id,
           },
           select: {
             id: true,
@@ -171,6 +168,8 @@ export class TaskAttachmentService {
             fileId: true,
             file: {
               select: {
+                publicId: true,
+                uploadedById: true,
                 storageKey: true,
               },
             },
@@ -180,6 +179,14 @@ export class TaskAttachmentService {
         if (!attachment) {
           throw this.fileNotFound();
         }
+        if (
+          viewer.role === UserRole.MEMBER &&
+          attachment.file.uploadedById !== viewer.userId
+        ) {
+          throw this.forbidden();
+        }
+
+        this.storage.assertEnabled();
 
         const [taskAttachmentCount, submissionAttachmentCount] =
           await Promise.all([
@@ -222,11 +229,11 @@ export class TaskAttachmentService {
           actorId: viewer.userId,
           action: TASK_ACTIVITY.TASK_ATTACHMENT_REMOVED,
           entityType: 'TASK',
-          entityId: taskDbId,
+          entityId: task.id,
           metadata: {
             taskId,
-            attachmentId: attachment.id,
-            fileId: attachment.fileId,
+            attachmentId: attachment.publicId,
+            fileId: attachment.file.publicId,
           },
         });
 
@@ -252,33 +259,60 @@ export class TaskAttachmentService {
 
   private async resolveTaskCanMutateAttachments(
     prisma: Pick<PrismaTransactionClient, 'task'>,
-    adminId: string,
+    viewer: OperixViewer,
     taskId: string,
-  ): Promise<string> {
+  ): Promise<{ id: string }> {
     const task = await prisma.task.findFirst({
       where: {
         publicId: taskId,
-        team: {
-          adminId,
-        },
       },
       select: {
         id: true,
+        scope: true,
         status: true,
+        startedAt: true,
+        createdById: true,
+        distribution: { select: { status: true } },
+        assignments: {
+          where: { unassignedAt: null },
+          take: 2,
+          select: { responsibleUserId: true },
+        },
       },
     });
 
     if (!task) {
       throw this.taskNotFound();
     }
-    if (task.status !== TaskStatus.PENDING) {
+    if (task.assignments.length > 1) {
+      this.logger.error(
+        `Task ${task.id} has multiple active assignments during attachment mutation.`,
+      );
+      throw new AppException(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        APP_ERROR_CODE.INTERNAL_SERVER_ERROR,
+        'Task assignment integrity violation.',
+      );
+    }
+    const decision = getTaskAttachmentMutationDecision(viewer, {
+      ...task,
+      responsibleUserId: task.assignments[0]?.responsibleUserId ?? null,
+    });
+    if (!decision.allowed && decision.reason === 'FORBIDDEN') {
+      throw new AppException(
+        HttpStatus.FORBIDDEN,
+        APP_ERROR_CODE.FORBIDDEN,
+        'You do not have access to this action.',
+      );
+    }
+    if (!decision.allowed) {
       throw new AppException(
         HttpStatus.CONFLICT,
         TASK_ERROR_CODE.TASK_ATTACHMENTS_NOT_EDITABLE,
-        'Task attachments can only be changed while the task is pending.',
+        'Task attachments can no longer be changed.',
       );
     }
-    return task.id;
+    return { id: task.id };
   }
 
   private async assertTaskAttachmentCapacity(
@@ -301,21 +335,19 @@ export class TaskAttachmentService {
     }
   }
 
-  private assertRole(viewer: OperixViewer, role: UserRole): void {
-    if (viewer.role !== role) {
-      throw new AppException(
-        HttpStatus.FORBIDDEN,
-        APP_ERROR_CODE.FORBIDDEN,
-        'You do not have access to this resource.',
-      );
-    }
-  }
-
   private taskNotFound(): AppException {
     return new AppException(
       HttpStatus.NOT_FOUND,
       TASK_ERROR_CODE.TASK_NOT_FOUND,
       'Task not found.',
+    );
+  }
+
+  private forbidden(): AppException {
+    return new AppException(
+      HttpStatus.FORBIDDEN,
+      APP_ERROR_CODE.FORBIDDEN,
+      'You do not have access to this action.',
     );
   }
 

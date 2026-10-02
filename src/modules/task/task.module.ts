@@ -11,6 +11,7 @@ import { TaskAutomationService } from './task-automation.service.js';
 import { TaskRecurrenceController } from './task-recurrence.controller.js';
 import { TaskRecurrenceService } from './task-recurrence.service.js';
 import { TaskService } from './task.service.js';
+import { TaskDistributionService } from './task-distribution.service.js';
 
 @Module({
   imports: [PrismaModule, OperixAuthModule, MailModule, FileStorageModule],
@@ -25,6 +26,7 @@ import { TaskService } from './task.service.js';
     TaskAttachmentService,
     TaskRecurrenceService,
     TaskAutomationService,
+    TaskDistributionService,
   ],
   exports: [TaskService],
 })

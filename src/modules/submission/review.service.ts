@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  TaskCompletionMode,
   TaskReviewAction,
   TaskStatus,
   UserRole,
@@ -36,11 +37,6 @@ export class ReviewService {
       const submission = await tx.taskSubmission.findFirst({
         where: {
           publicId: submissionId,
-          task: {
-            team: {
-              adminId: viewer.userId,
-            },
-          },
         },
         select: {
           id: true,
@@ -51,12 +47,24 @@ export class ReviewService {
             select: {
               id: true,
               status: true,
+              completionMode: true,
+              team: { select: { adminId: true } },
             },
           },
         },
       });
 
       if (!submission) {
+        throw this.submissionNotFound();
+      }
+
+      if (
+        submission.task.completionMode === TaskCompletionMode.DIRECT ||
+        submission.task.team === null
+      ) {
+        throw this.reviewNotAllowed();
+      }
+      if (submission.task.team.adminId !== viewer.userId) {
         throw this.submissionNotFound();
       }
 

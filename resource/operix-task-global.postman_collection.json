@@ -1,0 +1,233 @@
+{
+  "info": {
+    "name": "Operix Team and Global Tasks",
+    "description": "Coordinated backend contract for GLOBAL Tasks, distribution management, attachment access, and Member self claim.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api/v1"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "taskId",
+      "value": ""
+    },
+    {
+      "key": "recurrenceId",
+      "value": ""
+    },
+    {
+      "key": "teamId",
+      "value": ""
+    },
+    {
+      "key": "responsibleUserId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Immediate Global Task",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Organization policy acknowledgement\",\n  \"scope\": \"GLOBAL\",\n  \"distribution\": {\n    \"notifyAll\": true\n  }\n}"
+        },
+        "url": "{{baseUrl}}/tasks"
+      }
+    },
+    {
+      "name": "Create Monthly Team Task on the Fifth",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Submit Bank Balance\",\n  \"scope\": \"TEAM\",\n  \"teamId\": \"{{teamId}}\",\n  \"responsibleUserId\": \"{{responsibleUserId}}\",\n  \"dueAt\": \"2026-10-05T09:00:00+06:00\",\n  \"recurrence\": {\n    \"frequency\": \"MONTHLY\",\n    \"reminderLeadMinutes\": 1440\n  }\n}"
+        },
+        "url": "{{baseUrl}}/tasks"
+      }
+    },
+    {
+      "name": "Create Recurring Global Task",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Monthly Financial Submission\",\n  \"scope\": \"GLOBAL\",\n  \"dueAt\": \"2026-10-05T09:00:00+06:00\",\n  \"responsibleUserId\": \"{{responsibleUserId}}\",\n  \"recurrence\": {\n    \"frequency\": \"MONTHLY\",\n    \"reminderLeadMinutes\": 1440\n  },\n  \"distribution\": {\n    \"notifyAll\": true,\n    \"leadMinutes\": 720\n  }\n}"
+        },
+        "url": "{{baseUrl}}/tasks"
+      }
+    },
+    {
+      "name": "List Global Tasks",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/tasks?scope=GLOBAL"
+      }
+    },
+    {
+      "name": "Get Recurrence",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/task-recurrences/{{recurrenceId}}"
+      }
+    },
+    {
+      "name": "List Recurrence Occurrences",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/task-recurrences/{{recurrenceId}}/occurrences"
+      }
+    },
+    {
+      "name": "Update Future Recurrence Leads",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reminderLeadMinutes\": 1440,\n  \"distributionLeadMinutes\": 720\n}"
+        },
+        "url": "{{baseUrl}}/task-recurrences/{{recurrenceId}}"
+      }
+    },
+    {
+      "name": "Disable Future Recurrence Broadcast",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"distributionLeadMinutes\": null\n}"
+        },
+        "url": "{{baseUrl}}/task-recurrences/{{recurrenceId}}"
+      }
+    },
+    {
+      "name": "Pause Recurrence",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"isActive\": false\n}"
+        },
+        "url": "{{baseUrl}}/task-recurrences/{{recurrenceId}}"
+      }
+    },
+    {
+      "name": "Resume Recurrence",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"isActive\": true\n}"
+        },
+        "url": "{{baseUrl}}/task-recurrences/{{recurrenceId}}"
+      }
+    },
+    {
+      "name": "Reschedule Pending Distribution",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"scheduledAt\": \"2026-09-15T08:30:00+06:00\"\n}"
+        },
+        "url": "{{baseUrl}}/tasks/{{taskId}}/distribution"
+      }
+    },
+    {
+      "name": "Cancel Pending Distribution",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/tasks/{{taskId}}/distribution/cancel"
+      }
+    },
+    {
+      "name": "Enable Member Self Claim",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"enabled\": true\n}"
+        },
+        "url": "{{baseUrl}}/tasks/{{taskId}}/self-claim"
+      }
+    },
+    {
+      "name": "Claim Task as Member",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/tasks/{{taskId}}/claim"
+      }
+    }
+  ]
+}

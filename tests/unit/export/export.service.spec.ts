@@ -1,5 +1,6 @@
 import { read, utils, type CellObject } from 'xlsx';
 import {
+  TaskScope,
   TaskPriority,
   TaskStatus,
   UserRole,
@@ -96,6 +97,7 @@ describe('ExportService', () => {
         remarks: null,
         priority: TaskPriority.HIGH,
         status: TaskStatus.COMPLETED,
+        scope: TaskScope.TEAM,
         dueAt: null,
         startedAt: null,
         completedAt: createdAt,
@@ -116,6 +118,7 @@ describe('ExportService', () => {
         occurrenceKey: null,
         recurrence: null,
         reminder: null,
+        distribution: null,
         createdAt,
         updatedAt: createdAt,
         isOverdue: false,

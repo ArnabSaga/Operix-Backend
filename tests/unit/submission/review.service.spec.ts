@@ -19,6 +19,7 @@ import { APP_ERROR_CODE } from '../../../src/shared/errors/app-error-code.consta
 import type { OperixViewer } from '../../../src/shared/auth/viewer.interface';
 import {
   TaskReviewAction,
+  TaskCompletionMode,
   TaskStatus,
   UserRole,
   UserStatus,
@@ -86,6 +87,8 @@ function createSubmissionRecord(
     task: {
       id: 'task-a',
       status: overrides.status ?? TaskStatus.SUBMITTED,
+      completionMode: TaskCompletionMode.REVIEW_REQUIRED,
+      team: { adminId: 'admin-a' },
     },
   };
 }
@@ -217,14 +220,7 @@ describe('ReviewService', () => {
     expect(tx.taskSubmission.findFirst).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        where: {
-          publicId: 'submission-a',
-          task: {
-            team: {
-              adminId: 'admin-a',
-            },
-          },
-        },
+        where: { publicId: 'submission-a' },
       }),
     );
     expect(tx.task.update).toHaveBeenNthCalledWith(

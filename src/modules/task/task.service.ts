@@ -5,6 +5,7 @@ import {
   TaskCompletionMode,
   TaskPriority,
   TaskReminderStatus,
+  TaskScope,
   TaskStatus,
   UserRole,
   UserStatus,
@@ -48,7 +49,17 @@ import { mapTaskResponse } from './task.mapper.js';
 import { buildTaskListWhere, getTaskOrderBy } from './task-query.js';
 import { generateTaskReferenceCode } from './task-reference.js';
 import { TaskRecurrenceService } from './task-recurrence.service.js';
+import { TaskDistributionService } from './task-distribution.service.js';
 import { taskSelect } from './task.select.js';
+
+const DIRECT_COMPLETION_AUTHORITY = {
+  RESPONSIBLE: 'RESPONSIBLE',
+  SUPER_ADMIN_OVERRIDE: 'SUPER_ADMIN_OVERRIDE',
+  TEAM_ADMIN_OVERRIDE: 'TEAM_ADMIN_OVERRIDE',
+} as const;
+
+type DirectCompletionAuthority =
+  (typeof DIRECT_COMPLETION_AUTHORITY)[keyof typeof DIRECT_COMPLETION_AUTHORITY];
 
 @Injectable()
 export class TaskService {
@@ -59,6 +70,7 @@ export class TaskService {
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
     private readonly recurrenceService?: TaskRecurrenceService,
+    private readonly distributionService?: TaskDistributionService,
     configService?: ConfigService<ApplicationConfiguration, true>,
   ) {
     this.businessTimezone =
@@ -72,11 +84,18 @@ export class TaskService {
   ): Promise<SafeTaskResponse> {
     this.assertCreationRole(viewer);
     const now = new Date();
+    const scope = dto.scope ?? TaskScope.TEAM;
     const completionMode = this.resolveCompletionMode(dto);
+    this.validateScopeInput(viewer, dto, scope, completionMode);
+    this.validateDistributionInput(dto, scope);
     this.validateRecurrenceInput(dto, completionMode, now);
+    this.validateSelfClaimInput(dto);
 
     const result = await runSerializableTransaction(this.prisma, async (tx) => {
-      const teamId = await this.resolveCreationTeamId(tx, viewer, dto.teamId);
+      const teamId =
+        scope === TaskScope.TEAM
+          ? await this.resolveCreationTeamId(tx, viewer, dto.teamId!)
+          : null;
       const categoryId = await this.resolveCategoryId(tx, dto.categoryId);
       const responsible = dto.responsibleUserId
         ? await this.resolveResponsibleUser(
@@ -103,6 +122,7 @@ export class TaskService {
         const recurrence = await tx.taskRecurrence.create({
           data: {
             frequency: dto.recurrence.frequency,
+            scope,
             createdById: viewer.userId,
             defaultResponsibleUserId: responsible.id,
             teamId,
@@ -117,6 +137,8 @@ export class TaskService {
             anchorLocalTime: anchor.anchorLocalTime,
             nextOccurrenceAt,
             reminderLeadMinutes: dto.recurrence.reminderLeadMinutes ?? 1_440,
+            broadcastAll: dto.distribution !== undefined,
+            distributionLeadMinutes: dto.distribution?.leadMinutes ?? null,
           },
           select: { id: true },
         });
@@ -135,8 +157,10 @@ export class TaskService {
           remarks: dto.remarks ?? null,
           priority: dto.priority ?? TaskPriority.MEDIUM,
           status: initialStatus,
+          scope,
           dueAt: dto.dueAt ?? null,
           completionMode,
+          allowSelfClaim: dto.allowSelfClaim ?? false,
           recurrenceId,
           occurrenceKey,
           teamId,
@@ -195,6 +219,28 @@ export class TaskService {
         });
       }
 
+      let distributionId: string | null = null;
+      let distributionScheduledAt: Date | null = null;
+      if (dto.distribution) {
+        const scheduledAt = dto.recurrence
+          ? new Date(
+              dto.dueAt!.getTime() - dto.distribution.leadMinutes! * 60_000,
+            )
+          : (dto.distribution.scheduledAt ?? now);
+        distributionScheduledAt = scheduledAt;
+        const distribution = await tx.taskDistribution.create({
+          data: { taskId: task.id, scheduledAt },
+          select: { id: true },
+        });
+        distributionId = distribution.id;
+        await writeActivity(tx, {
+          actorId: viewer.userId,
+          action: TASK_ACTIVITY.TASK_DISTRIBUTION_SCHEDULED,
+          entityType: 'TASK',
+          entityId: task.id,
+        });
+      }
+
       const mail = responsible
         ? await this.createAssignmentSideEffects(
             tx,
@@ -205,17 +251,35 @@ export class TaskService {
           )
         : null;
 
-      const selected = responsible
-        ? await tx.task.findFirst({
-            where: { id: task.id },
-            select: taskSelect,
-          })
-        : task;
+      const selected =
+        responsible || distributionId
+          ? await tx.task.findFirst({
+              where: { id: task.id },
+              select: taskSelect,
+            })
+          : task;
       if (!selected) throw this.taskNotFound();
-      return { task: mapTaskResponse(selected, now), mail };
+      return {
+        task: mapTaskResponse(selected, now),
+        mail,
+        immediateDistributionId:
+          distributionId && distributionScheduledAt! <= now
+            ? distributionId
+            : null,
+      };
     });
 
     await this.sendAssignmentBestEffort(result.mail);
+    if (result.immediateDistributionId) {
+      await this.distributionService
+        ?.processDistribution(result.immediateDistributionId, new Date())
+        .catch((error: unknown) => {
+          this.logger.warn('Immediate task distribution failed.', {
+            eventId: result.task.id,
+            errorName: getErrorName(error),
+          });
+        });
+    }
     return result.task;
   }
 
@@ -223,6 +287,7 @@ export class TaskService {
     viewer: OperixViewer,
     query: ListTaskQueryDto,
   ): Promise<PaginatedTaskResponse> {
+    this.validateListFilters(query);
     const normalized = normalizePagination(query);
     const now = new Date();
     const where = buildTaskListWhere(viewer, query, now);
@@ -249,6 +314,7 @@ export class TaskService {
     now: Date,
     take: number,
   ): Promise<SafeTaskResponse[]> {
+    this.validateListFilters(query);
     const tasks = await this.prisma.task.findMany({
       where: buildTaskListWhere(viewer, query, now),
       select: taskSelect,
@@ -412,6 +478,212 @@ export class TaskService {
     return result.task;
   }
 
+  async updateSelfClaim(
+    viewer: OperixViewer,
+    taskId: string,
+    enabled: boolean,
+  ): Promise<SafeTaskResponse> {
+    return runSerializableTransaction(this.prisma, async (tx) => {
+      const task = await tx.task.findFirst({
+        where: { publicId: taskId },
+        select: {
+          id: true,
+          status: true,
+          createdById: true,
+          recurrenceId: true,
+          allowSelfClaim: true,
+        },
+      });
+      if (!task) throw this.taskNotFound();
+      if (
+        viewer.role !== UserRole.SUPER_ADMIN &&
+        task.createdById !== viewer.userId
+      ) {
+        throw this.forbidden();
+      }
+      if (task.recurrenceId) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          TASK_ERROR_CODE.TASK_SELF_CLAIM_NOT_ALLOWED_FOR_RECURRING_TASK,
+          'Self claim is not available for recurring tasks.',
+        );
+      }
+      if (task.status !== TaskStatus.PENDING) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          TASK_ERROR_CODE.TASK_INVALID_STATUS_TRANSITION,
+          'Self claim settings can only be changed for a pending task.',
+        );
+      }
+      if (await this.findCurrentAssignment(tx, task.id)) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          TASK_ERROR_CODE.TASK_CLAIM_CONFLICT,
+          'The task is no longer available for self claim.',
+        );
+      }
+
+      if (task.allowSelfClaim === enabled) {
+        const unchanged = await tx.task.findUnique({
+          where: { id: task.id },
+          select: taskSelect,
+        });
+        if (!unchanged) throw this.taskNotFound();
+        return mapTaskResponse(unchanged, new Date());
+      }
+
+      const updated = await tx.task.update({
+        where: { id: task.id },
+        data: { allowSelfClaim: enabled },
+        select: taskSelect,
+      });
+      await writeActivity(tx, {
+        actorId: viewer.userId,
+        action: enabled
+          ? TASK_ACTIVITY.TASK_SELF_CLAIM_ENABLED
+          : TASK_ACTIVITY.TASK_SELF_CLAIM_DISABLED,
+        entityType: 'TASK',
+        entityId: task.id,
+      });
+      return mapTaskResponse(updated, new Date());
+    });
+  }
+
+  async claimTask(
+    viewer: OperixViewer,
+    taskId: string,
+  ): Promise<SafeTaskResponse> {
+    if (
+      viewer.role !== UserRole.MEMBER ||
+      viewer.status !== UserStatus.ACTIVE
+    ) {
+      throw this.forbidden();
+    }
+
+    let result: { task: SafeTaskResponse; mail: TaskAssignedEmailInput };
+    try {
+      result = await this.prisma.$transaction(
+        async (tx) => {
+          const claimedAt = new Date();
+          const task = await tx.task.findFirst({
+            where: { publicId: taskId },
+            select: {
+              id: true,
+              publicId: true,
+              referenceCode: true,
+              title: true,
+              priority: true,
+              dueAt: true,
+              status: true,
+              allowSelfClaim: true,
+              recurrenceId: true,
+              createdById: true,
+            },
+          });
+          if (!task) throw this.taskNotFound();
+          if (task.recurrenceId) {
+            throw new AppException(
+              HttpStatus.CONFLICT,
+              TASK_ERROR_CODE.TASK_SELF_CLAIM_NOT_ALLOWED_FOR_RECURRING_TASK,
+              'Self claim is not available for recurring tasks.',
+            );
+          }
+          if (task.status !== TaskStatus.PENDING) {
+            throw new AppException(
+              HttpStatus.CONFLICT,
+              TASK_ERROR_CODE.TASK_INVALID_STATUS_TRANSITION,
+              'Only a pending task may be claimed.',
+            );
+          }
+          if (!task.allowSelfClaim) {
+            throw new AppException(
+              HttpStatus.CONFLICT,
+              TASK_ERROR_CODE.TASK_SELF_CLAIM_DISABLED,
+              'Self claim is not enabled for this task.',
+            );
+          }
+          if (await this.findCurrentAssignment(tx, task.id)) {
+            throw this.claimConflict();
+          }
+
+          const claimant = await tx.user.findFirst({
+            where: {
+              id: viewer.userId,
+              role: UserRole.MEMBER,
+              status: UserStatus.ACTIVE,
+            },
+            select: { id: true, name: true, email: true },
+          });
+          if (!claimant) throw this.forbidden();
+
+          await tx.taskAssignment.create({
+            data: {
+              taskId: task.id,
+              responsibleUserId: claimant.id,
+              assignedById: claimant.id,
+              assignedAt: claimedAt,
+              note: null,
+            },
+          });
+          const transitioned = await tx.task.updateMany({
+            where: { id: task.id, status: TaskStatus.PENDING },
+            data: { status: TaskStatus.ASSIGNED },
+          });
+          if (transitioned.count !== 1) throw this.claimConflict();
+
+          await tx.taskStatusHistory.create({
+            data: {
+              taskId: task.id,
+              fromStatus: TaskStatus.PENDING,
+              toStatus: TaskStatus.ASSIGNED,
+              changedById: claimant.id,
+              changedAt: claimedAt,
+              notes: 'Task claimed.',
+            },
+          });
+          await writeActivity(tx, {
+            actorId: claimant.id,
+            action: TASK_ACTIVITY.TASK_CLAIMED,
+            entityType: 'TASK',
+            entityId: task.id,
+          });
+
+          const mail = await this.createAssignmentSideEffects(
+            tx,
+            task,
+            claimant,
+            claimant.id,
+            null,
+          );
+          if (task.createdById !== claimant.id) {
+            await createNotification(tx, {
+              receiverId: task.createdById,
+              actorId: claimant.id,
+              type: TASK_NOTIFICATION.TASK_CLAIMED,
+              title: 'Task claimed',
+              body: `"${task.title}" was claimed by a Member.`,
+              targetType: 'TASK',
+              targetId: task.id,
+            });
+          }
+
+          const updated = await tx.task.findUnique({
+            where: { id: task.id },
+            select: taskSelect,
+          });
+          if (!updated) throw this.taskNotFound();
+          return { task: mapTaskResponse(updated, claimedAt), mail };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      throw mapClaimConflict(error);
+    }
+
+    await this.sendAssignmentBestEffort(result.mail);
+    return result.task;
+  }
+
   async startTask(
     viewer: OperixViewer,
     taskId: string,
@@ -466,15 +738,22 @@ export class TaskService {
         select: {
           id: true,
           status: true,
+          scope: true,
           completionMode: true,
           recurrenceId: true,
+          team: { select: { adminId: true } },
         },
       });
       if (!task) throw this.taskNotFound();
       const assignment = await this.findCurrentAssignment(tx, task.id);
-      if (assignment?.responsibleUserId !== viewer.userId) {
+      if (!assignment) {
         throw this.notResponsible();
       }
+      const authority = this.assertCanDirectCompleteTask(
+        viewer,
+        task,
+        assignment,
+      );
       if (task.status === TaskStatus.COMPLETED) {
         throw new AppException(
           HttpStatus.CONFLICT,
@@ -516,7 +795,10 @@ export class TaskService {
           fromStatus: TaskStatus.IN_PROGRESS,
           toStatus: TaskStatus.COMPLETED,
           changedById: viewer.userId,
-          notes: 'Task completed directly.',
+          notes:
+            authority === DIRECT_COMPLETION_AUTHORITY.RESPONSIBLE
+              ? 'Task completed directly.'
+              : 'Task completed directly by administrative override.',
         },
       });
       await writeActivity(tx, {
@@ -544,6 +826,16 @@ export class TaskService {
   }
 
   private resolveCompletionMode(dto: CreateTaskDto): TaskCompletionMode {
+    if (dto.scope === TaskScope.GLOBAL) {
+      if (dto.completionMode === TaskCompletionMode.REVIEW_REQUIRED) {
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          TASK_ERROR_CODE.INVALID_TASK_SCOPE,
+          'Global tasks must use direct completion.',
+        );
+      }
+      return TaskCompletionMode.DIRECT;
+    }
     if (dto.recurrence) {
       if (dto.completionMode === TaskCompletionMode.REVIEW_REQUIRED) {
         throw new AppException(
@@ -555,6 +847,67 @@ export class TaskService {
       return TaskCompletionMode.DIRECT;
     }
     return dto.completionMode ?? TaskCompletionMode.REVIEW_REQUIRED;
+  }
+
+  private validateScopeInput(
+    viewer: OperixViewer,
+    dto: CreateTaskDto,
+    scope: TaskScope,
+    completionMode: TaskCompletionMode,
+  ): void {
+    const invalidTeam = scope === TaskScope.TEAM && !dto.teamId;
+    const invalidGlobal = scope === TaskScope.GLOBAL && dto.teamId != null;
+    const unauthorizedGlobal =
+      scope === TaskScope.GLOBAL && viewer.role !== UserRole.SUPER_ADMIN;
+    if (
+      invalidTeam ||
+      invalidGlobal ||
+      unauthorizedGlobal ||
+      (scope === TaskScope.GLOBAL &&
+        completionMode !== TaskCompletionMode.DIRECT)
+    ) {
+      throw new AppException(
+        unauthorizedGlobal ? HttpStatus.FORBIDDEN : HttpStatus.BAD_REQUEST,
+        unauthorizedGlobal
+          ? APP_ERROR_CODE.FORBIDDEN
+          : TASK_ERROR_CODE.INVALID_TASK_SCOPE,
+        unauthorizedGlobal
+          ? 'Only a Super Admin may create a global task.'
+          : 'Task scope and Team selection are invalid.',
+      );
+    }
+  }
+
+  private validateDistributionInput(
+    dto: CreateTaskDto,
+    scope: TaskScope,
+  ): void {
+    if (!dto.distribution) return;
+    const invalidScope = scope !== TaskScope.GLOBAL;
+    const recurring = dto.recurrence !== undefined;
+    const invalidRecurring =
+      recurring &&
+      (dto.distribution.leadMinutes === undefined ||
+        dto.distribution.scheduledAt !== undefined);
+    const invalidOneTime =
+      !recurring && dto.distribution.leadMinutes !== undefined;
+    if (invalidScope || invalidRecurring || invalidOneTime) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        TASK_ERROR_CODE.INVALID_TASK_DISTRIBUTION,
+        'Task distribution timing is invalid.',
+      );
+    }
+  }
+
+  private validateListFilters(query: ListTaskQueryDto): void {
+    if (query.scope === TaskScope.GLOBAL && query.teamId) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        APP_ERROR_CODE.VALIDATION_ERROR,
+        'A global Task filter cannot include a Team.',
+      );
+    }
   }
 
   private validateRecurrenceInput(
@@ -573,6 +926,19 @@ export class TaskService {
         HttpStatus.BAD_REQUEST,
         TASK_ERROR_CODE.INVALID_TASK_RECURRENCE,
         'Recurrence requires a future due date, a responsible user, and direct completion.',
+      );
+    }
+  }
+
+  private validateSelfClaimInput(dto: CreateTaskDto): void {
+    if (
+      dto.allowSelfClaim === true &&
+      (dto.responsibleUserId !== undefined || dto.recurrence !== undefined)
+    ) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        APP_ERROR_CODE.VALIDATION_ERROR,
+        'Self claim requires a non recurring task without a responsible user.',
       );
     }
   }
@@ -711,6 +1077,37 @@ export class TaskService {
     });
   }
 
+  private assertCanDirectCompleteTask(
+    viewer: OperixViewer,
+    task: {
+      scope: TaskScope;
+      team: { adminId: string } | null;
+    },
+    assignment: { responsibleUserId: string },
+  ): DirectCompletionAuthority {
+    if (assignment.responsibleUserId === viewer.userId) {
+      return DIRECT_COMPLETION_AUTHORITY.RESPONSIBLE;
+    }
+
+    if (viewer.role === UserRole.SUPER_ADMIN) {
+      return DIRECT_COMPLETION_AUTHORITY.SUPER_ADMIN_OVERRIDE;
+    }
+
+    if (
+      viewer.role === UserRole.ADMIN &&
+      task.scope === TaskScope.TEAM &&
+      task.team?.adminId === viewer.userId
+    ) {
+      return DIRECT_COMPLETION_AUTHORITY.TEAM_ADMIN_OVERRIDE;
+    }
+
+    if (viewer.role === UserRole.MEMBER) {
+      throw this.notResponsible();
+    }
+
+    throw this.forbidden();
+  }
+
   private async sendAssignmentBestEffort(
     mail: TaskAssignedEmailInput | null,
   ): Promise<void> {
@@ -758,6 +1155,14 @@ export class TaskService {
     );
   }
 
+  private claimConflict(): AppException {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      TASK_ERROR_CODE.TASK_CLAIM_CONFLICT,
+      'The task is no longer available for claiming.',
+    );
+  }
+
   private taskNotFound(): AppException {
     return new AppException(
       HttpStatus.NOT_FOUND,
@@ -770,12 +1175,37 @@ export class TaskService {
 function mapAssignmentConflict(error: unknown): Error {
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === 'P2002'
+    (error.code === 'P2002' || error.code === 'P2034')
   ) {
     return new AppException(
       HttpStatus.CONFLICT,
       TASK_ERROR_CODE.TASK_ALREADY_ASSIGNED,
       'Task already has an active assignment.',
+    );
+  }
+  return error instanceof Error ? error : new Error('Unexpected error.');
+}
+
+function mapClaimConflict(error: unknown): Error {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  ) {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      TASK_ERROR_CODE.TASK_CLAIM_CONFLICT,
+      'The task is no longer available for claiming.',
+    );
+  }
+  if (
+    error instanceof AppException &&
+    (error.getResponse() as { code?: string }).code ===
+      APP_ERROR_CODE.CONCURRENT_MODIFICATION
+  ) {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      TASK_ERROR_CODE.TASK_CLAIM_CONFLICT,
+      'The task is no longer available for claiming.',
     );
   }
   return error instanceof Error ? error : new Error('Unexpected error.');

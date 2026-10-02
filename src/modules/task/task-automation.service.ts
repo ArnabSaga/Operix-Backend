@@ -11,6 +11,7 @@ import type { TaskReminderEmailInput } from '../../shared/mail/mail.interface.js
 import { createNotification } from '../../shared/notification/notification-write.js';
 import { TASK_ACTIVITY, TASK_NOTIFICATION } from './task.constant.js';
 import { TaskRecurrenceService } from './task-recurrence.service.js';
+import { TaskDistributionService } from './task-distribution.service.js';
 
 const REMINDER_BATCH_SIZE = 50;
 
@@ -22,13 +23,16 @@ export class TaskAutomationService {
     private readonly prisma: PrismaService,
     private readonly recurrenceService: TaskRecurrenceService,
     private readonly mailService: MailService,
+    private readonly distributionService: TaskDistributionService,
   ) {}
 
   async run(now = new Date()) {
     const reminders = await this.processDueReminders(now);
     const recurrences =
       await this.recurrenceService.reconcileDueRecurrences(now);
-    return { reminders, recurrences };
+    const distributions =
+      await this.distributionService.processDueDistributions(now);
+    return { reminders, recurrences, distributions };
   }
 
   async processDueReminders(now: Date): Promise<{

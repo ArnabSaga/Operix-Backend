@@ -10,12 +10,17 @@ import {
 import {
   TaskPriority,
   TaskRecurrenceFrequency,
+  TaskScope,
   TaskStatus,
 } from '../../../../generated/prisma/enums.js';
 import { PaginationQueryDto } from '../../../shared/pagination/pagination.dto.js';
 import { TaskSort } from '../task.constant.js';
 
 export class ListTaskQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @IsEnum(TaskScope)
+  scope?: TaskScope;
+
   @IsOptional()
   @IsEnum(TaskStatus)
   status?: TaskStatus;
