@@ -162,7 +162,7 @@ describe('MailTemplateRenderer', () => {
     );
   });
 
-  it('renders Account Setup with approval, expiry, fallback URL, and security guidance', async () => {
+  it('renders Account Setup with approval, expiry, CTA, and security guidance', async () => {
     const rendered = await new MailTemplateRenderer().render(
       MAIL_TEMPLATE.ACCOUNT_SETUP,
       {
@@ -176,7 +176,13 @@ describe('MailTemplateRenderer', () => {
     expect(rendered.text).toContain('Set Up Password');
     expect(rendered.text).toContain('24 hours');
     expect(rendered.text).toContain('Security notice');
-    expect(rendered.text).toContain(
+    expect(rendered.html).toContain('class="email-button"');
+    expect(rendered.html).toContain(
+      'href="https://app.operix.test/setup-password?token=safe"',
+    );
+    expect(rendered.text).not.toContain('If the button does not work');
+    expect(rendered.text).not.toContain('copy and paste this link');
+    expect(rendered.text).not.toContain(
       'https://app.operix.test/setup-password?token=safe',
     );
     expect(rendered.text.toLowerCase()).not.toContain('bootstrap password');
