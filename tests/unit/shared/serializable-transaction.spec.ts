@@ -62,4 +62,24 @@ describe('runSerializableTransaction', () => {
       });
     }
   });
+
+  it('forwards explicit timeout and maxWait without changing the default', async () => {
+    const prisma = {
+      $transaction: jestApi.fn().mockResolvedValue('ok'),
+    };
+
+    await expect(
+      runSerializableTransaction(
+        prisma as unknown as PrismaService,
+        () => Promise.resolve('result'),
+        { timeoutMs: 15000, maxWaitMs: 3000 },
+      ),
+    ).resolves.toBe('ok');
+
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      timeout: 15000,
+      maxWait: 3000,
+    });
+  });
 });

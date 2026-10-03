@@ -1765,6 +1765,39 @@ Related Entity
 
 Final file limits require confirmation.
 
+## Documents Library (V1)
+
+Operix provides a derived document library over existing uploaded files.
+Documents are not copied, duplicated, or re-uploaded: the library queries
+`FileAsset` records already linked through `TaskAttachment` or
+`SubmissionAttachment`. Orphan file records are never exposed as documents.
+
+Access policy:
+
+```text
+MEMBER
+→ only files the Member personally uploaded.
+
+ADMIN
+→ files the Admin personally uploaded, plus files uploaded by MEMBERs
+  whose current Team membership belongs to a Team the Admin administers.
+  Membership is evaluated at query time; transfers move access immediately.
+
+SUPER_ADMIN
+→ all legitimate documents organization-wide.
+```
+
+Explicit product rule: a Team Admin may access a document uploaded by a
+current Team Member through the Documents library even when the file
+originated from a GLOBAL Task whose Task or Submission routes the Admin
+cannot otherwise access. This is document-level access only and grants no
+Task detail, Submission, review, mutation, or GLOBAL administration
+authority.
+
+V1 supports listing, search, filtering, metadata inspection, preview, and
+download. There is no generic document delete: submission files are
+immutable evidence and task-file deletion follows Task lifecycle policy.
+
 ---
 
 # 54. Auditability

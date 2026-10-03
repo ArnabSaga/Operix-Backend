@@ -110,4 +110,59 @@ describe('GlobalExceptionFilter', () => {
 
     expect(setHeader).not.toHaveBeenCalled();
   });
+
+  it('logs unexpected failures with Prisma code while keeping response sanitized', () => {
+    const { response, status, json } = createResponseHarness();
+    const logged: string[] = [];
+    const testFilter = new GlobalExceptionFilter();
+    (
+      testFilter as unknown as {
+        logger: { error: (message: string, stack?: string) => void };
+      }
+    ).logger = {
+      error: (message: string): void => {
+        logged.push(message);
+      },
+    };
+
+    const failure = Object.assign(new Error('transaction expired'), {
+      code: 'P2028',
+    });
+    testFilter.catch(failure, createHost(response));
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+    expect(json).toHaveBeenCalledWith({
+      success: false,
+      message: 'Internal server error',
+      code: 'INTERNAL_SERVER_ERROR',
+      details: null,
+    });
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('P2028');
+    expect(logged[0]).toContain('transaction expired');
+  });
+
+  it('redacts connection strings from server logs', () => {
+    const { response } = createResponseHarness();
+    const logged: string[] = [];
+    const testFilter = new GlobalExceptionFilter();
+    (
+      testFilter as unknown as {
+        logger: { error: (message: string, stack?: string) => void };
+      }
+    ).logger = {
+      error: (message: string): void => {
+        logged.push(message);
+      },
+    };
+
+    testFilter.catch(
+      new Error('connect postgres://admin:s3cret@db:5432/app failed'),
+      createHost(response),
+    );
+
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('postgres://[REDACTED]');
+    expect(logged[0]).not.toContain('s3cret');
+  });
 });

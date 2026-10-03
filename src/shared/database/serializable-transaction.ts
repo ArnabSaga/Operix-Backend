@@ -7,14 +7,26 @@ import type { PrismaTransactionClient } from './transaction-client.type.js';
 
 export const MAX_TRANSACTION_RETRIES = 3;
 
+export interface SerializableTransactionOptions {
+  timeoutMs?: number;
+  maxWaitMs?: number;
+}
+
 export async function runSerializableTransaction<T>(
   prisma: PrismaService,
   callback: (tx: PrismaTransactionClient) => Promise<T>,
+  options?: SerializableTransactionOptions,
 ): Promise<T> {
   for (let attempt = 1; attempt <= MAX_TRANSACTION_RETRIES; attempt += 1) {
     try {
       return await prisma.$transaction(callback, {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        ...(options?.timeoutMs !== undefined
+          ? { timeout: options.timeoutMs }
+          : {}),
+        ...(options?.maxWaitMs !== undefined
+          ? { maxWait: options.maxWaitMs }
+          : {}),
       });
     } catch (error) {
       if (error instanceof AppException) {

@@ -1,0 +1,9 @@
+export enum DocumentSource {
+  TASK_ATTACHMENT = 'TASK_ATTACHMENT',
+  SUBMISSION_ATTACHMENT = 'SUBMISSION_ATTACHMENT',
+}
+
+export enum DocumentSort {
+  CREATED_AT_DESC = 'CREATED_AT_DESC',
+  CREATED_AT_ASC = 'CREATED_AT_ASC',
+}

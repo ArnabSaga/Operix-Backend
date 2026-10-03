@@ -8,6 +8,7 @@ import { AppException } from '../../shared/errors/app.exception.js';
 import { FileStorageService } from '../../shared/file-storage/file-storage.service.js';
 import { buildSubmissionScopeWhere } from '../submission/policies/submission-scope.policy.js';
 import { buildTaskArtifactScopeWhere } from '../task/policies/task-scope.policy.js';
+import { buildDocumentScopeWhere } from '../document/policies/document-scope.policy.js';
 
 export interface AuthorizedFileDownload {
   stream: Readable;
@@ -70,6 +71,7 @@ export class FileService {
   private async canReadFileParent(
     viewer: OperixViewer,
     file: {
+      id: string;
       taskAttachments: { taskId: string }[];
       submissionAttachments: { submissionId: string }[];
     },
@@ -106,7 +108,30 @@ export class FileService {
       }
     }
 
-    return false;
+    return this.canReadFileThroughDocuments(viewer, file.id);
+  }
+
+  /**
+   * Document-library authorization branch. Evaluated only after the existing
+   * Task and Submission parent checks, so it can only grant additional
+   * access, never revoke it. The shared Documents predicate already requires
+   * a legitimate operational source, so orphan FileAsset rows stay excluded.
+   */
+  private async canReadFileThroughDocuments(
+    viewer: OperixViewer,
+    fileId: string,
+  ): Promise<boolean> {
+    const document = await this.prisma.fileAsset.findFirst({
+      where: {
+        id: fileId,
+        AND: [buildDocumentScopeWhere(viewer)],
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return document !== null;
   }
 
   private fileNotFound(): AppException {
