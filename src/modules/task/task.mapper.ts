@@ -68,23 +68,31 @@ export function mapTaskResponse(
     scope: task.scope,
     team: task.team ? { id: task.team.publicId, name: task.team.name } : null,
     categoryId: task.category?.publicId ?? null,
-    owner: {
-      id: task.createdBy.publicId,
-      name: task.createdBy.name,
-      role: task.createdBy.role,
-      employeeId: task.createdBy.employeeId,
-      designation: task.createdBy.designation,
-    },
-    responsible: task.assignments[0]
+    owner: task.createdBy
+      ? {
+          id: task.createdBy.publicId,
+          name: task.createdBy.name,
+          role: task.createdBy.role,
+          employeeId: task.createdBy.employeeId ?? null,
+          designation: task.createdBy.designation ?? null,
+        }
+      : {
+          id: '',
+          name: 'Unknown Creator',
+          role: 'MEMBER' as any,
+          employeeId: null,
+          designation: null,
+        },
+    responsible: task.assignments?.[0]?.responsibleUser
       ? {
           id: task.assignments[0].responsibleUser.publicId,
           name: task.assignments[0].responsibleUser.name,
           role: task.assignments[0].responsibleUser.role,
-          employeeId: task.assignments[0].responsibleUser.employeeId,
-          designation: task.assignments[0].responsibleUser.designation,
+          employeeId: task.assignments[0].responsibleUser.employeeId ?? null,
+          designation: task.assignments[0].responsibleUser.designation ?? null,
         }
       : null,
-    recurrence: task.recurrence
+    recurrence: task.recurrence?.publicId
       ? mapTaskRecurrenceSummary(task.recurrence)
       : null,
     reminder: task.reminder,

@@ -6,7 +6,15 @@ export const submissionSelect = {
   taskId: true,
   submittedById: true,
   task: { select: { publicId: true } },
-  submittedBy: { select: { publicId: true } },
+  submittedBy: {
+    select: {
+      publicId: true,
+      name: true,
+      role: true,
+      employeeId: true,
+      designation: true,
+    },
+  },
   version: true,
   submissionText: true,
   submittedAt: true,

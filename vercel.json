@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/v1/internal/cron/task-automation",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/v1/internal/cron/registration-cleanup",
