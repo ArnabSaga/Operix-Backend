@@ -58,6 +58,13 @@ const DIRECT_COMPLETION_AUTHORITY = {
   TEAM_ADMIN_OVERRIDE: 'TEAM_ADMIN_OVERRIDE',
 } as const;
 
+// Task creation and assignment run ~12-15 sequential writes plus public-ID
+// lookups inside one serializable transaction. Over a pooled remote database
+// this exceeds Prisma's 5s default interactive-transaction timeout (P2028),
+// which surfaces as a generic 500. The explicit budget below is an upper
+// bound only; it changes no business logic, eligibility, or side effects.
+const TASK_ASSIGNMENT_TRANSACTION_TIMEOUT_MS = 15_000;
+
 type DirectCompletionAuthority =
   (typeof DIRECT_COMPLETION_AUTHORITY)[keyof typeof DIRECT_COMPLETION_AUTHORITY];
 
@@ -91,183 +98,187 @@ export class TaskService {
     this.validateRecurrenceInput(dto, completionMode, now);
     this.validateSelfClaimInput(dto);
 
-    const result = await runSerializableTransaction(this.prisma, async (tx) => {
-      const teamId =
-        scope === TaskScope.TEAM
-          ? await this.resolveCreationTeamId(tx, viewer, dto.teamId!)
+    const result = await runSerializableTransaction(
+      this.prisma,
+      async (tx) => {
+        const teamId =
+          scope === TaskScope.TEAM
+            ? await this.resolveCreationTeamId(tx, viewer, dto.teamId!)
+            : null;
+        const categoryId = await this.resolveCategoryId(tx, dto.categoryId);
+        const responsible = dto.responsibleUserId
+          ? await this.resolveResponsibleUser(
+              tx,
+              dto.responsibleUserId,
+              completionMode,
+            )
           : null;
-      const categoryId = await this.resolveCategoryId(tx, dto.categoryId);
-      const responsible = dto.responsibleUserId
-        ? await this.resolveResponsibleUser(
-            tx,
-            dto.responsibleUserId,
-            completionMode,
-          )
-        : null;
 
-      let recurrenceId: string | null = null;
-      let occurrenceKey: string | null = null;
-      if (dto.recurrence && dto.dueAt && responsible) {
-        const anchor = createRecurrenceAnchor(
-          dto.dueAt,
-          this.businessTimezone,
-          dto.recurrence.frequency,
-        );
-        const nextOccurrenceAt = getNextOccurrence(
-          dto.dueAt,
-          this.businessTimezone,
-          dto.recurrence.frequency,
-          anchor,
-        );
-        const recurrence = await tx.taskRecurrence.create({
+        let recurrenceId: string | null = null;
+        let occurrenceKey: string | null = null;
+        if (dto.recurrence && dto.dueAt && responsible) {
+          const anchor = createRecurrenceAnchor(
+            dto.dueAt,
+            this.businessTimezone,
+            dto.recurrence.frequency,
+          );
+          const nextOccurrenceAt = getNextOccurrence(
+            dto.dueAt,
+            this.businessTimezone,
+            dto.recurrence.frequency,
+            anchor,
+          );
+          const recurrence = await tx.taskRecurrence.create({
+            data: {
+              frequency: dto.recurrence.frequency,
+              scope,
+              createdById: viewer.userId,
+              defaultResponsibleUserId: responsible.id,
+              teamId,
+              categoryId,
+              title: dto.title,
+              description: dto.description ?? null,
+              remarks: dto.remarks ?? null,
+              priority: dto.priority ?? TaskPriority.MEDIUM,
+              anchorDueAt: dto.dueAt,
+              anchorLocalDay: anchor.anchorLocalDay,
+              anchorLocalWeekday: anchor.anchorLocalWeekday,
+              anchorLocalTime: anchor.anchorLocalTime,
+              nextOccurrenceAt,
+              reminderLeadMinutes: dto.recurrence.reminderLeadMinutes ?? 1_440,
+              broadcastAll: dto.distribution !== undefined,
+              distributionLeadMinutes: dto.distribution?.leadMinutes ?? null,
+            },
+            select: { id: true },
+          });
+          recurrenceId = recurrence.id;
+          occurrenceKey = getOccurrenceKey(dto.dueAt, this.businessTimezone);
+        }
+
+        const initialStatus = responsible
+          ? TaskStatus.ASSIGNED
+          : TaskStatus.PENDING;
+        const task = await tx.task.create({
           data: {
-            frequency: dto.recurrence.frequency,
-            scope,
-            createdById: viewer.userId,
-            defaultResponsibleUserId: responsible.id,
-            teamId,
-            categoryId,
+            referenceCode: generateTaskReferenceCode(now),
             title: dto.title,
             description: dto.description ?? null,
             remarks: dto.remarks ?? null,
             priority: dto.priority ?? TaskPriority.MEDIUM,
-            anchorDueAt: dto.dueAt,
-            anchorLocalDay: anchor.anchorLocalDay,
-            anchorLocalWeekday: anchor.anchorLocalWeekday,
-            anchorLocalTime: anchor.anchorLocalTime,
-            nextOccurrenceAt,
-            reminderLeadMinutes: dto.recurrence.reminderLeadMinutes ?? 1_440,
-            broadcastAll: dto.distribution !== undefined,
-            distributionLeadMinutes: dto.distribution?.leadMinutes ?? null,
+            status: initialStatus,
+            scope,
+            dueAt: dto.dueAt ?? null,
+            completionMode,
+            allowSelfClaim: dto.allowSelfClaim ?? false,
+            recurrenceId,
+            occurrenceKey,
+            teamId,
+            categoryId,
+            createdById: viewer.userId,
           },
-          select: { id: true },
+          select: taskSelect,
         });
-        recurrenceId = recurrence.id;
-        occurrenceKey = getOccurrenceKey(dto.dueAt, this.businessTimezone);
-      }
 
-      const initialStatus = responsible
-        ? TaskStatus.ASSIGNED
-        : TaskStatus.PENDING;
-      const task = await tx.task.create({
-        data: {
-          referenceCode: generateTaskReferenceCode(now),
-          title: dto.title,
-          description: dto.description ?? null,
-          remarks: dto.remarks ?? null,
-          priority: dto.priority ?? TaskPriority.MEDIUM,
-          status: initialStatus,
-          scope,
-          dueAt: dto.dueAt ?? null,
-          completionMode,
-          allowSelfClaim: dto.allowSelfClaim ?? false,
-          recurrenceId,
-          occurrenceKey,
-          teamId,
-          categoryId,
-          createdById: viewer.userId,
-        },
-        select: taskSelect,
-      });
+        if (responsible) {
+          await tx.taskAssignment.create({
+            data: {
+              taskId: task.id,
+              responsibleUserId: responsible.id,
+              assignedById: viewer.userId,
+              note: null,
+            },
+          });
+          await writeActivity(tx, {
+            actorId: viewer.userId,
+            action: TASK_ACTIVITY.TASK_RESPONSIBILITY_ASSIGNED,
+            entityType: 'TASK',
+            entityId: task.id,
+          });
+        }
 
-      if (responsible) {
-        await tx.taskAssignment.create({
-          data: {
-            taskId: task.id,
-            responsibleUserId: responsible.id,
-            assignedById: viewer.userId,
-            note: null,
-          },
-        });
+        await this.writeCreationHistory(
+          tx,
+          task.id,
+          viewer.userId,
+          initialStatus,
+        );
         await writeActivity(tx, {
           actorId: viewer.userId,
-          action: TASK_ACTIVITY.TASK_RESPONSIBILITY_ASSIGNED,
+          action: TASK_ACTIVITY.TASK_CREATED,
           entityType: 'TASK',
           entityId: task.id,
+          metadata: { referenceCode: task.referenceCode },
         });
-      }
 
-      await this.writeCreationHistory(
-        tx,
-        task.id,
-        viewer.userId,
-        initialStatus,
-      );
-      await writeActivity(tx, {
-        actorId: viewer.userId,
-        action: TASK_ACTIVITY.TASK_CREATED,
-        entityType: 'TASK',
-        entityId: task.id,
-        metadata: { referenceCode: task.referenceCode },
-      });
+        if (recurrenceId && dto.dueAt) {
+          await tx.taskReminder.create({
+            data: {
+              taskId: task.id,
+              scheduledAt: new Date(
+                dto.dueAt.getTime() -
+                  (dto.recurrence?.reminderLeadMinutes ?? 1_440) * 60_000,
+              ),
+            },
+          });
+          await writeActivity(tx, {
+            actorId: viewer.userId,
+            action: TASK_ACTIVITY.TASK_RECURRENCE_CREATED,
+            entityType: 'TASK_RECURRENCE',
+            entityId: recurrenceId,
+          });
+        }
 
-      if (recurrenceId && dto.dueAt) {
-        await tx.taskReminder.create({
-          data: {
-            taskId: task.id,
-            scheduledAt: new Date(
-              dto.dueAt.getTime() -
-                (dto.recurrence?.reminderLeadMinutes ?? 1_440) * 60_000,
-            ),
-          },
-        });
-        await writeActivity(tx, {
-          actorId: viewer.userId,
-          action: TASK_ACTIVITY.TASK_RECURRENCE_CREATED,
-          entityType: 'TASK_RECURRENCE',
-          entityId: recurrenceId,
-        });
-      }
+        let distributionId: string | null = null;
+        let distributionScheduledAt: Date | null = null;
+        if (dto.distribution) {
+          const scheduledAt = dto.recurrence
+            ? new Date(
+                dto.dueAt!.getTime() - dto.distribution.leadMinutes! * 60_000,
+              )
+            : (dto.distribution.scheduledAt ?? now);
+          distributionScheduledAt = scheduledAt;
+          const distribution = await tx.taskDistribution.create({
+            data: { taskId: task.id, scheduledAt },
+            select: { id: true },
+          });
+          distributionId = distribution.id;
+          await writeActivity(tx, {
+            actorId: viewer.userId,
+            action: TASK_ACTIVITY.TASK_DISTRIBUTION_SCHEDULED,
+            entityType: 'TASK',
+            entityId: task.id,
+          });
+        }
 
-      let distributionId: string | null = null;
-      let distributionScheduledAt: Date | null = null;
-      if (dto.distribution) {
-        const scheduledAt = dto.recurrence
-          ? new Date(
-              dto.dueAt!.getTime() - dto.distribution.leadMinutes! * 60_000,
+        const mail = responsible
+          ? await this.createAssignmentSideEffects(
+              tx,
+              task,
+              responsible,
+              viewer.userId,
+              null,
             )
-          : (dto.distribution.scheduledAt ?? now);
-        distributionScheduledAt = scheduledAt;
-        const distribution = await tx.taskDistribution.create({
-          data: { taskId: task.id, scheduledAt },
-          select: { id: true },
-        });
-        distributionId = distribution.id;
-        await writeActivity(tx, {
-          actorId: viewer.userId,
-          action: TASK_ACTIVITY.TASK_DISTRIBUTION_SCHEDULED,
-          entityType: 'TASK',
-          entityId: task.id,
-        });
-      }
+          : null;
 
-      const mail = responsible
-        ? await this.createAssignmentSideEffects(
-            tx,
-            task,
-            responsible,
-            viewer.userId,
-            null,
-          )
-        : null;
-
-      const selected =
-        responsible || distributionId
-          ? await tx.task.findFirst({
-              where: { id: task.id },
-              select: taskSelect,
-            })
-          : task;
-      if (!selected) throw this.taskNotFound();
-      return {
-        task: mapTaskResponse(selected, now),
-        mail,
-        immediateDistributionId:
-          distributionId && distributionScheduledAt! <= now
-            ? distributionId
-            : null,
-      };
-    });
+        const selected =
+          responsible || distributionId
+            ? await tx.task.findFirst({
+                where: { id: task.id },
+                select: taskSelect,
+              })
+            : task;
+        if (!selected) throw this.taskNotFound();
+        return {
+          task: mapTaskResponse(selected, now),
+          mail,
+          immediateDistributionId:
+            distributionId && distributionScheduledAt! <= now
+              ? distributionId
+              : null,
+        };
+      },
+      { timeoutMs: TASK_ASSIGNMENT_TRANSACTION_TIMEOUT_MS },
+    );
 
     await this.sendAssignmentBestEffort(result.mail);
     if (result.immediateDistributionId) {
@@ -383,94 +394,98 @@ export class TaskService {
   ): Promise<SafeTaskResponse> {
     let result: { task: SafeTaskResponse; mail: TaskAssignedEmailInput };
     try {
-      result = await runSerializableTransaction(this.prisma, async (tx) => {
-        const task = await tx.task.findFirst({
-          where: { publicId: taskId },
-          select: {
-            id: true,
-            publicId: true,
-            referenceCode: true,
-            title: true,
-            priority: true,
-            dueAt: true,
-            status: true,
-            createdById: true,
-            completionMode: true,
-          },
-        });
-        if (!task) throw this.taskNotFound();
-        if (
-          viewer.role !== UserRole.SUPER_ADMIN &&
-          task.createdById !== viewer.userId
-        ) {
-          throw this.forbidden();
-        }
-        if (
-          task.status !== TaskStatus.PENDING &&
-          task.status !== TaskStatus.ASSIGNED
-        ) {
-          throw this.transitionConflict('Task responsibility is locked.');
-        }
-        const responsible = await this.resolveResponsibleUser(
-          tx,
-          dto.responsibleUserId,
-          task.completionMode,
-        );
-        const current = await this.findCurrentAssignment(tx, task.id);
-        if (current?.responsibleUserId === responsible.id) {
-          throw new AppException(
-            HttpStatus.CONFLICT,
-            TASK_ERROR_CODE.TASK_ALREADY_ASSIGNED,
-            'This user is already responsible for the task.',
-          );
-        }
-        if (current) {
-          await tx.taskAssignment.update({
-            where: { id: current.id },
-            data: { unassignedAt: new Date() },
-          });
-        }
-        await tx.taskAssignment.create({
-          data: {
-            taskId: task.id,
-            responsibleUserId: responsible.id,
-            assignedById: viewer.userId,
-            note: normalizeOptionalText(dto.note),
-          },
-        });
-        if (task.status === TaskStatus.PENDING) {
-          await tx.taskStatusHistory.create({
-            data: {
-              taskId: task.id,
-              fromStatus: TaskStatus.PENDING,
-              toStatus: TaskStatus.ASSIGNED,
-              changedById: viewer.userId,
-              notes: 'Task assigned.',
+      result = await runSerializableTransaction(
+        this.prisma,
+        async (tx) => {
+          const task = await tx.task.findFirst({
+            where: { publicId: taskId },
+            select: {
+              id: true,
+              publicId: true,
+              referenceCode: true,
+              title: true,
+              priority: true,
+              dueAt: true,
+              status: true,
+              createdById: true,
+              completionMode: true,
             },
           });
-        }
-        await writeActivity(tx, {
-          actorId: viewer.userId,
-          action: current
-            ? TASK_ACTIVITY.TASK_RESPONSIBILITY_CHANGED
-            : TASK_ACTIVITY.TASK_RESPONSIBILITY_ASSIGNED,
-          entityType: 'TASK',
-          entityId: task.id,
-        });
-        const mail = await this.createAssignmentSideEffects(
-          tx,
-          task,
-          responsible,
-          viewer.userId,
-          normalizeOptionalText(dto.note),
-        );
-        const updated = await tx.task.update({
-          where: { id: task.id },
-          data: { status: TaskStatus.ASSIGNED },
-          select: taskSelect,
-        });
-        return { task: mapTaskResponse(updated, new Date()), mail };
-      });
+          if (!task) throw this.taskNotFound();
+          if (
+            viewer.role !== UserRole.SUPER_ADMIN &&
+            task.createdById !== viewer.userId
+          ) {
+            throw this.forbidden();
+          }
+          if (
+            task.status !== TaskStatus.PENDING &&
+            task.status !== TaskStatus.ASSIGNED
+          ) {
+            throw this.transitionConflict('Task responsibility is locked.');
+          }
+          const responsible = await this.resolveResponsibleUser(
+            tx,
+            dto.responsibleUserId,
+            task.completionMode,
+          );
+          const current = await this.findCurrentAssignment(tx, task.id);
+          if (current?.responsibleUserId === responsible.id) {
+            throw new AppException(
+              HttpStatus.CONFLICT,
+              TASK_ERROR_CODE.TASK_ALREADY_ASSIGNED,
+              'This user is already responsible for the task.',
+            );
+          }
+          if (current) {
+            await tx.taskAssignment.update({
+              where: { id: current.id },
+              data: { unassignedAt: new Date() },
+            });
+          }
+          await tx.taskAssignment.create({
+            data: {
+              taskId: task.id,
+              responsibleUserId: responsible.id,
+              assignedById: viewer.userId,
+              note: normalizeOptionalText(dto.note),
+            },
+          });
+          if (task.status === TaskStatus.PENDING) {
+            await tx.taskStatusHistory.create({
+              data: {
+                taskId: task.id,
+                fromStatus: TaskStatus.PENDING,
+                toStatus: TaskStatus.ASSIGNED,
+                changedById: viewer.userId,
+                notes: 'Task assigned.',
+              },
+            });
+          }
+          await writeActivity(tx, {
+            actorId: viewer.userId,
+            action: current
+              ? TASK_ACTIVITY.TASK_RESPONSIBILITY_CHANGED
+              : TASK_ACTIVITY.TASK_RESPONSIBILITY_ASSIGNED,
+            entityType: 'TASK',
+            entityId: task.id,
+          });
+          const mail = await this.createAssignmentSideEffects(
+            tx,
+            task,
+            responsible,
+            viewer.userId,
+            normalizeOptionalText(dto.note),
+          );
+          const updated = await tx.task.update({
+            where: { id: task.id },
+            data: { status: TaskStatus.ASSIGNED },
+            select: taskSelect,
+          });
+          return { task: mapTaskResponse(updated, new Date()), mail };
+        },
+        { timeoutMs: TASK_ASSIGNMENT_TRANSACTION_TIMEOUT_MS },
+      );
     } catch (error) {
       throw mapAssignmentConflict(error);
     }

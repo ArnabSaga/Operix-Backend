@@ -36,6 +36,15 @@ import type {
 import { mapSubmissionResponse } from './submission.mapper.js';
 import { submissionSelect } from './submission.select.js';
 
+// Submission creation performs Task lookup, version resolution, submission
+// and attachment persistence, Task status/history writes, Activity and
+// Notification writes with public-ID resolution, and a final safe-response
+// read inside one serializable transaction. Remote pooled databases can
+// exceed Prisma's 5s default interactive transaction timeout (P2028), so the
+// transaction carries an explicit budget. This changes no business logic,
+// eligibility, or side-effect behavior.
+const SUBMISSION_TRANSACTION_TIMEOUT_MS = 15_000;
+
 @Injectable()
 export class SubmissionService {
   constructor(
@@ -246,6 +255,7 @@ export class SubmissionService {
 
           return submissionWithAttachments;
         },
+        { timeoutMs: SUBMISSION_TRANSACTION_TIMEOUT_MS },
       );
 
       return mapSubmissionResponse(submission);

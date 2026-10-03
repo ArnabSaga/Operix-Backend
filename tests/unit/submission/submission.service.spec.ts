@@ -204,6 +204,10 @@ describe('SubmissionService', () => {
         targetId: 'submission-a',
       },
     });
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      timeout: 15000,
+    });
   });
 
   it('returns TASK_NOT_FOUND when the current Member cannot access the Task', async () => {
