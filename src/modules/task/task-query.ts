@@ -4,16 +4,19 @@ import { TaskScope } from '../../../generated/prisma/enums.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import type { ListTaskQueryDto } from './dto/list-task-query.dto.js';
 import { TaskSort } from './task.constant.js';
+import { buildTaskScopeWhere } from './policies/task-scope.policy.js';
 
 export function buildTaskListWhere(
   viewer: OperixViewer,
   query: ListTaskQueryDto,
   now: Date,
 ): Prisma.TaskWhereInput {
-  void viewer;
+  const scopeWhere = buildTaskScopeWhere(viewer);
+  const filterConditions = buildTaskFilterConditions(query, now);
+  const isScopeEmpty = Object.keys(scopeWhere).length === 0;
 
   return {
-    AND: buildTaskFilterConditions(query, now),
+    AND: isScopeEmpty ? filterConditions : [scopeWhere, ...filterConditions],
   };
 }
 

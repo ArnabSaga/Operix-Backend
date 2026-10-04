@@ -60,10 +60,14 @@ export class MailTemplateRenderer {
         preheaderText: metadata.preheaderText,
       });
       const html = juice(documentHtml);
-      const text = convert(html, {
-        wordwrap: 100,
-        selectors: [{ selector: '.preheader', format: 'skip' }],
-      });
+      const text = sanitizePlainTextLinks(
+        templateName,
+        context,
+        convert(html, {
+          wordwrap: 100,
+          selectors: [{ selector: '.preheader', format: 'skip' }],
+        }),
+      );
 
       return { html, text };
     } catch (error) {
@@ -245,6 +249,26 @@ function templateRenderException(): AppException {
     APP_ERROR_CODE.MAIL_TEMPLATE_RENDER_FAILED,
     'Mail template rendering failed.',
   );
+}
+
+function sanitizePlainTextLinks<TName extends MailTemplateName>(
+  templateName: TName,
+  context: MailTemplateContext<TName>,
+  text: string,
+): string {
+  if (templateName !== MAIL_TEMPLATE.ACCOUNT_SETUP) {
+    return text;
+  }
+
+  const setupUrl = (context as { setupUrl: string }).setupUrl;
+  return text.replace(
+    new RegExp(`Set Up Password \\[${escapeRegExp(setupUrl)}\\]`, 'g'),
+    'Set Up Password',
+  );
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function getErrorName(error: unknown): string {

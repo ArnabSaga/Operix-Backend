@@ -65,7 +65,8 @@ export function isTaskAttachmentLifecycleEditable(
 ): boolean {
   return (
     task.status === TaskStatus.PENDING ||
-    (task.status === TaskStatus.ASSIGNED && task.startedAt === null)
+    (task.status === TaskStatus.ASSIGNED && task.startedAt === null) ||
+    task.status === TaskStatus.IN_PROGRESS
   );
 }
 

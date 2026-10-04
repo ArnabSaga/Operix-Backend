@@ -266,9 +266,23 @@ The upload validator canonicalizes `image/jpg` to `image/jpeg` and still require
 
 ## Member Self Claim
 
-Task creation accepts `allowSelfClaim`, which defaults to `false`. Enabling it requires a one time Task without an initial Responsible User. Recurring Tasks cannot enable self claim.
+Task creation accepts `allowSelfClaim`, but GLOBAL Tasks derive the canonical value from the resolved Task configuration instead of trusting the client flag:
 
-The Task Owner or a Super Admin may enable or disable self claim while the Task is PENDING, unassigned, and non recurring:
+```text
+GLOBAL one time without Responsible
+→ allowSelfClaim = true
+
+GLOBAL one time with Responsible
+→ allowSelfClaim = false
+
+GLOBAL recurring
+→ Responsible required
+→ allowSelfClaim = false
+```
+
+TEAM one time unassigned Tasks keep the existing optional self claim behavior. TEAM assigned or recurring Tasks keep self claim disabled, and stale `allowSelfClaim=true` input remains invalid for those combinations.
+
+The Task Owner or a Super Admin may enable or disable self claim while an eligible TEAM Task is PENDING, unassigned, and non recurring. A Super Admin may also repair an eligible legacy GLOBAL Task by enabling self claim, but a GLOBAL one time PENDING unassigned Task cannot be disabled back into an unclaimable state:
 
 ```http
 PATCH /api/v1/tasks/:taskId/self-claim

@@ -47,6 +47,7 @@ import type {
 } from './task.interface.js';
 import { mapTaskResponse } from './task.mapper.js';
 import { buildTaskListWhere, getTaskOrderBy } from './task-query.js';
+import { buildTaskScopeWhere } from './policies/task-scope.policy.js';
 import { generateTaskReferenceCode } from './task-reference.js';
 import { TaskRecurrenceService } from './task-recurrence.service.js';
 import { TaskDistributionService } from './task-distribution.service.js';
@@ -96,7 +97,7 @@ export class TaskService {
     this.validateScopeInput(viewer, dto, scope, completionMode);
     this.validateDistributionInput(dto, scope);
     this.validateRecurrenceInput(dto, completionMode, now);
-    this.validateSelfClaimInput(dto);
+    this.validateSelfClaimInput(dto, scope);
 
     const result = await runSerializableTransaction(
       this.prisma,
@@ -158,6 +159,11 @@ export class TaskService {
         const initialStatus = responsible
           ? TaskStatus.ASSIGNED
           : TaskStatus.PENDING;
+        const allowSelfClaim = this.resolveInitialSelfClaim(
+          scope,
+          dto,
+          responsible !== null,
+        );
         const task = await tx.task.create({
           data: {
             referenceCode: generateTaskReferenceCode(now),
@@ -169,7 +175,7 @@ export class TaskService {
             scope,
             dueAt: dto.dueAt ?? null,
             completionMode,
-            allowSelfClaim: dto.allowSelfClaim ?? false,
+            allowSelfClaim,
             recurrenceId,
             occurrenceKey,
             teamId,
@@ -336,11 +342,14 @@ export class TaskService {
   }
 
   async getTask(
-    _viewer: OperixViewer,
+    viewer: OperixViewer,
     taskId: string,
   ): Promise<SafeTaskResponse> {
+    const scopeWhere = buildTaskScopeWhere(viewer);
     const task = await this.prisma.task.findFirst({
-      where: { publicId: taskId },
+      where: {
+        AND: [{ publicId: taskId }, scopeWhere],
+      },
       select: taskSelect,
     });
     if (!task) throw this.taskNotFound();
@@ -348,12 +357,15 @@ export class TaskService {
   }
 
   async getTaskHistory(
-    _viewer: OperixViewer,
+    viewer: OperixViewer,
     taskId: string,
     pagination: PaginationInput,
   ): Promise<PaginatedTaskStatusHistoryResponse> {
+    const scopeWhere = buildTaskScopeWhere(viewer);
     const task = await this.prisma.task.findFirst({
-      where: { publicId: taskId },
+      where: {
+        AND: [{ publicId: taskId }, scopeWhere],
+      },
       select: { id: true, publicId: true },
     });
     if (!task) throw this.taskNotFound();
@@ -479,7 +491,7 @@ export class TaskService {
           );
           const updated = await tx.task.update({
             where: { id: task.id },
-            data: { status: TaskStatus.ASSIGNED },
+            data: { status: TaskStatus.ASSIGNED, allowSelfClaim: false },
             select: taskSelect,
           });
           return { task: mapTaskResponse(updated, new Date()), mail };
@@ -504,6 +516,7 @@ export class TaskService {
         select: {
           id: true,
           status: true,
+          scope: true,
           createdById: true,
           recurrenceId: true,
           allowSelfClaim: true,
@@ -535,6 +548,13 @@ export class TaskService {
           HttpStatus.CONFLICT,
           TASK_ERROR_CODE.TASK_CLAIM_CONFLICT,
           'The task is no longer available for self claim.',
+        );
+      }
+      if (this.isCanonicalGlobalOpenSelfClaimTask(task) && !enabled) {
+        throw new AppException(
+          HttpStatus.CONFLICT,
+          TASK_ERROR_CODE.TASK_INVALID_STATUS_TRANSITION,
+          'Global unassigned one time tasks must remain open for self claim.',
         );
       }
 
@@ -577,7 +597,8 @@ export class TaskService {
 
     let result: { task: SafeTaskResponse; mail: TaskAssignedEmailInput };
     try {
-      result = await this.prisma.$transaction(
+      result = await runSerializableTransaction(
+        this.prisma,
         async (tx) => {
           const claimedAt = new Date();
           const task = await tx.task.findFirst({
@@ -689,7 +710,7 @@ export class TaskService {
           if (!updated) throw this.taskNotFound();
           return { task: mapTaskResponse(updated, claimedAt), mail };
         },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        { timeoutMs: TASK_ASSIGNMENT_TRANSACTION_TIMEOUT_MS },
       );
     } catch (error) {
       throw mapClaimConflict(error);
@@ -945,7 +966,8 @@ export class TaskService {
     }
   }
 
-  private validateSelfClaimInput(dto: CreateTaskDto): void {
+  private validateSelfClaimInput(dto: CreateTaskDto, scope: TaskScope): void {
+    if (scope === TaskScope.GLOBAL) return;
     if (
       dto.allowSelfClaim === true &&
       (dto.responsibleUserId !== undefined || dto.recurrence !== undefined)
@@ -956,6 +978,32 @@ export class TaskService {
         'Self claim requires a non recurring task without a responsible user.',
       );
     }
+  }
+
+  private resolveInitialSelfClaim(
+    scope: TaskScope,
+    dto: CreateTaskDto,
+    hasResponsible: boolean,
+  ): boolean {
+    if (scope === TaskScope.GLOBAL) {
+      return !dto.recurrence && !hasResponsible;
+    }
+    if (hasResponsible || dto.recurrence) {
+      return false;
+    }
+    return dto.allowSelfClaim ?? false;
+  }
+
+  private isCanonicalGlobalOpenSelfClaimTask(task: {
+    scope: TaskScope;
+    status: TaskStatus;
+    recurrenceId: string | null;
+  }): boolean {
+    return (
+      task.scope === TaskScope.GLOBAL &&
+      task.status === TaskStatus.PENDING &&
+      task.recurrenceId === null
+    );
   }
 
   private async resolveCreationTeamId(

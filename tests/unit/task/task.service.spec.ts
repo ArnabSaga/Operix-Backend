@@ -424,6 +424,7 @@ describe('TaskService', () => {
         teamId: null,
         status: TaskStatus.PENDING,
         completionMode: TaskCompletionMode.DIRECT,
+        allowSelfClaim: true,
       }) as Record<string, unknown>,
       select: expect.any(Object) as object,
     });
@@ -518,6 +519,7 @@ describe('TaskService', () => {
         occurrenceKey: '2099-09-25',
         scope: TaskScope.GLOBAL,
         teamId: null,
+        allowSelfClaim: false,
       }) as Record<string, unknown>,
       select: expect.any(Object) as object,
     });
@@ -527,6 +529,71 @@ describe('TaskService', () => {
         scheduledAt: new Date('2099-09-24T11:00:00.000Z'),
       },
       select: { id: true },
+    });
+  });
+
+  it('normalizes GLOBAL self claim from the canonical task configuration', async () => {
+    const assignedTask = createTask({
+      scope: TaskScope.GLOBAL,
+      team: null,
+      status: TaskStatus.ASSIGNED,
+      completionMode: TaskCompletionMode.DIRECT,
+      allowSelfClaim: false,
+      responsible: {
+        id: '44444444-4444-4444-8444-444444444444',
+        name: 'Responsible User',
+        role: UserRole.MEMBER,
+        employeeId: null,
+        designation: null,
+      },
+    });
+    const tx = {
+      task: {
+        create: jestApi.fn().mockResolvedValue(assignedTask),
+        findFirst: jestApi.fn().mockResolvedValue(assignedTask),
+      },
+      taskAssignment: {
+        create: jestApi.fn().mockResolvedValue({ id: 'assignment-db' }),
+      },
+      taskStatusHistory: {
+        create: jestApi.fn().mockResolvedValue({ id: 'history-a' }),
+      },
+      activityLog: {
+        create: jestApi.fn().mockResolvedValue({ id: 'activity-a' }),
+      },
+      notification: {
+        create: jestApi.fn().mockResolvedValue({ id: 'notification-a' }),
+      },
+      user: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'responsible-db',
+          name: 'Responsible User',
+          email: 'responsible@example.com',
+        }),
+      },
+    };
+    const prisma = {
+      $transaction: jestApi.fn(
+        (callback: (transaction: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      ),
+    } as unknown as PrismaService;
+    const service = createTaskService(prisma);
+
+    await service.createTask(createViewer(UserRole.SUPER_ADMIN), {
+      title: 'Assigned organization work',
+      scope: TaskScope.GLOBAL,
+      responsibleUserId: '44444444-4444-4444-8444-444444444444',
+      allowSelfClaim: true,
+    });
+
+    expect(tx.task.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        scope: TaskScope.GLOBAL,
+        status: TaskStatus.ASSIGNED,
+        allowSelfClaim: false,
+      }) as Record<string, unknown>,
+      select: expect.any(Object) as object,
     });
   });
 
@@ -729,7 +796,10 @@ describe('TaskService', () => {
 
     expect(prisma.task.findFirst).toHaveBeenCalledWith({
       where: {
-        publicId: 'task-a',
+        AND: [
+          { publicId: 'task-a' },
+          { teamId: { in: ['team-a'] } },
+        ],
       },
       select: {
         id: true,
@@ -904,6 +974,11 @@ describe('TaskService', () => {
         targetId: 'task-a',
       },
     });
+    expect(tx.task.update).toHaveBeenCalledWith({
+      where: { id: 'task-a' },
+      data: { status: TaskStatus.ASSIGNED, allowSelfClaim: false },
+      select: expect.any(Object) as object,
+    });
     expect(mailService.sendTaskAssignedEmail).toHaveBeenCalledWith({
       responsibleUserId: 'member-a',
       responsibleName: 'Member A',
@@ -1067,6 +1142,14 @@ describe('task query helpers', () => {
     expect(where).toEqual({
       AND: [
         {
+          assignments: {
+            some: {
+              responsibleUserId: 'member-a',
+              unassignedAt: null,
+            },
+          },
+        },
+        {
           status: TaskStatus.IN_PROGRESS,
         },
         {
@@ -1114,7 +1197,11 @@ describe('task query helpers', () => {
         fixedDate,
       ),
     ).toEqual({
-      AND: [{ scope: TaskScope.TEAM }, { team: { publicId: 'team-b' } }],
+      AND: [
+        { teamId: { in: ['team-a'] } },
+        { scope: TaskScope.TEAM },
+        { team: { publicId: 'team-b' } },
+      ],
     });
 
     expect(
@@ -1125,6 +1212,14 @@ describe('task query helpers', () => {
       ),
     ).toEqual({
       AND: [
+        {
+          assignments: {
+            some: {
+              responsibleUserId: 'member-a',
+              unassignedAt: null,
+            },
+          },
+        },
         {
           assignments: {
             some: {
@@ -1149,6 +1244,7 @@ describe('task query helpers', () => {
 
     expect(where).toEqual({
       AND: [
+        { teamId: { in: ['team-a'] } },
         {
           assignments: {
             some: {
@@ -1306,6 +1402,86 @@ describe('TaskService self claim', () => {
     await expect(
       service.updateSelfClaim(createViewer(UserRole.ADMIN), 'task-a', true),
     ).resolves.toEqual(unchanged);
+    expect(tx.task.update).not.toHaveBeenCalled();
+    expect(tx.activityLog.create).not.toHaveBeenCalled();
+  });
+
+  it('allows a Super Admin to repair an eligible legacy GLOBAL open task', async () => {
+    const updated = createTask({
+      scope: TaskScope.GLOBAL,
+      team: null,
+      completionMode: TaskCompletionMode.DIRECT,
+      allowSelfClaim: true,
+    });
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-a',
+          scope: TaskScope.GLOBAL,
+          status: TaskStatus.PENDING,
+          createdById: 'chief-a',
+          recurrenceId: null,
+          allowSelfClaim: false,
+        }),
+        update: jestApi.fn().mockResolvedValue(updated),
+      },
+      taskAssignment: { findFirst: jestApi.fn().mockResolvedValue(null) },
+      activityLog: { create: jestApi.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jestApi.fn(
+        (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+      ),
+    } as unknown as PrismaService;
+    const service = createTaskService(prisma);
+
+    await expect(
+      service.updateSelfClaim(
+        createViewer(UserRole.SUPER_ADMIN),
+        'task-a',
+        true,
+      ),
+    ).resolves.toEqual(updated);
+    expect(tx.task.update).toHaveBeenCalledWith({
+      where: { id: 'task-a' },
+      data: { allowSelfClaim: true },
+      select: expect.any(Object) as object,
+    });
+  });
+
+  it('rejects disabling self claim for a canonical GLOBAL open task', async () => {
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-a',
+          scope: TaskScope.GLOBAL,
+          status: TaskStatus.PENDING,
+          createdById: 'chief-a',
+          recurrenceId: null,
+          allowSelfClaim: true,
+        }),
+        update: jestApi.fn(),
+      },
+      taskAssignment: { findFirst: jestApi.fn().mockResolvedValue(null) },
+      activityLog: { create: jestApi.fn() },
+    };
+    const prisma = {
+      $transaction: jestApi.fn(
+        (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+      ),
+    } as unknown as PrismaService;
+    const service = createTaskService(prisma);
+
+    await expect(
+      service.updateSelfClaim(
+        createViewer(UserRole.SUPER_ADMIN),
+        'task-a',
+        false,
+      ),
+    ).rejects.toMatchObject({
+      status: HttpStatus.CONFLICT,
+      response: { code: TASK_ERROR_CODE.TASK_INVALID_STATUS_TRANSITION },
+    });
     expect(tx.task.update).not.toHaveBeenCalled();
     expect(tx.activityLog.create).not.toHaveBeenCalled();
   });
