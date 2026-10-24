@@ -167,6 +167,15 @@ export interface DashboardTrendsResponse extends DashboardResponseBase {
   completionTrend: CompletionTrendPoint[];
 }
 
+export interface DashboardOperationalSnapshot {
+  role: Extract<UserRole, 'SUPER_ADMIN' | 'ADMIN'>;
+  asOf: Date;
+  days: import('./dashboard.constant.js').DashboardTrendDays;
+  overview: SuperAdminDashboardOverview | AdminDashboardOverview;
+  workload: SuperAdminDashboardWorkload | AdminDashboardWorkload;
+  trends: DashboardTrendsResponse;
+}
+
 export interface DashboardTaskMetricSource {
   id: string;
   status: TaskStatus;

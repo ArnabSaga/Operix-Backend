@@ -1,3 +1,5 @@
+import { GEMINI_PROVIDER_NAME } from '../shared/ai/ai.constant.js';
+
 const NODE_ENVIRONMENTS = ['development', 'test', 'production'] as const;
 
 type NodeEnvironment = (typeof NODE_ENVIRONMENTS)[number];
@@ -267,10 +269,38 @@ export function validateEnvironment(
     environment,
     'OPERIX_BUSINESS_TIMEZONE',
   );
+
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: businessTimezone });
   } catch {
     throw new Error('OPERIX_BUSINESS_TIMEZONE must be a valid IANA timezone');
+  }
+  const aiEnabled = parseBoolean(environment.AI_ENABLED, 'AI_ENABLED', false);
+  const aiProvider = aiEnabled
+    ? requiredString(environment, 'AI_PROVIDER')
+    : typeof environment.AI_PROVIDER === 'string'
+      ? environment.AI_PROVIDER.trim()
+      : '';
+  const geminiApiKey = aiEnabled
+    ? requiredString(environment, 'GEMINI_API_KEY')
+    : typeof environment.GEMINI_API_KEY === 'string'
+      ? environment.GEMINI_API_KEY.trim()
+      : '';
+  const geminiModel = aiEnabled
+    ? requiredString(environment, 'GEMINI_MODEL')
+    : typeof environment.GEMINI_MODEL === 'string'
+      ? environment.GEMINI_MODEL.trim()
+      : '';
+  const aiTimeoutMs = parsePositiveInteger(
+    environment.AI_TIMEOUT_MS,
+    'AI_TIMEOUT_MS',
+    30_000,
+  );
+
+  if (aiEnabled && aiProvider !== GEMINI_PROVIDER_NAME) {
+    throw new Error(
+      `AI_PROVIDER must be "${GEMINI_PROVIDER_NAME}" when AI_ENABLED is true`,
+    );
   }
 
   return {
@@ -326,5 +356,15 @@ export function validateEnvironment(
     CLOUDINARY_API_SECRET: cloudinaryApiSecret,
 
     CLOUDINARY_FOLDER: cloudinaryFolder,
+
+    AI_ENABLED: aiEnabled,
+
+    AI_PROVIDER: aiProvider,
+
+    GEMINI_API_KEY: geminiApiKey,
+
+    GEMINI_MODEL: geminiModel,
+
+    AI_TIMEOUT_MS: aiTimeoutMs,
   };
 }

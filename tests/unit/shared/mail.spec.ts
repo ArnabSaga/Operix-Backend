@@ -52,6 +52,13 @@ function createConfig(
       rateLimitSecret: 'registration-rate-limit-secret-32-characters',
       cronSecret: 'registration-cron-secret-32-characters-long',
     },
+    ai: {
+      enabled: false,
+      provider: 'gemini',
+      apiKey: '',
+      model: '',
+      timeoutMs: 30_000,
+    },
     rateLimit: {
       apiSecret: 'api-rate-limit-secret-at-least-32-characters',
     },

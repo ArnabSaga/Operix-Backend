@@ -671,7 +671,27 @@ Admin makes final assignment decision
 
 Blind performance-based automatic assignment is not part of the MVP. Approved recurring series may automatically materialize a Task occurrence for the series' explicitly configured Responsible User.
 
-## 20.1 Task V2 Ownership and Recurrence
+### 20.1 AI Smart Assignment Recommendation
+
+Super Admins and the immutable owner Admin may request an on-demand advisory
+recommendation while a Task is `PENDING` or `ASSIGNED`. The feature uses the
+same authority and Task-state policy as real assignment. It never assigns or
+reassigns a Member, selects a Member automatically, or persists an AI result.
+
+Eligible candidates are active Members in the caller's existing Member-picker
+scope, excluding the current Responsible User. The server calculates canonical
+workload, overdue, priority, completion, on-time, completion-time, and relevant
+category-history facts. The model receives only opaque candidate references,
+safe Team/designation labels, and those server facts; it never receives Member
+names, public/private identifiers, email addresses, or employee identifiers.
+
+The response is decision support only. It must state that schedules, leave,
+and real capacity are not modeled and that the recommendation is not a
+comprehensive employee evaluation. The Admin or Super Admin must explicitly
+select a Member and use the ordinary Assign action. No new performance score is
+created for this feature.
+
+## 20.2 Task V2 Ownership and Recurrence
 
 ```text
 Owner = immutable Task creator
@@ -684,7 +704,7 @@ Reminder = one persisted reminder per recurring occurrence
 
 Admin creation remains limited to the Admin's current Team; Super Admin may create for any Team. Responsibility may cross Teams. Global Task visibility does not grant mutation, artifact, submission, review, Dashboard, report, Activity, or Inventory access. Recurrence uses stable business-local anchors and creates independent historical Task occurrences. Overdue remains derived and never becomes a persisted Task status.
 
-## 20.2 Team and Global Task Classification
+## 20.3 Team and Global Task Classification
 
 Every Task has one organization classification:
 
@@ -1798,6 +1818,48 @@ V1 supports listing, search, filtering, metadata inspection, preview, and
 download. There is no generic document delete: submission files are
 immutable evidence and task-file deletion follows Task lifecycle policy.
 
+### Advisory Document Intelligence
+
+An active user may request advisory AI analysis only for a document already
+visible to that user through the Documents Library scope above. Analysis does
+not broaden Task, Submission, review, download, or mutation authority.
+
+Supported text-bearing formats are PDF, DOCX, XLSX, and PPTX. The platform
+reads the authorized stored object server-side, extracts bounded plain text,
+and returns a structured summary, key points, explicit action items, important
+dates, risks or warnings, confidence, limitations, and safe provider metadata.
+Scanned or image-only content is not OCR processed. Images, charts, macros,
+speaker notes, embedded media, and other content not represented by the
+bounded text extraction may be omitted and must be disclosed through
+server-owned limitations.
+
+Document analysis is advisory only. It never creates or mutates a Task,
+Submission, Review, attachment, Notification, Activity, or other business
+record. Prompts, extracted text, and AI responses are not persisted; there is
+no document vector index, RAG store, AI audit table, or schema migration in
+this release. Users must verify important details against the source document.
+
+### AI Operations Brief
+
+Super Admins and Admins may explicitly generate an advisory operations brief
+from their current authorized Dashboard snapshot for a 7, 30, or 90 day
+completion-trend window. Members do not have access. Generation is on demand
+and never runs automatically when the Dashboard loads or its period changes.
+
+The Dashboard remains the source of truth for every metric. The brief may
+interpret supplied overview, workload, reporting, completion-trend, and recent
+Activity facts, but it must not recalculate or invent metrics. Admin input is
+restricted to the Admin's current Team scope; Super Admin input is
+organization-wide. Context is bounded and excludes private IDs, email and
+employee identifiers, Task descriptions, Submission or Document content, and
+Activity metadata.
+
+The brief is advisory and read-only. It cannot create, assign, start, submit,
+review, complete, claim, distribute, notify, or otherwise mutate business
+data. Results live only in the client session, are invalidated when the trend
+period changes, and are not persisted. Provider failure must not prevent the
+ordinary Dashboard from loading or remaining usable.
+
 ---
 
 # 54. Auditability
@@ -2112,6 +2174,16 @@ An Admin shall only review submissions within permitted scope.
 
 **SUB-FR-005**
 A Member shall not approve their own submission.
+
+**SUB-FR-006**
+The Platform may provide an advisory AI analysis of the latest actionable Submission to the Admin authorized to review it. The analysis is not a review action: it shall never approve, reject, request a revision, complete, or change a Task, and the Admin's explicit review decision remains authoritative.
+
+The AI Review Assistant may analyze bounded extractable text from supported
+attachments on that current Submission. Unsupported, unreadable, truncated,
+scanned or image-only, and omitted content must be disclosed through
+server-owned limitations. Submission review authorization remains the source
+of attachment access for this operation; Documents Library scope does not
+apply. Extracted text and AI results are not persisted.
 
 ---
 
@@ -2668,3 +2740,11 @@ Operix provides a private PostgreSQL-backed checklist for active `SUPER_ADMIN` a
 Todo deadlines are calendar dates in the configured Operix business timezone. Completion and reopening are idempotent, completed items remain editable, and overdue state is derived only for active items whose due date is before the current business date. Client-facing Todo identity is an immutable public UUID; private owner and database identities never leave the backend.
 
 Selected Todo mutations use a PostgreSQL fixed-window rate limit keyed by an HMAC of the authenticated internal User identity. The existing global Nest throttler remains the local burst guard, while authorization, owner scoping, idempotency, and database constraints remain the correctness controls.
+
+# Ask Operix V1
+
+Ask Operix provides stateless, read only operational questions using only the authenticated viewer's existing authorized Operix data. Gemini may classify a question into an allowlisted read plan and explain deterministic Operix results. Operix remains authoritative for data access, scope, filtering, metrics, identifiers, and references.
+
+V1 supports Task queries for every active role. It also supports current Operations Snapshot questions for Super Admin and Admin. Member and Team name resolution, Documents, Management Reports, Inventory, Todos, conversation history, retrieval augmented generation, and autonomous actions are outside V1.
+
+Ask Operix cannot execute SQL, access Prisma, create authoritative identifiers, call workflow mutations, widen authorization, or persist prompts, answers, conversations, or AI query history. Task reads use `TaskService.listTasks()`. Operations reads use `DashboardService.getOperationalSnapshot()`. The browser supplies only the question.

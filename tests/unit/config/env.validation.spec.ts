@@ -159,6 +159,89 @@ describe('validateEnvironment', () => {
     ).toThrow('THROTTLE_LIMIT must be a positive integer');
   });
 
+  it('leaves AI disabled by default without requiring a provider key', () => {
+    const result = validateEnvironment(validEnvironment);
+
+    expect(result).toMatchObject({
+      AI_ENABLED: false,
+      AI_PROVIDER: '',
+      GEMINI_API_KEY: '',
+      GEMINI_MODEL: '',
+      AI_TIMEOUT_MS: 30_000,
+    });
+  });
+
+  it('accepts Gemini as the only enabled provider', () => {
+    const result = validateEnvironment({
+      ...validEnvironment,
+      AI_ENABLED: 'true',
+      AI_PROVIDER: 'gemini',
+      GEMINI_API_KEY: 'gemini-test-key',
+      GEMINI_MODEL: 'gemini-3.1-flash-lite',
+    });
+
+    expect(result).toMatchObject({
+      AI_ENABLED: true,
+      AI_PROVIDER: 'gemini',
+      GEMINI_MODEL: 'gemini-3.1-flash-lite',
+      AI_TIMEOUT_MS: 30_000,
+    });
+  });
+
+  it('rejects an enabled AI configuration without a provider or key', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        AI_ENABLED: 'true',
+        GEMINI_API_KEY: 'gemini-test-key',
+        GEMINI_MODEL: 'gemini-3.1-flash-lite',
+      }),
+    ).toThrow('AI_PROVIDER is required');
+
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        AI_ENABLED: 'true',
+        AI_PROVIDER: 'gemini',
+        GEMINI_MODEL: 'gemini-3.1-flash-lite',
+      }),
+    ).toThrow('GEMINI_API_KEY is required');
+
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        AI_ENABLED: 'true',
+        AI_PROVIDER: 'gemini',
+        GEMINI_API_KEY: 'gemini-test-key',
+      }),
+    ).toThrow('GEMINI_MODEL is required');
+  });
+
+  it('rejects any AI provider other than Gemini', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        AI_ENABLED: 'true',
+        AI_PROVIDER: 'openai',
+        GEMINI_API_KEY: 'gemini-test-key',
+        GEMINI_MODEL: 'gemini-3.1-flash-lite',
+      }),
+    ).toThrow('AI_PROVIDER must be "gemini" when AI_ENABLED is true');
+  });
+
+  it('validates the AI timeout as a positive integer in milliseconds', () => {
+    const result = validateEnvironment({
+      ...validEnvironment,
+      AI_TIMEOUT_MS: '45000',
+    });
+
+    expect(result).toMatchObject({ AI_TIMEOUT_MS: 45_000 });
+
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, AI_TIMEOUT_MS: '0' }),
+    ).toThrow('AI_TIMEOUT_MS must be a positive integer');
+  });
+
   it('requires a separate API rate limit secret with sufficient entropy', () => {
     expect(() =>
       validateEnvironment({ ...validEnvironment, API_RATE_LIMIT_SECRET: '' }),

@@ -48,6 +48,7 @@ import type {
 import { mapTaskResponse } from './task.mapper.js';
 import { buildTaskListWhere, getTaskOrderBy } from './task-query.js';
 import { buildTaskScopeWhere } from './policies/task-scope.policy.js';
+import { resolveAssignableTask } from './policies/task-assignment.policy.js';
 import { generateTaskReferenceCode } from './task-reference.js';
 import { TaskRecurrenceService } from './task-recurrence.service.js';
 import { TaskDistributionService } from './task-distribution.service.js';
@@ -409,33 +410,7 @@ export class TaskService {
       result = await runSerializableTransaction(
         this.prisma,
         async (tx) => {
-          const task = await tx.task.findFirst({
-            where: { publicId: taskId },
-            select: {
-              id: true,
-              publicId: true,
-              referenceCode: true,
-              title: true,
-              priority: true,
-              dueAt: true,
-              status: true,
-              createdById: true,
-              completionMode: true,
-            },
-          });
-          if (!task) throw this.taskNotFound();
-          if (
-            viewer.role !== UserRole.SUPER_ADMIN &&
-            task.createdById !== viewer.userId
-          ) {
-            throw this.forbidden();
-          }
-          if (
-            task.status !== TaskStatus.PENDING &&
-            task.status !== TaskStatus.ASSIGNED
-          ) {
-            throw this.transitionConflict('Task responsibility is locked.');
-          }
+          const task = await resolveAssignableTask(tx, viewer, taskId);
           const responsible = await this.resolveResponsibleUser(
             tx,
             dto.responsibleUserId,

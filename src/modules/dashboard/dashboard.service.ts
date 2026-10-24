@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import {
   ManagementReportStatus,
@@ -8,6 +8,8 @@ import {
 } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
+import { AppException } from '../../shared/errors/app.exception.js';
 import {
   createPaginationMeta,
   normalizePagination,
@@ -36,6 +38,7 @@ import type {
   AdminDashboardWorkload,
   DashboardContext,
   DashboardOverviewResponse,
+  DashboardOperationalSnapshot,
   DashboardTaskMetricSource,
   DashboardTrendsResponse,
   DashboardWorkloadResponse,
@@ -258,6 +261,44 @@ export class DashboardService {
       completionTrend: buildCompletionTrend(tasks, days, now),
       context: this.createContext(viewer, now),
     };
+  }
+
+  async getOperationalSnapshot(
+    viewer: OperixViewer,
+    days: DashboardTrendDays,
+    memberLimit: number,
+  ): Promise<DashboardOperationalSnapshot> {
+    const now = new Date();
+
+    if (viewer.role === UserRole.SUPER_ADMIN) {
+      const [overview, workload, trends] = await Promise.all([
+        this.getSuperAdminOverview(viewer, now),
+        this.getSuperAdminWorkload(
+          viewer,
+          { page: 1, limit: memberLimit },
+          now,
+        ),
+        this.getTrendsForExport(viewer, days, now),
+      ]);
+
+      return { role: viewer.role, asOf: now, days, overview, workload, trends };
+    }
+
+    if (viewer.role === UserRole.ADMIN) {
+      const [overview, workload, trends] = await Promise.all([
+        this.getAdminOverview(viewer, now),
+        this.getAdminWorkload(viewer, { page: 1, limit: memberLimit }, now),
+        this.getTrendsForExport(viewer, days, now),
+      ]);
+
+      return { role: viewer.role, asOf: now, days, overview, workload, trends };
+    }
+
+    throw new AppException(
+      HttpStatus.FORBIDDEN,
+      APP_ERROR_CODE.FORBIDDEN,
+      'You do not have access to this resource.',
+    );
   }
 
   private async getSuperAdminOverview(

@@ -6,6 +6,8 @@ import {
   UserStatus,
 } from '../../../generated/prisma/enums';
 import { DashboardService } from '../../../src/modules/dashboard/dashboard.service';
+import { DashboardTrendDays } from '../../../src/modules/dashboard/dashboard.constant';
+import { APP_ERROR_CODE } from '../../../src/shared/errors/app-error-code.constant';
 import { performanceTaskSelect } from '../../../src/modules/performance/performance.select';
 import type { OperixViewer } from '../../../src/shared/auth/viewer.interface';
 
@@ -533,6 +535,36 @@ describe('DashboardService', () => {
       select: {
         completedAt: true,
       },
+    });
+  });
+
+  it('builds one management snapshot with one shared asOf timestamp', async () => {
+    const { service } = createService();
+
+    const result = await service.getOperationalSnapshot(
+      createViewer(UserRole.SUPER_ADMIN),
+      DashboardTrendDays.SEVEN,
+      10,
+    );
+
+    expect(result.asOf).toEqual(fixedNow);
+    expect(result.overview.context.asOf).toBe(result.asOf);
+    expect(result.workload.context.asOf).toBe(result.asOf);
+    expect(result.trends.context.asOf).toBe(result.asOf);
+    expect(result.days).toBe(DashboardTrendDays.SEVEN);
+  });
+
+  it('denies Member operational snapshots', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.getOperationalSnapshot(
+        createViewer(UserRole.MEMBER),
+        DashboardTrendDays.SEVEN,
+        10,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: APP_ERROR_CODE.FORBIDDEN },
     });
   });
 });
