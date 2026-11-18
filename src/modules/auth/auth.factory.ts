@@ -7,6 +7,7 @@ import { createAuthMiddleware } from 'better-auth/api';
 import { customSession } from 'better-auth/plugins';
 import type { PrismaService } from '../../database/prisma.service.js';
 import { PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS } from '../../shared/auth/password-reset.constant.js';
+import type { MailOutcome } from '../../shared/mail/mail.interface.js';
 import type { MailService } from '../../shared/mail/mail.service.js';
 import { writeActivity } from '../../shared/activity/activity-write.js';
 import { UserStatus, type UserRole } from '../../../generated/prisma/enums.js';
@@ -51,6 +52,7 @@ export function createOperixAuth(
   prisma: PrismaService,
   config: ConfigService,
   mailService: MailService,
+  mailOutcomeSink?: (outcome: MailOutcome) => void,
 ) {
   const logger = new Logger('OperixAuth');
   const options = {
@@ -88,14 +90,12 @@ export function createOperixAuth(
       enabled: true,
       disableSignUp: true,
       resetPasswordTokenExpiresIn: PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS,
-      sendResetPassword: ({ user, url }) => {
-        void (async () => {
-          const lifecycle = prisma.user?.findUnique
-            ? await prisma.user.findUnique({
-                where: { id: user.id },
-                select: { passwordSetupRequired: true },
-              })
-            : null;
+      sendResetPassword: async ({ user, url }) => {
+        try {
+          const lifecycle = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { passwordSetupRequired: true },
+          });
           if (lifecycle?.passwordSetupRequired) {
             await mailService.sendAccountSetupEmail({
               userId: user.id,
@@ -103,18 +103,21 @@ export function createOperixAuth(
               email: user.email,
               setupUrl: url,
             });
-            return;
+          } else {
+            await mailService.sendPasswordResetEmail({
+              userId: user.id,
+              recipientName: user.name,
+              email: user.email,
+              resetUrl: url,
+            });
           }
-          await mailService.sendPasswordResetEmail({
-            userId: user.id,
-            recipientName: user.name,
-            email: user.email,
-            resetUrl: url,
-          });
-        })().catch((error: unknown) => {
+          mailOutcomeSink?.('ACCEPTED');
+        } catch (error) {
+          // Better Auth swallows callback rejections, so the sink is the only
+          // reliable channel back to the caller. Do not rethrow.
           mailService.logPasswordResetDeliveryFailure(user.id, error);
-        });
-        return Promise.resolve();
+          mailOutcomeSink?.('FAILED');
+        }
       },
       onPasswordReset: async ({ user }) => {
         try {

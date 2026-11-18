@@ -7,15 +7,19 @@ model TaskSubmission {
   submissionText String?
   submittedAt    DateTime @default(now())
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastEditedById String?
 
   task        Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   submittedBy User @relation("TaskSubmissions", fields: [submittedById], references: [id], onDelete: Restrict)
+  lastEditedBy User? @relation("TaskSubmissionLastEditor", fields: [lastEditedById], references: [id], onDelete: Restrict)
 
   attachments SubmissionAttachment[]
   reviews     TaskReview[]
 
   @@unique([taskId, version])
   @@index([submittedById])
+  @@index([lastEditedById])
   @@map("task_submission")
 }
 

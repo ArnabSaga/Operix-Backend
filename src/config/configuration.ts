@@ -43,6 +43,14 @@ export interface ApplicationConfiguration {
     cronSecret: string;
   };
 
+  ai: {
+    enabled: boolean;
+    provider: string;
+    apiKey: string;
+    model: string;
+    timeoutMs: number;
+  };
+
   rateLimit: {
     apiSecret: string;
   };
@@ -108,6 +116,14 @@ export default function configuration(): ApplicationConfiguration {
     registration: {
       rateLimitSecret: process.env.REGISTRATION_RATE_LIMIT_SECRET ?? '',
       cronSecret: process.env.CRON_SECRET ?? '',
+    },
+
+    ai: {
+      enabled: process.env.AI_ENABLED === 'true',
+      provider: process.env.AI_PROVIDER ?? '',
+      apiKey: process.env.GEMINI_API_KEY ?? '',
+      model: process.env.GEMINI_MODEL ?? '',
+      timeoutMs: Number(process.env.AI_TIMEOUT_MS ?? 30_000),
     },
 
     rateLimit: {

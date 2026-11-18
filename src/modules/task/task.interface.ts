@@ -44,6 +44,8 @@ export type SafeTaskResponse = Pick<
   id: string;
   owner: SafeTaskUserResponse;
   responsible: SafeTaskUserResponse | null;
+  reviewer: SafeTaskUserResponse | null;
+  batchId: string | null;
   scope: TaskScope;
   team: { id: string; name: string } | null;
   categoryId: string | null;
@@ -69,6 +71,16 @@ export type SafeTaskResponse = Pick<
 export interface PaginatedTaskResponse {
   data: SafeTaskResponse[];
   meta: PaginationMeta;
+}
+
+export interface BulkTaskResponse {
+  batchId: string;
+  recipients: {
+    total: number;
+    admins: number;
+    members: number;
+  };
+  createdTasks: number;
 }
 
 export interface SafeTaskStatusHistoryResponse {

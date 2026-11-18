@@ -1,5 +1,5 @@
 import type { Prisma, Task } from '../../../generated/prisma/client.js';
-import { TaskStatus } from '../../../generated/prisma/enums.js';
+import { TaskStatus, UserRole } from '../../../generated/prisma/enums.js';
 import type {
   SafeTaskResponse,
   TaskRecurrenceSummary,
@@ -79,7 +79,7 @@ export function mapTaskResponse(
       : {
           id: '',
           name: 'Unknown Creator',
-          role: 'MEMBER' as any,
+          role: UserRole.MEMBER,
           employeeId: null,
           designation: null,
         },
@@ -92,6 +92,16 @@ export function mapTaskResponse(
           designation: task.assignments[0].responsibleUser.designation ?? null,
         }
       : null,
+    reviewer: task.reviewer
+      ? {
+          id: task.reviewer.publicId,
+          name: task.reviewer.name,
+          role: task.reviewer.role,
+          employeeId: task.reviewer.employeeId ?? null,
+          designation: task.reviewer.designation ?? null,
+        }
+      : null,
+    batchId: task.batch?.publicId ?? null,
     recurrence: task.recurrence?.publicId
       ? mapTaskRecurrenceSummary(task.recurrence)
       : null,

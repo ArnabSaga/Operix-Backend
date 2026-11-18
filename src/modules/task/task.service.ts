@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '../../../generated/prisma/client.js';
 import {
   TaskCompletionMode,
+  TaskDistributionStatus,
   TaskPriority,
   TaskReminderStatus,
   TaskScope,
@@ -35,6 +36,7 @@ import type { AssignTaskDto } from './dto/assign-task.dto.js';
 import type { CompleteTaskDto } from './dto/complete-task.dto.js';
 import type { CreateTaskDto } from './dto/create-task.dto.js';
 import type { ListTaskQueryDto } from './dto/list-task-query.dto.js';
+import type { UpdateTaskDto } from './dto/update-task.dto.js';
 import {
   TASK_ACTIVITY,
   TASK_ERROR_CODE,
@@ -48,6 +50,7 @@ import type {
 import { mapTaskResponse } from './task.mapper.js';
 import { buildTaskListWhere, getTaskOrderBy } from './task-query.js';
 import { buildTaskScopeWhere } from './policies/task-scope.policy.js';
+import { resolveAssignableTask } from './policies/task-assignment.policy.js';
 import { generateTaskReferenceCode } from './task-reference.js';
 import { TaskRecurrenceService } from './task-recurrence.service.js';
 import { TaskDistributionService } from './task-distribution.service.js';
@@ -114,6 +117,10 @@ export class TaskService {
               completionMode,
             )
           : null;
+        const reviewerUserId =
+          completionMode === TaskCompletionMode.REVIEW_REQUIRED
+            ? await this.resolveTeamReviewerId(tx, teamId)
+            : null;
 
         let recurrenceId: string | null = null;
         let occurrenceKey: string | null = null;
@@ -181,6 +188,7 @@ export class TaskService {
             teamId,
             categoryId,
             createdById: viewer.userId,
+            reviewerUserId,
           },
           select: taskSelect,
         });
@@ -356,6 +364,125 @@ export class TaskService {
     return mapTaskResponse(task, new Date());
   }
 
+  async updateTask(
+    viewer: OperixViewer,
+    taskId: string,
+    dto: UpdateTaskDto,
+  ): Promise<SafeTaskResponse> {
+    const suppliedFields = Object.keys(dto);
+    if (suppliedFields.length === 0) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        APP_ERROR_CODE.VALIDATION_ERROR,
+        'At least one editable Task field is required.',
+      );
+    }
+
+    const now = new Date();
+    const updated = await runSerializableTransaction(
+      this.prisma,
+      async (tx) => {
+        const task = await tx.task.findFirst({
+          where: { publicId: taskId },
+          select: {
+            id: true,
+            createdById: true,
+            status: true,
+            startedAt: true,
+            dueAt: true,
+            recurrenceId: true,
+            title: true,
+            description: true,
+            remarks: true,
+            priority: true,
+            categoryId: true,
+            distribution: {
+              select: { status: true, scheduledAt: true },
+            },
+            reminder: {
+              select: { status: true, scheduledAt: true },
+            },
+          },
+        });
+
+        if (!task) throw this.taskNotFound();
+        this.assertCanEditTaskDefinition(viewer, task);
+
+        const categoryId =
+          dto.categoryId === undefined
+            ? task.categoryId
+            : await this.resolveCategoryId(tx, dto.categoryId ?? undefined);
+        const nextValues = {
+          title: dto.title ?? task.title,
+          description:
+            dto.description === undefined
+              ? task.description
+              : normalizeOptionalText(dto.description),
+          remarks:
+            dto.remarks === undefined
+              ? task.remarks
+              : normalizeOptionalText(dto.remarks),
+          priority: dto.priority ?? task.priority,
+          dueAt: dto.dueAt === undefined ? task.dueAt : dto.dueAt,
+          categoryId,
+        };
+        const changedFields = [
+          nextValues.title !== task.title ? 'title' : null,
+          nextValues.description !== task.description ? 'description' : null,
+          nextValues.remarks !== task.remarks ? 'remarks' : null,
+          nextValues.priority !== task.priority ? 'priority' : null,
+          !sameDate(nextValues.dueAt, task.dueAt) ? 'dueAt' : null,
+          nextValues.categoryId !== task.categoryId ? 'categoryId' : null,
+        ].filter((field): field is string => field !== null);
+
+        if (changedFields.length === 0) {
+          const current = await tx.task.findUnique({
+            where: { id: task.id },
+            select: taskSelect,
+          });
+          if (!current) throw this.taskNotFound();
+          return current;
+        }
+
+        if (changedFields.includes('dueAt')) {
+          await this.updatePendingDeadlineSideEffects(
+            tx,
+            task,
+            nextValues.dueAt,
+          );
+        }
+
+        const result = await tx.task.update({
+          where: { id: task.id },
+          data: {
+            title: nextValues.title,
+            description: nextValues.description,
+            remarks: nextValues.remarks,
+            priority: nextValues.priority,
+            dueAt: nextValues.dueAt,
+            category:
+              nextValues.categoryId === null
+                ? { disconnect: true }
+                : { connect: { id: nextValues.categoryId } },
+          },
+          select: taskSelect,
+        });
+
+        await writeActivity(tx, {
+          actorId: viewer.userId,
+          action: TASK_ACTIVITY.TASK_UPDATED,
+          entityType: 'TASK',
+          entityId: task.id,
+          metadata: { changedFields },
+        });
+
+        return result;
+      },
+    );
+
+    return mapTaskResponse(updated, now);
+  }
+
   async getTaskHistory(
     viewer: OperixViewer,
     taskId: string,
@@ -409,33 +536,7 @@ export class TaskService {
       result = await runSerializableTransaction(
         this.prisma,
         async (tx) => {
-          const task = await tx.task.findFirst({
-            where: { publicId: taskId },
-            select: {
-              id: true,
-              publicId: true,
-              referenceCode: true,
-              title: true,
-              priority: true,
-              dueAt: true,
-              status: true,
-              createdById: true,
-              completionMode: true,
-            },
-          });
-          if (!task) throw this.taskNotFound();
-          if (
-            viewer.role !== UserRole.SUPER_ADMIN &&
-            task.createdById !== viewer.userId
-          ) {
-            throw this.forbidden();
-          }
-          if (
-            task.status !== TaskStatus.PENDING &&
-            task.status !== TaskStatus.ASSIGNED
-          ) {
-            throw this.transitionConflict('Task responsibility is locked.');
-          }
+          const task = await resolveAssignableTask(tx, viewer, taskId);
           const responsible = await this.resolveResponsibleUser(
             tx,
             dto.responsibleUserId,
@@ -893,11 +994,13 @@ export class TaskService {
   ): void {
     const invalidTeam = scope === TaskScope.TEAM && !dto.teamId;
     const invalidGlobal = scope === TaskScope.GLOBAL && dto.teamId != null;
+    const invalidIndividual = scope === TaskScope.INDIVIDUAL;
     const unauthorizedGlobal =
       scope === TaskScope.GLOBAL && viewer.role !== UserRole.SUPER_ADMIN;
     if (
       invalidTeam ||
       invalidGlobal ||
+      invalidIndividual ||
       unauthorizedGlobal ||
       (scope === TaskScope.GLOBAL &&
         completionMode !== TaskCompletionMode.DIRECT)
@@ -1039,6 +1142,108 @@ export class TaskService {
       );
     }
     return category.id;
+  }
+
+  private assertCanEditTaskDefinition(
+    viewer: OperixViewer,
+    task: {
+      createdById: string;
+      status: TaskStatus;
+      startedAt: Date | null;
+      distribution: { status: TaskDistributionStatus } | null;
+    },
+  ): void {
+    const hasAuthority =
+      viewer.role === UserRole.SUPER_ADMIN ||
+      (viewer.role === UserRole.ADMIN && task.createdById === viewer.userId);
+    if (!hasAuthority) throw this.forbidden();
+
+    const lifecycleEditable =
+      task.status === TaskStatus.PENDING ||
+      (task.status === TaskStatus.ASSIGNED && task.startedAt === null);
+    if (
+      !lifecycleEditable ||
+      task.distribution?.status === TaskDistributionStatus.SENT
+    ) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        TASK_ERROR_CODE.TASK_DEFINITION_NOT_EDITABLE,
+        'Task definition can no longer be changed.',
+      );
+    }
+  }
+
+  private async updatePendingDeadlineSideEffects(
+    tx: PrismaTransactionClient,
+    task: {
+      id: string;
+      dueAt: Date | null;
+      recurrenceId: string | null;
+      reminder: { status: TaskReminderStatus; scheduledAt: Date } | null;
+      distribution: {
+        status: TaskDistributionStatus;
+        scheduledAt: Date;
+      } | null;
+    },
+    dueAt: Date | null,
+  ): Promise<void> {
+    if (task.reminder?.status === TaskReminderStatus.PENDING) {
+      if (!dueAt) {
+        await tx.taskReminder.update({
+          where: { taskId: task.id },
+          data: { status: TaskReminderStatus.CANCELLED },
+        });
+      } else if (task.dueAt) {
+        const leadMs =
+          task.dueAt.getTime() - task.reminder.scheduledAt.getTime();
+        await tx.taskReminder.update({
+          where: { taskId: task.id },
+          data: { scheduledAt: new Date(dueAt.getTime() - leadMs) },
+        });
+      }
+    }
+
+    if (
+      task.recurrenceId &&
+      task.distribution?.status === TaskDistributionStatus.PENDING &&
+      dueAt &&
+      task.dueAt
+    ) {
+      const leadMs =
+        task.dueAt.getTime() - task.distribution.scheduledAt.getTime();
+      await tx.taskDistribution.update({
+        where: { taskId: task.id },
+        data: { scheduledAt: new Date(dueAt.getTime() - leadMs) },
+      });
+    }
+  }
+
+  private async resolveTeamReviewerId(
+    tx: PrismaTransactionClient,
+    teamId: string | null,
+  ): Promise<string> {
+    if (!teamId) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        TASK_ERROR_CODE.TASK_NOT_ASSIGNABLE,
+        'A review required task must have an eligible reviewer.',
+      );
+    }
+    const team = await tx.team.findFirst({
+      where: {
+        id: teamId,
+        admin: { role: UserRole.ADMIN, status: UserStatus.ACTIVE },
+      },
+      select: { adminId: true },
+    });
+    if (!team) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        TASK_ERROR_CODE.TASK_NOT_ASSIGNABLE,
+        'A review required task must have an eligible reviewer.',
+      );
+    }
+    return team.adminId;
   }
 
   private async resolveResponsibleUser(
@@ -1278,7 +1483,13 @@ function getErrorName(error: unknown): string {
   return error instanceof Error ? error.name : 'UnknownError';
 }
 
-function normalizeOptionalText(value: string | undefined): string | null {
+function normalizeOptionalText(
+  value: string | null | undefined,
+): string | null {
   const normalized = value?.trim();
   return normalized && normalized.length > 0 ? normalized : null;
+}
+
+function sameDate(left: Date | null, right: Date | null): boolean {
+  return left?.getTime() === right?.getTime();
 }

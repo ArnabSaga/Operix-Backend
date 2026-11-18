@@ -12,6 +12,9 @@ import type {
   SpreadsheetCell,
   SpreadsheetMerge,
   SpreadsheetRow,
+  SpreadsheetTextLimits,
+  SpreadsheetTextResult,
+  SpreadsheetTextSheet,
   SpreadsheetWorkbook,
   SpreadsheetWriteWorkbook,
 } from '../spreadsheet.interface.js';
@@ -40,6 +43,118 @@ export class SheetJsSpreadsheetAdapter implements SpreadsheetAdapter {
     };
   }
 
+  /**
+   * Bounded worksheet text extraction.
+   *
+   * `sheetRows` stops SheetJS after the first allowed row, and the traversal
+   * clamps the decoded range before touching cells, so neither a huge row
+   * count nor a far-away column reference expands into a large allocation.
+   */
+  readText(
+    buffer: Buffer,
+    limits: SpreadsheetTextLimits,
+  ): SpreadsheetTextResult {
+    const workbook = read(buffer, {
+      type: 'buffer',
+      sheetRows: limits.maxRowsPerSheet + 1,
+      cellDates: true,
+      cellFormula: false,
+      cellHTML: false,
+      cellStyles: false,
+      cellNF: false,
+      cellText: true,
+      bookVBA: false,
+      WTF: false,
+    });
+
+    const totalSheets = workbook.SheetNames.length;
+    const selectedSheets = workbook.SheetNames.slice(0, limits.maxSheets);
+    const sheets: SpreadsheetTextSheet[] = [];
+    let truncatedRows = false;
+    let truncatedColumns = false;
+    let truncatedCells = false;
+
+    for (const sheetName of selectedSheets) {
+      const worksheet = workbook.Sheets[sheetName];
+
+      if (!worksheet) {
+        continue;
+      }
+
+      const ref = worksheet['!ref'];
+      const range = ref
+        ? utils.decode_range(ref)
+        : {
+            s: { r: 0, c: 0 },
+            e: { r: -1, c: -1 },
+          };
+
+      if (range.e.r < range.s.r || range.e.c < range.s.c) {
+        continue;
+      }
+
+      if (range.e.r - range.s.r + 1 > limits.maxRowsPerSheet) {
+        truncatedRows = true;
+      }
+
+      if (range.e.c - range.s.c + 1 > limits.maxColumnsPerSheet) {
+        truncatedColumns = true;
+      }
+
+      const lastRow = Math.min(
+        range.e.r,
+        range.s.r + limits.maxRowsPerSheet - 1,
+      );
+      const lastColumn = Math.min(
+        range.e.c,
+        range.s.c + limits.maxColumnsPerSheet - 1,
+      );
+      const rows: string[] = [];
+
+      for (let rowIndex = range.s.r; rowIndex <= lastRow; rowIndex += 1) {
+        const values: string[] = [];
+
+        for (
+          let columnIndex = range.s.c;
+          columnIndex <= lastColumn;
+          columnIndex += 1
+        ) {
+          const address = utils.encode_cell({ r: rowIndex, c: columnIndex });
+          const cell = worksheet[address] as CellObject | undefined;
+          const value = formatTextCell(cell);
+
+          if (value.length === 0) {
+            continue;
+          }
+
+          if (value.length > limits.maxCellLength) {
+            truncatedCells = true;
+            values.push(value.slice(0, limits.maxCellLength));
+          } else {
+            values.push(value);
+          }
+        }
+
+        if (values.length > 0) {
+          rows.push(values.join(' | '));
+        }
+      }
+
+      if (rows.length > 0) {
+        sheets.push({ name: sheetName, rows });
+      }
+    }
+
+    return {
+      sheets,
+      totalSheets,
+      truncatedSheets: totalSheets > limits.maxSheets,
+      truncatedRows,
+      truncatedColumns,
+      truncatedCells,
+    };
+  }
+
   write(workbook: SpreadsheetWriteWorkbook): Buffer {
     const output = utils.book_new();
 
@@ -64,6 +179,38 @@ function toSheetJsWriteValue(value: unknown): unknown {
   }
 
   return value;
+}
+
+/**
+ * Converts one cell to a single line of text. Formatted text is preferred so
+ * dates and percentages read the way the worksheet displays them.
+ */
+function formatTextCell(cell: CellObject | undefined): string {
+  if (!cell) {
+    return '';
+  }
+
+  if (typeof cell.w === 'string') {
+    return singleLine(cell.w);
+  }
+
+  if (cell.v instanceof Date) {
+    return singleLine(cell.v.toISOString());
+  }
+
+  if (
+    typeof cell.v === 'string' ||
+    typeof cell.v === 'number' ||
+    typeof cell.v === 'boolean'
+  ) {
+    return singleLine(String(cell.v));
+  }
+
+  return '';
+}
+
+function singleLine(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
 }
 
 function mapSheet(

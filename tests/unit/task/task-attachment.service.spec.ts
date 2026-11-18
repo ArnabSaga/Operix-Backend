@@ -59,6 +59,13 @@ describe('canMutateTaskAttachments', () => {
         responsibleUserId: 'other-admin-db',
       }),
     ).toBe(false);
+    expect(
+      canMutateTaskAttachments(viewer(UserRole.ADMIN, 'other-admin-db'), {
+        ...baseTask,
+        scope: TaskScope.INDIVIDUAL,
+        responsibleUserId: 'other-admin-db',
+      }),
+    ).toBe(true);
   });
 
   it('separates authority failures from lifecycle and broadcast locks', () => {
@@ -91,7 +98,7 @@ describe('canMutateTaskAttachments', () => {
       }),
     ).toEqual({
       allowed: true,
-      authority: 'RESPONSIBLE_MEMBER',
+      authority: 'RESPONSIBLE_USER',
     });
     expect(
       getTaskAttachmentMutationDecision(viewer(UserRole.MEMBER, 'member-db'), {
@@ -165,7 +172,7 @@ describe('canMutateTaskAttachments', () => {
         ...inProgress,
         responsibleUserId: 'member-db',
       }),
-    ).toEqual({ allowed: true, authority: 'RESPONSIBLE_MEMBER' });
+    ).toEqual({ allowed: true, authority: 'RESPONSIBLE_USER' });
     expect(
       getTaskAttachmentMutationDecision(
         viewer(UserRole.SUPER_ADMIN, 'chief-db'),
@@ -185,7 +192,7 @@ describe('canMutateTaskAttachments', () => {
         responsibleUserId: 'member-db',
         distribution: { status: TaskDistributionStatus.SENT },
       }),
-    ).toEqual({ allowed: true, authority: 'RESPONSIBLE_MEMBER' });
+    ).toEqual({ allowed: true, authority: 'RESPONSIBLE_USER' });
     expect(
       getTaskAttachmentMutationDecision(viewer(UserRole.ADMIN, 'owner-db'), {
         ...inProgress,
@@ -1059,6 +1066,19 @@ describe('TaskAttachmentService artifact reads', () => {
               { scope: TaskScope.GLOBAL },
               {
                 scope: TaskScope.TEAM,
+                AND: [
+                  {
+                    assignments: {
+                      some: {
+                        responsibleUserId: 'member-db',
+                        unassignedAt: null,
+                      },
+                    },
+                  },
+                ],
+              },
+              {
+                scope: TaskScope.INDIVIDUAL,
                 AND: [
                   {
                     assignments: {

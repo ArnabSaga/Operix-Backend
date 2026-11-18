@@ -7,6 +7,7 @@ import configuration from './config/configuration.js';
 import { validateEnvironment } from './config/env.validation.js';
 import { PrismaModule } from './database/prisma.module.js';
 import { ActivityModule } from './modules/activity/activity.module.js';
+import { AssistantModule } from './modules/assistant/assistant.module.js';
 import { OperixAuthModule } from './modules/auth/auth.module.js';
 import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { DocumentModule } from './modules/document/document.module.js';
@@ -59,6 +60,7 @@ const ENV_FILE_PATHS = [
     SubmissionModule,
     NotificationModule,
     ActivityModule,
+    AssistantModule,
     PerformanceModule,
     RegistrationModule,
     ManagementReportModule,

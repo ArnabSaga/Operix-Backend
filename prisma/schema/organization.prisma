@@ -10,6 +10,8 @@ model Team {
   members TeamMember[]
   tasks   Task[]
   taskRecurrences TaskRecurrence[]
+  taskBatches TaskBatch[]
+  taskBatchRecurrences TaskBatchRecurrence[]
   managementReports ManagementReport[]
   inventoryItems InventoryItem[] @relation("TeamInventoryItems")
   registrationRequests RegistrationRequest[]

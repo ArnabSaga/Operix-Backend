@@ -91,14 +91,8 @@ describe('createOperixAuth', () => {
     ).toBeUndefined();
   });
 
-  it('dispatches reset mail without returning the SMTP promise or forwarding the token', async () => {
-    const neverSettles = new Promise<void>(() => undefined);
-    const mailService = {
-      sendPasswordResetEmail: jestApi.fn().mockReturnValue(neverSettles),
-      logPasswordResetDeliveryFailure: jestApi.fn(),
-    };
-    const auth = createOperixAuth(
-      {} as PrismaService,
+  describe('sendResetPassword', () => {
+    const buildConfig = () =>
       new ConfigService({
         app: {
           frontendOrigins: ['http://localhost:3000'],
@@ -107,36 +101,167 @@ describe('createOperixAuth', () => {
           secret: 'test-secret-that-is-long-enough-for-auth',
           baseUrl: 'http://localhost:5000',
         },
-      }),
-      mailService as unknown as MailService,
-    );
-    const sendResetPassword = auth.options.emailAndPassword?.sendResetPassword;
+      });
 
-    expect(sendResetPassword).toBeDefined();
-    if (!sendResetPassword) {
-      throw new Error('sendResetPassword was not configured');
-    }
-
-    const returned = sendResetPassword({
-      user: {
-        id: 'user-a',
-        name: 'User A',
-        email: 'user-a@example.com',
-        emailVerified: true,
-        createdAt: new Date('2026-01-01T00:00:00.000Z'),
-        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
-      },
-      url: 'https://api.operix.test/reset-password/token',
-      token: 'secret-token',
-    });
-    await expect(returned).resolves.toBeUndefined();
-    await Promise.resolve();
-
-    expect(mailService.sendPasswordResetEmail).toHaveBeenCalledWith({
-      userId: 'user-a',
-      recipientName: 'User A',
+    const buildUser = () => ({
+      id: 'user-a',
+      name: 'User A',
       email: 'user-a@example.com',
-      resetUrl: 'https://api.operix.test/reset-password/token',
+      emailVerified: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    const settleMicrotasks = async () => {
+      for (let index = 0; index < 10; index += 1) {
+        await Promise.resolve();
+      }
+    };
+
+    it('waits for SMTP before resolving and reports ACCEPTED', async () => {
+      let releaseSend: () => void = () => undefined;
+      const pendingSend = new Promise<void>((resolve) => {
+        releaseSend = resolve;
+      });
+      const mailService = {
+        sendPasswordResetEmail: jestApi.fn().mockReturnValue(pendingSend),
+        sendAccountSetupEmail: jestApi.fn(),
+        logPasswordResetDeliveryFailure: jestApi.fn(),
+      };
+      const prisma = {
+        user: {
+          findUnique: jestApi
+            .fn()
+            .mockResolvedValue({ passwordSetupRequired: false }),
+        },
+      };
+      const sink = jestApi.fn();
+      const auth = createOperixAuth(
+        prisma as unknown as PrismaService,
+        buildConfig(),
+        mailService as unknown as MailService,
+        sink,
+      );
+      const sendResetPassword =
+        auth.options.emailAndPassword?.sendResetPassword;
+
+      expect(sendResetPassword).toBeDefined();
+      if (!sendResetPassword) {
+        throw new Error('sendResetPassword was not configured');
+      }
+
+      let settled = false;
+      const returned = sendResetPassword({
+        user: buildUser(),
+        url: 'https://api.operix.test/reset-password/token',
+        token: 'secret-token',
+      }).then(() => {
+        settled = true;
+      });
+
+      await settleMicrotasks();
+      expect(settled).toBe(false);
+      expect(sink).not.toHaveBeenCalled();
+
+      releaseSend();
+      await returned;
+
+      expect(settled).toBe(true);
+      expect(sink).toHaveBeenCalledTimes(1);
+      expect(sink).toHaveBeenCalledWith('ACCEPTED');
+      expect(mailService.sendPasswordResetEmail).toHaveBeenCalledWith({
+        userId: 'user-a',
+        recipientName: 'User A',
+        email: 'user-a@example.com',
+        resetUrl: 'https://api.operix.test/reset-password/token',
+      });
+    });
+
+    it('reports FAILED and logs safely when SMTP rejects', async () => {
+      const deliveryError = new Error('smtp unavailable');
+      const mailService = {
+        sendPasswordResetEmail: jestApi.fn().mockRejectedValue(deliveryError),
+        sendAccountSetupEmail: jestApi.fn(),
+        logPasswordResetDeliveryFailure: jestApi.fn(),
+      };
+      const prisma = {
+        user: {
+          findUnique: jestApi
+            .fn()
+            .mockResolvedValue({ passwordSetupRequired: false }),
+        },
+      };
+      const sink = jestApi.fn();
+      const auth = createOperixAuth(
+        prisma as unknown as PrismaService,
+        buildConfig(),
+        mailService as unknown as MailService,
+        sink,
+      );
+      const sendResetPassword =
+        auth.options.emailAndPassword?.sendResetPassword;
+
+      if (!sendResetPassword) {
+        throw new Error('sendResetPassword was not configured');
+      }
+
+      await expect(
+        sendResetPassword({
+          user: buildUser(),
+          url: 'https://api.operix.test/reset-password/token',
+          token: 'secret-token',
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(mailService.logPasswordResetDeliveryFailure).toHaveBeenCalledWith(
+        'user-a',
+        deliveryError,
+      );
+      expect(sink).toHaveBeenCalledTimes(1);
+      expect(sink).toHaveBeenCalledWith('FAILED');
+    });
+
+    it('uses the account setup template while setup is still pending', async () => {
+      const mailService = {
+        sendPasswordResetEmail: jestApi.fn(),
+        sendAccountSetupEmail: jestApi.fn().mockResolvedValue(undefined),
+        logPasswordResetDeliveryFailure: jestApi.fn(),
+      };
+      const prisma = {
+        user: {
+          findUnique: jestApi
+            .fn()
+            .mockResolvedValue({ passwordSetupRequired: true }),
+        },
+      };
+      const sink = jestApi.fn();
+      const auth = createOperixAuth(
+        prisma as unknown as PrismaService,
+        buildConfig(),
+        mailService as unknown as MailService,
+        sink,
+      );
+      const sendResetPassword =
+        auth.options.emailAndPassword?.sendResetPassword;
+
+      if (!sendResetPassword) {
+        throw new Error('sendResetPassword was not configured');
+      }
+
+      await sendResetPassword({
+        user: buildUser(),
+        url: 'https://api.operix.test/reset-password/token',
+        token: 'secret-token',
+      });
+
+      expect(mailService.sendAccountSetupEmail).toHaveBeenCalledWith({
+        userId: 'user-a',
+        recipientName: 'User A',
+        email: 'user-a@example.com',
+        setupUrl: 'https://api.operix.test/reset-password/token',
+      });
+      expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+      expect(sink).toHaveBeenCalledWith('ACCEPTED');
     });
   });
 
@@ -246,5 +371,119 @@ describe('createOperixAuth', () => {
       },
     });
     expect(JSON.stringify(result)).not.toContain('private-user-id');
+  });
+
+  describe('onPasswordReset', () => {
+    const buildAuth = (tx: Record<string, unknown>) => {
+      const prisma = {
+        $transaction: jestApi.fn(
+          (callback: (transaction: unknown) => Promise<unknown>) =>
+            callback(tx),
+        ),
+      };
+
+      return createOperixAuth(
+        prisma as unknown as PrismaService,
+        new ConfigService({
+          app: { frontendOrigins: ['http://localhost:3000'] },
+          auth: {
+            secret: 'test-secret-that-is-long-enough-for-auth',
+            baseUrl: 'http://localhost:5000',
+          },
+        }),
+        {
+          sendPasswordResetEmail: jestApi.fn(),
+          sendAccountSetupEmail: jestApi.fn(),
+          logPasswordResetDeliveryFailure: jestApi.fn(),
+        } as unknown as MailService,
+      );
+    };
+
+    const user = {
+      id: 'active-user-id',
+      name: 'Active User',
+      email: 'active@example.com',
+      emailVerified: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+
+    it('leaves an ordinary active user out of the onboarding activation flow', async () => {
+      const tx = {
+        user: {
+          updateMany: jestApi.fn().mockResolvedValue({ count: 0 }),
+          findFirst: jestApi.fn(),
+        },
+        registrationRequest: {
+          update: jestApi.fn(),
+          findUnique: jestApi.fn(),
+        },
+        activityLog: {
+          create: jestApi.fn(),
+        },
+      };
+      const auth = buildAuth(tx);
+      const onPasswordReset = auth.options.emailAndPassword?.onPasswordReset;
+
+      if (!onPasswordReset) {
+        throw new Error('onPasswordReset was not configured');
+      }
+
+      await onPasswordReset({ user });
+
+      expect(tx.user.updateMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          status: 'INACTIVE',
+          passwordSetupRequired: true,
+          registrationRequestId: { not: null },
+        }) as unknown,
+        data: {
+          status: 'ACTIVE',
+          passwordSetupRequired: false,
+        },
+      });
+      expect(tx.registrationRequest.update).not.toHaveBeenCalled();
+      expect(tx.activityLog.create).not.toHaveBeenCalled();
+    });
+
+    it('activates a setup-pending registration after the first password reset', async () => {
+      const tx = {
+        user: {
+          updateMany: jestApi.fn().mockResolvedValue({ count: 1 }),
+          findFirst: jestApi
+            .fn()
+            .mockResolvedValue({ registrationRequestId: 'request-id' }),
+        },
+        registrationRequest: {
+          update: jestApi.fn().mockResolvedValue({ id: 'request-id' }),
+          findUnique: jestApi
+            .fn()
+            .mockResolvedValue({ publicId: 'request-public-id' }),
+        },
+        activityLog: {
+          create: jestApi.fn().mockResolvedValue({ id: 'activity-id' }),
+        },
+      };
+      const auth = buildAuth(tx);
+      const onPasswordReset = auth.options.emailAndPassword?.onPasswordReset;
+
+      if (!onPasswordReset) {
+        throw new Error('onPasswordReset was not configured');
+      }
+
+      await onPasswordReset({ user });
+
+      expect(tx.registrationRequest.update).toHaveBeenCalledWith({
+        where: { id: 'request-id' },
+        data: { passwordConfiguredAt: expect.any(Date) as Date },
+      });
+      expect(tx.activityLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'REGISTRATION_PASSWORD_CONFIGURED',
+          entityType: 'REGISTRATION_REQUEST',
+          entityId: 'request-id',
+        }) as unknown,
+      });
+    });
   });
 });

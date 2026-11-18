@@ -72,6 +72,13 @@ export class MailService {
     context: MailTemplateContextMap[TName],
   ): Promise<void> {
     if (!this.transporter) {
+      this.logger.warn(
+        'Mail delivery is unavailable: SMTP is not configured.',
+        {
+          templateName,
+          outcome: 'UNAVAILABLE',
+        },
+      );
       throw new AppException(
         HttpStatus.SERVICE_UNAVAILABLE,
         APP_ERROR_CODE.MAIL_DELIVERY_UNAVAILABLE,
@@ -80,6 +87,7 @@ export class MailService {
     }
 
     const rendered = await this.renderer.render(templateName, context);
+    const startedAt = Date.now();
 
     try {
       await this.transporter.sendMail({
@@ -92,9 +100,16 @@ export class MailService {
         text: rendered.text,
         html: rendered.html,
       });
+      this.logger.log('Mail accepted by SMTP.', {
+        templateName,
+        outcome: 'ACCEPTED',
+        latencyMs: Date.now() - startedAt,
+      });
     } catch (error) {
       this.logger.error('Mail delivery failed.', {
         templateName,
+        outcome: 'FAILED',
+        latencyMs: Date.now() - startedAt,
         errorName: getErrorName(error),
       });
       throw new AppException(
@@ -107,6 +122,7 @@ export class MailService {
 
   async sendTaskAssignedEmail(input: TaskAssignedEmailInput): Promise<void> {
     if (!this.transporter) {
+      this.logBestEffortSkip(MAIL_TEMPLATE.NOTIFICATION_ALERT);
       return;
     }
 
@@ -152,7 +168,10 @@ export class MailService {
   }
 
   async sendTaskReminderEmail(input: TaskReminderEmailInput): Promise<void> {
-    if (!this.transporter) return;
+    if (!this.transporter) {
+      this.logBestEffortSkip(MAIL_TEMPLATE.NOTIFICATION_ALERT);
+      return;
+    }
 
     const taskUrl = new URL(
       `/tasks/${encodeURIComponent(input.taskId)}`,
@@ -190,6 +209,7 @@ export class MailService {
 
   async sendWelcomeUserEmail(input: WelcomeUserEmailInput): Promise<void> {
     if (!this.transporter) {
+      this.logBestEffortSkip(MAIL_TEMPLATE.WELCOME_USER);
       return;
     }
 
@@ -239,7 +259,6 @@ export class MailService {
   async sendRegistrationReceivedEmail(
     input: RegistrationMailInput,
   ): Promise<void> {
-    if (!this.transporter) return;
     await this.sendTemplatedEmail(
       { name: input.recipientName, address: input.email },
       'We received your Operix access request',
@@ -251,7 +270,6 @@ export class MailService {
   async sendRegistrationRejectedEmail(
     input: RegistrationMailInput,
   ): Promise<void> {
-    if (!this.transporter) return;
     await this.sendTemplatedEmail(
       { name: input.recipientName, address: input.email },
       'Operix access request update',
@@ -261,7 +279,6 @@ export class MailService {
   }
 
   async sendAccountSetupEmail(input: AccountSetupEmailInput): Promise<void> {
-    if (!this.transporter) return;
     await this.sendTemplatedEmail(
       { name: input.recipientName, address: input.email },
       'Set up your Operix account',
@@ -270,6 +287,16 @@ export class MailService {
         recipientName: input.recipientName,
         setupUrl: input.setupUrl,
         expiryHours: PASSWORD_RESET_TOKEN_EXPIRES_IN_HOURS,
+      },
+    );
+  }
+
+  private logBestEffortSkip(templateName: MailTemplateName): void {
+    this.logger.warn(
+      'Skipping best-effort email because SMTP is not configured.',
+      {
+        templateName,
+        outcome: 'SKIPPED',
       },
     );
   }

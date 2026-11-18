@@ -6,6 +6,8 @@ export const notificationSelect = {
   targetType: true,
   targetPublicId: true,
   readAt: true,
+  resolvedAt: true,
+  resolution: true,
   createdAt: true,
   actor: {
     select: {

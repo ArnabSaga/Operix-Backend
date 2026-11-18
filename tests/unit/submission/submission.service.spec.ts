@@ -44,16 +44,25 @@ function createViewer(role: UserRole): OperixViewer {
 function createSubmission(
   overrides: Partial<SafeSubmissionResponse> = {},
 ): SafeSubmissionResponse {
-  return {
+  const submission = {
     id: 'submission-a',
     taskId: 'task-a',
     submittedById: 'member-a',
+    submittedBy: null,
     version: 1,
     submissionText: 'Completed assigned workload.',
     submittedAt: fixedDate,
     createdAt: fixedDate,
+    updatedAt: fixedDate,
+    lastEditedBy: null,
+    attachments: [],
     ...overrides,
   };
+  Object.defineProperties(submission, {
+    publicId: { value: submission.id, enumerable: false },
+    task: { value: { publicId: submission.taskId }, enumerable: false },
+  });
+  return submission;
 }
 
 function createKnownRequestError(code: string): Error {
@@ -87,11 +96,11 @@ describe('submission scope policy', () => {
       buildSubmissionScopeWhere(createViewer(UserRole.SUPER_ADMIN)),
     ).toEqual({});
     expect(buildSubmissionScopeWhere(createViewer(UserRole.ADMIN))).toEqual({
-      task: {
-        teamId: {
-          in: ['team-a'],
-        },
-      },
+      OR: [
+        { submittedById: 'admin-a' },
+        { task: { reviewerUserId: 'admin-a' } },
+        { task: { teamId: { in: ['team-a'] } } },
+      ],
     });
     expect(buildSubmissionScopeWhere(createViewer(UserRole.MEMBER))).toEqual({
       submittedById: 'member-a',
@@ -107,6 +116,8 @@ describe('SubmissionService', () => {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-a',
           status: TaskStatus.IN_PROGRESS,
+          completionMode: 'REVIEW_REQUIRED',
+          reviewerUserId: 'admin-a',
           team: {
             adminId: 'admin-a',
           },
@@ -139,7 +150,7 @@ describe('SubmissionService', () => {
       service.createSubmission(createViewer(UserRole.MEMBER), 'task-a', {
         submissionText: 'Completed assigned workload.',
       }),
-    ).resolves.toBe(submission);
+    ).resolves.toEqual(submission);
 
     expect(tx.task.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -210,6 +221,79 @@ describe('SubmissionService', () => {
     });
   });
 
+  it('lets the current Responsible Admin submit an upward-review Task to its Super Admin reviewer', async () => {
+    const submission = createSubmission({
+      submittedById: 'admin-a',
+    });
+    const tx = {
+      task: {
+        findFirst: jestApi.fn().mockResolvedValue({
+          id: 'task-a',
+          status: TaskStatus.IN_PROGRESS,
+          completionMode: 'REVIEW_REQUIRED',
+          reviewerUserId: 'chief-a',
+        }),
+        update: jestApi.fn().mockResolvedValue({ id: 'task-a' }),
+      },
+      taskSubmission: {
+        findFirst: jestApi.fn().mockResolvedValue(null),
+        create: jestApi.fn().mockResolvedValue(submission),
+      },
+      taskStatusHistory: {
+        create: jestApi.fn().mockResolvedValue({ id: 'history-a' }),
+      },
+      activityLog: {
+        create: jestApi.fn().mockResolvedValue({ id: 'activity-a' }),
+      },
+      notification: {
+        create: jestApi.fn().mockResolvedValue({ id: 'notification-a' }),
+      },
+    };
+    const prisma = {
+      $transaction: jestApi.fn(
+        (callback: (transaction: typeof tx) => Promise<unknown>) =>
+          callback(tx),
+      ),
+    };
+    const service = new SubmissionService(prisma as unknown as PrismaService);
+
+    await expect(
+      service.createSubmission(createViewer(UserRole.ADMIN), 'task-a', {
+        submissionText: 'Upward review report.',
+      }),
+    ).resolves.toEqual(submission);
+
+    expect(tx.task.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          publicId: 'task-a',
+          assignments: {
+            some: {
+              responsibleUserId: 'admin-a',
+              unassignedAt: null,
+            },
+          },
+        },
+      }),
+    );
+    expect(tx.taskSubmission.create).toHaveBeenCalledWith({
+      data: {
+        taskId: 'task-a',
+        submittedById: 'admin-a',
+        version: 1,
+        submissionText: 'Upward review report.',
+      },
+      select: expect.any(Object) as object,
+    });
+    expect(tx.notification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        receiverId: 'chief-a',
+        actorId: 'admin-a',
+        targetType: 'SUBMISSION',
+      }) as Record<string, unknown>,
+    });
+  });
+
   it('returns TASK_NOT_FOUND when the current Member cannot access the Task', async () => {
     const tx = {
       task: {
@@ -243,6 +327,8 @@ describe('SubmissionService', () => {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-a',
           status: TaskStatus.SUBMITTED,
+          completionMode: 'REVIEW_REQUIRED',
+          reviewerUserId: 'admin-a',
           team: {
             adminId: 'admin-a',
           },
@@ -280,6 +366,8 @@ describe('SubmissionService', () => {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-a',
           status: TaskStatus.REVISION_REQUIRED,
+          completionMode: 'REVIEW_REQUIRED',
+          reviewerUserId: 'admin-a',
           team: {
             adminId: 'admin-a',
           },
@@ -312,7 +400,7 @@ describe('SubmissionService', () => {
       service.createSubmission(createViewer(UserRole.MEMBER), 'task-a', {
         submissionText: 'Revised workload.',
       }),
-    ).resolves.toBe(submission);
+    ).resolves.toEqual(submission);
 
     expect(tx.taskSubmission.findFirst).toHaveBeenCalledWith({
       where: {
@@ -377,6 +465,8 @@ describe('SubmissionService', () => {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-a',
           status: TaskStatus.REVISION_REQUIRED,
+          completionMode: 'REVIEW_REQUIRED',
+          reviewerUserId: 'admin-a',
           team: {
             adminId: 'admin-a',
           },
@@ -413,6 +503,8 @@ describe('SubmissionService', () => {
         findFirst: jestApi.fn().mockResolvedValue({
           id: 'task-a',
           status: TaskStatus.IN_PROGRESS,
+          completionMode: 'REVIEW_REQUIRED',
+          reviewerUserId: 'admin-a',
           team: {
             adminId: 'admin-a',
           },
@@ -457,17 +549,17 @@ describe('SubmissionService', () => {
 
     await expect(
       service.getSubmission(createViewer(UserRole.ADMIN), 'submission-a'),
-    ).resolves.toBe(submission);
+    ).resolves.toEqual(submission);
 
     expect(prisma.taskSubmission.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           publicId: 'submission-a',
-          task: {
-            teamId: {
-              in: ['team-a'],
-            },
-          },
+          OR: [
+            { submittedById: 'admin-a' },
+            { task: { reviewerUserId: 'admin-a' } },
+            { task: { teamId: { in: ['team-a'] } } },
+          ],
         },
       }),
     );

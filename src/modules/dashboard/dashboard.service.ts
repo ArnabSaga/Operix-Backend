@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import {
   ManagementReportStatus,
@@ -6,12 +7,17 @@ import {
   UserRole,
   UserStatus,
 } from '../../../generated/prisma/enums.js';
+import type { ApplicationConfiguration } from '../../config/configuration.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
+import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
+import { AppException } from '../../shared/errors/app.exception.js';
 import {
   createPaginationMeta,
   normalizePagination,
 } from '../../shared/pagination/pagination.helper.js';
+import { getBusinessMonthWindow } from '../../shared/time/business-time.js';
+import type { BusinessMonthWindow } from '../../shared/time/business-time.js';
 import { ActivityService } from '../activity/activity.service.js';
 import { NotificationService } from '../notification/notification.service.js';
 import {
@@ -19,13 +25,14 @@ import {
   calculateWorkloadMetrics,
 } from '../performance/performance.calculator.js';
 import { performanceTaskSelect } from '../performance/performance.select.js';
+import { isTaskOverdue } from '../task/task.mapper.js';
 import {
-  buildCompletionTrend,
+  buildZonedCompletionTrend,
   calculateTaskKpis,
   createEmptyReportStatusCounts,
   createTaskStatusCountsFromTasks,
   isTaskDueSoon,
-  startOfUtcTrendWindow,
+  startOfZonedTrendWindow,
 } from './dashboard.calculator.js';
 import {
   DASHBOARD_RECENT_LIMIT,
@@ -36,16 +43,19 @@ import type {
   AdminDashboardWorkload,
   DashboardContext,
   DashboardOverviewResponse,
+  DashboardOperationalSnapshot,
   DashboardTaskMetricSource,
   DashboardTrendsResponse,
   DashboardWorkloadResponse,
   MemberDashboardOverview,
   MemberDashboardWorkload,
+  MemberMonthlyThroughput,
   MemberWorkloadRow,
   PaginatedMemberWorkload,
   ReportStatusCounts,
   SuperAdminDashboardOverview,
   SuperAdminDashboardWorkload,
+  TeamMonthlyThroughput,
   TeamWorkloadRow,
 } from './dashboard.interface.js';
 import type { DashboardTrendQueryDto } from './dto/dashboard-trend-query.dto.js';
@@ -90,11 +100,18 @@ const dashboardTeamSelect = {
 
 @Injectable()
 export class DashboardService {
+  private readonly businessTimezone: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityService: ActivityService,
     private readonly notificationService: NotificationService,
-  ) {}
+    configService: ConfigService<ApplicationConfiguration, true>,
+  ) {
+    this.businessTimezone = configService.get('app.businessTimezone', {
+      infer: true,
+    });
+  }
 
   async getOverview(viewer: OperixViewer): Promise<DashboardOverviewResponse> {
     const now = new Date();
@@ -133,7 +150,7 @@ export class DashboardService {
   ): Promise<DashboardTrendsResponse> {
     const now = new Date();
     const days = query.days ?? DashboardTrendDays.THIRTY;
-    const start = startOfUtcTrendWindow(days, now);
+    const start = startOfZonedTrendWindow(days, now, this.businessTimezone);
     const tasks = await this.prisma.task.findMany({
       where: {
         AND: [
@@ -153,7 +170,12 @@ export class DashboardService {
 
     return {
       role: viewer.role,
-      completionTrend: buildCompletionTrend(tasks, days, now),
+      completionTrend: buildZonedCompletionTrend(
+        tasks,
+        days,
+        now,
+        this.businessTimezone,
+      ),
       context: this.createContext(viewer, now),
     };
   }
@@ -235,7 +257,7 @@ export class DashboardService {
     days: DashboardTrendDays,
     now: Date,
   ): Promise<DashboardTrendsResponse> {
-    const start = startOfUtcTrendWindow(days, now);
+    const start = startOfZonedTrendWindow(days, now, this.businessTimezone);
     const tasks = await this.prisma.task.findMany({
       where: {
         AND: [
@@ -255,7 +277,127 @@ export class DashboardService {
 
     return {
       role: viewer.role,
-      completionTrend: buildCompletionTrend(tasks, days, now),
+      completionTrend: buildZonedCompletionTrend(
+        tasks,
+        days,
+        now,
+        this.businessTimezone,
+      ),
+      context: this.createContext(viewer, now),
+    };
+  }
+
+  async getOperationalSnapshot(
+    viewer: OperixViewer,
+    days: DashboardTrendDays,
+    memberLimit: number,
+  ): Promise<DashboardOperationalSnapshot> {
+    const now = new Date();
+
+    if (viewer.role === UserRole.SUPER_ADMIN) {
+      const [overview, workload, trends] = await Promise.all([
+        this.getSuperAdminOverview(viewer, now),
+        this.getSuperAdminWorkload(
+          viewer,
+          { page: 1, limit: memberLimit },
+          now,
+        ),
+        this.getTrendsForExport(viewer, days, now),
+      ]);
+
+      return { role: viewer.role, asOf: now, days, overview, workload, trends };
+    }
+
+    if (viewer.role === UserRole.ADMIN) {
+      const [overview, workload, trends] = await Promise.all([
+        this.getAdminOverview(viewer, now),
+        this.getAdminWorkload(viewer, { page: 1, limit: memberLimit }, now),
+        this.getTrendsForExport(viewer, days, now),
+      ]);
+
+      return { role: viewer.role, asOf: now, days, overview, workload, trends };
+    }
+
+    throw new AppException(
+      HttpStatus.FORBIDDEN,
+      APP_ERROR_CODE.FORBIDDEN,
+      'You do not have access to this resource.',
+    );
+  }
+
+  async getAiOperationalSnapshot(
+    viewer: OperixViewer,
+    days: number,
+    memberLimit: number,
+    timezone: string,
+  ): Promise<DashboardOperationalSnapshot> {
+    const now = new Date();
+    const periodStart = startOfZonedTrendWindow(days, now, timezone);
+
+    if (viewer.role === UserRole.SUPER_ADMIN) {
+      const [overview, workload, resolvedTrends] = await Promise.all([
+        this.getSuperAdminOverview(viewer, now),
+        this.getSuperAdminWorkload(
+          viewer,
+          { page: 1, limit: memberLimit },
+          now,
+        ),
+        this.getAiTrends(viewer, days, now, timezone),
+      ]);
+      return {
+        role: viewer.role,
+        asOf: now,
+        periodStart,
+        days,
+        overview,
+        workload,
+        trends: resolvedTrends,
+      };
+    }
+
+    if (viewer.role === UserRole.ADMIN) {
+      const [overview, workload, resolvedTrends] = await Promise.all([
+        this.getAdminOverview(viewer, now),
+        this.getAdminWorkload(viewer, { page: 1, limit: memberLimit }, now),
+        this.getAiTrends(viewer, days, now, timezone),
+      ]);
+      return {
+        role: viewer.role,
+        asOf: now,
+        periodStart,
+        days,
+        overview,
+        workload,
+        trends: resolvedTrends,
+      };
+    }
+
+    throw new AppException(
+      HttpStatus.FORBIDDEN,
+      APP_ERROR_CODE.FORBIDDEN,
+      'You do not have access to this resource.',
+    );
+  }
+
+  private async getAiTrends(
+    viewer: OperixViewer,
+    days: number,
+    now: Date,
+    timezone: string,
+  ): Promise<DashboardTrendsResponse> {
+    const start = startOfZonedTrendWindow(days, now, timezone);
+    const tasks = await this.prisma.task.findMany({
+      where: {
+        AND: [
+          this.buildTaskScopeWhere(viewer),
+          { completedAt: { gte: start, lte: now } },
+        ],
+      },
+      select: { completedAt: true },
+    });
+    return {
+      role: viewer.role,
+      completionTrend: buildZonedCompletionTrend(tasks, days, now, timezone),
       context: this.createContext(viewer, now),
     };
   }
@@ -264,17 +406,31 @@ export class DashboardService {
     viewer: OperixViewer,
     now: Date,
   ): Promise<SuperAdminDashboardOverview> {
+    const monthWindow = getBusinessMonthWindow(now, this.businessTimezone);
     const [
       totalAdmins,
       totalMembers,
       tasks,
-      reportStatusCounts,
+      monthlyReportStatusCounts,
+      pendingManagementReports,
+      revisionRequiredManagementReports,
       recentActivity,
     ] = await Promise.all([
       this.prisma.user.count({ where: { role: UserRole.ADMIN } }),
       this.prisma.user.count({ where: { role: UserRole.MEMBER } }),
       this.loadTasksForMetrics({}),
-      this.loadReportStatusCounts({}),
+      this.loadReportStatusCounts({
+        createdAt: {
+          gte: monthWindow.start,
+          lt: monthWindow.endExclusive,
+        },
+      }),
+      this.prisma.managementReport.count({
+        where: { status: ManagementReportStatus.SUBMITTED },
+      }),
+      this.prisma.managementReport.count({
+        where: { status: ManagementReportStatus.REVISION_REQUIRED },
+      }),
       this.activityService.listPreview(viewer, DASHBOARD_RECENT_LIMIT),
     ]);
     const kpis = calculateTaskKpis(tasks, now);
@@ -291,14 +447,14 @@ export class DashboardService {
         overdueTasks: kpis.overdueTasks,
         taskReviewQueue: kpis.reviewQueueTasks,
         revisionRequiredTasks: kpis.revisionRequiredTasks,
-        pendingManagementReports:
-          reportStatusCounts[ManagementReportStatus.SUBMITTED],
-        revisionRequiredManagementReports:
-          reportStatusCounts[ManagementReportStatus.REVISION_REQUIRED],
+        pendingManagementReports,
+        revisionRequiredManagementReports,
         completionRate: kpis.completionRate,
       },
       taskStatusCounts: kpis.statusCounts,
-      managementReportStatusCounts: reportStatusCounts,
+      // The breakdown is scoped to the current business month. Pending-review
+      // KPIs above stay live so unfinished reports never disappear on the 1st.
+      managementReportStatusCounts: monthlyReportStatusCounts,
       recentActivity,
       context: this.createContext(viewer, now),
     };
@@ -502,7 +658,14 @@ export class DashboardService {
     }
 
     const teamIds = teams.map((team) => team.id);
-    const [memberRows, tasks] = await Promise.all([
+    const monthWindow = getBusinessMonthWindow(now, this.businessTimezone);
+    const [
+      memberRows,
+      tasks,
+      monthlyAssignments,
+      monthlyCompletions,
+      monthlyReviews,
+    ] = await Promise.all([
       this.prisma.teamMember.findMany({
         where: {
           teamId: {
@@ -529,6 +692,66 @@ export class DashboardService {
           ...performanceTaskSelect,
         },
       }),
+      this.prisma.taskAssignment.findMany({
+        where: {
+          assignedAt: {
+            gte: monthWindow.start,
+            lt: monthWindow.endExclusive,
+          },
+          task: {
+            teamId: {
+              in: teamIds,
+            },
+          },
+        },
+        select: {
+          task: {
+            select: {
+              teamId: true,
+            },
+          },
+        },
+      }),
+      this.prisma.task.findMany({
+        where: {
+          teamId: {
+            in: teamIds,
+          },
+          completedAt: {
+            gte: monthWindow.start,
+            lt: monthWindow.endExclusive,
+          },
+        },
+        select: {
+          teamId: true,
+        },
+      }),
+      this.prisma.taskReview.findMany({
+        where: {
+          reviewedAt: {
+            gte: monthWindow.start,
+            lt: monthWindow.endExclusive,
+          },
+          submission: {
+            task: {
+              teamId: {
+                in: teamIds,
+              },
+            },
+          },
+        },
+        select: {
+          submission: {
+            select: {
+              task: {
+                select: {
+                  teamId: true,
+                },
+              },
+            },
+          },
+        },
+      }),
     ]);
 
     return teams.map((team) => {
@@ -537,6 +760,16 @@ export class DashboardService {
       );
       const teamTasks = tasks.filter((task) => task.teamId === team.id);
       const workload = calculateWorkloadMetrics(teamTasks, now);
+      const monthly: TeamMonthlyThroughput = {
+        assigned: monthlyAssignments.filter(
+          (assignment) => assignment.task.teamId === team.id,
+        ).length,
+        completed: monthlyCompletions.filter((task) => task.teamId === team.id)
+          .length,
+        reviewsCompleted: monthlyReviews.filter(
+          (review) => review.submission.task.teamId === team.id,
+        ).length,
+      };
 
       return {
         teamId: team.publicId,
@@ -555,6 +788,7 @@ export class DashboardService {
           (task) => task.status === TaskStatus.REVISION_REQUIRED,
         ).length,
         statusCounts: workload.statusCounts,
+        monthly,
       };
     });
   }
@@ -623,20 +857,79 @@ export class DashboardService {
       Task reassignment is introduced.
     */
     const memberIds = members.map((member) => member.id);
-    const assignments = await this.prisma.taskAssignment.findMany({
-      where: {
-        responsibleUserId: {
-          in: memberIds,
+    const monthWindow = getBusinessMonthWindow(now, this.businessTimezone);
+    const [assignments, monthlyAssignments, monthlyTasks] = await Promise.all([
+      this.prisma.taskAssignment.findMany({
+        where: {
+          responsibleUserId: {
+            in: memberIds,
+          },
+          unassignedAt: null,
         },
-        unassignedAt: null,
-      },
-      select: {
-        responsibleUserId: true,
-        task: {
-          select: performanceTaskSelect,
+        select: {
+          responsibleUserId: true,
+          task: {
+            select: performanceTaskSelect,
+          },
         },
-      },
-    });
+      }),
+      // Assignment events inside the month, including tasks reassigned away
+      // afterwards. Current-state workload below stays live and is unaffected.
+      this.prisma.taskAssignment.findMany({
+        where: {
+          responsibleUserId: {
+            in: memberIds,
+          },
+          assignedAt: {
+            gte: monthWindow.start,
+            lt: monthWindow.endExclusive,
+          },
+        },
+        select: {
+          responsibleUserId: true,
+        },
+      }),
+      this.prisma.task.findMany({
+        where: {
+          assignments: {
+            some: {
+              responsibleUserId: {
+                in: memberIds,
+              },
+              unassignedAt: null,
+            },
+          },
+          OR: [
+            {
+              completedAt: {
+                gte: monthWindow.start,
+                lt: monthWindow.endExclusive,
+              },
+            },
+            {
+              createdAt: {
+                gte: monthWindow.start,
+                lt: monthWindow.endExclusive,
+              },
+            },
+          ],
+        },
+        select: {
+          createdAt: true,
+          completedAt: true,
+          dueAt: true,
+          status: true,
+          assignments: {
+            where: {
+              unassignedAt: null,
+            },
+            select: {
+              responsibleUserId: true,
+            },
+          },
+        },
+      }),
+    ]);
     const tasksByMemberId = new Map<string, DashboardTaskMetricSource[]>();
 
     for (const assignment of assignments) {
@@ -645,9 +938,24 @@ export class DashboardService {
       tasksByMemberId.set(assignment.responsibleUserId, existing);
     }
 
+    const monthlyByMemberId = buildMemberMonthlyThroughput(
+      monthlyTasks,
+      monthWindow,
+      now,
+    );
+    const assignedByMemberId = new Map<string, number>();
+
+    for (const assignment of monthlyAssignments) {
+      assignedByMemberId.set(
+        assignment.responsibleUserId,
+        (assignedByMemberId.get(assignment.responsibleUserId) ?? 0) + 1,
+      );
+    }
+
     return members.map((member) => {
       const tasks = tasksByMemberId.get(member.id) ?? [];
       const workload = calculateWorkloadMetrics(tasks, now);
+      const monthly = monthlyByMemberId.get(member.id) ?? emptyMemberMonthly();
 
       return {
         memberId: member.publicId,
@@ -661,6 +969,10 @@ export class DashboardService {
         overdueTasks: workload.overdueTasks,
         statusCounts: workload.statusCounts,
         activePriorityCounts: workload.activePriorityCounts,
+        monthly: {
+          ...monthly,
+          assigned: assignedByMemberId.get(member.id) ?? 0,
+        },
       };
     });
   }
@@ -752,6 +1064,7 @@ export class DashboardService {
       overdueTasks: workload.overdueTasks,
       statusCounts: createTaskStatusCountsFromTasks([]),
       activePriorityCounts: workload.activePriorityCounts,
+      monthly: emptyMemberMonthly(),
     };
   }
 }
@@ -766,4 +1079,60 @@ function compareMemberWorkloadRows(
     left.name.localeCompare(right.name) ||
     left.memberId.localeCompare(right.memberId)
   );
+}
+
+interface MonthlyMemberTaskSource {
+  createdAt: Date;
+  completedAt: Date | null;
+  dueAt: Date | null;
+  status: TaskStatus;
+  assignments: { responsibleUserId: string }[];
+}
+
+function buildMemberMonthlyThroughput(
+  tasks: MonthlyMemberTaskSource[],
+  window: BusinessMonthWindow,
+  now: Date,
+): Map<string, MemberMonthlyThroughput> {
+  const result = new Map<string, MemberMonthlyThroughput>();
+
+  for (const task of tasks) {
+    const completedInWindow =
+      task.completedAt !== null &&
+      task.completedAt >= window.start &&
+      task.completedAt < window.endExclusive;
+    const createdInWindow =
+      task.createdAt >= window.start && task.createdAt < window.endExclusive;
+    const overdueCreated = createdInWindow && isTaskOverdue(task, now);
+
+    for (const assignment of task.assignments) {
+      const entry =
+        result.get(assignment.responsibleUserId) ?? emptyMemberMonthly();
+
+      if (completedInWindow && task.completedAt !== null) {
+        entry.completed += 1;
+
+        if (task.dueAt !== null && task.completedAt <= task.dueAt) {
+          entry.onTime += 1;
+        }
+      }
+
+      if (overdueCreated) {
+        entry.overdueCreated += 1;
+      }
+
+      result.set(assignment.responsibleUserId, entry);
+    }
+  }
+
+  return result;
+}
+
+function emptyMemberMonthly(): MemberMonthlyThroughput {
+  return {
+    assigned: 0,
+    completed: 0,
+    onTime: 0,
+    overdueCreated: 0,
+  };
 }

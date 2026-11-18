@@ -15,7 +15,6 @@ import {
 import type { SafeReviewResponse } from '../../../src/modules/submission/review.interface';
 import { ReviewService } from '../../../src/modules/submission/review.service';
 import { SUBMISSION_ERROR_CODE } from '../../../src/modules/submission/submission.constant';
-import { APP_ERROR_CODE } from '../../../src/shared/errors/app-error-code.constant';
 import type { OperixViewer } from '../../../src/shared/auth/viewer.interface';
 import {
   TaskReviewAction,
@@ -77,6 +76,7 @@ function createSubmissionRecord(
     version?: number;
     status?: TaskStatus;
     submittedById?: string;
+    reviewerUserId?: string;
   } = {},
 ) {
   return {
@@ -88,6 +88,7 @@ function createSubmissionRecord(
       id: 'task-a',
       status: overrides.status ?? TaskStatus.SUBMITTED,
       completionMode: TaskCompletionMode.REVIEW_REQUIRED,
+      reviewerUserId: overrides.reviewerUserId ?? 'admin-a',
       team: { adminId: 'admin-a' },
     },
   };
@@ -425,20 +426,38 @@ describe('ReviewService', () => {
     );
   });
 
-  it('rejects wrong roles before opening a transaction', async () => {
-    const tx = createTx();
-    const { service, transaction } = createService(tx);
+  it('lets the explicit Super Admin reviewer approve an Admin submission', async () => {
+    const review = createReview({
+      reviewer: { id: 'chief-a', name: 'Chief A' },
+    });
+    const tx = createTx({
+      submission: createSubmissionRecord({
+        submittedById: 'admin-a',
+        reviewerUserId: 'chief-a',
+      }),
+      review,
+    });
+    const { service } = createService(tx);
 
-    await expectRejectsAppException(
+    await expect(
       service.createReview(createViewer(UserRole.SUPER_ADMIN), 'submission-a', {
         action: TaskReviewAction.APPROVE,
       }),
-      {
-        status: HttpStatus.FORBIDDEN,
-        code: APP_ERROR_CODE.FORBIDDEN,
-      },
+    ).resolves.toEqual(review);
+
+    expect(tx.taskReview.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        reviewerId: 'chief-a',
+        action: TaskReviewAction.APPROVE,
+      }) as Record<string, unknown>,
+      select: expect.any(Object) as object,
+    });
+    expect(tx.taskStatusHistory.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({ changedById: 'chief-a' }) as object,
+      }),
     );
-    expect(transaction).not.toHaveBeenCalled();
   });
 
   it('returns submission not found for missing or out-of-scope submissions', async () => {

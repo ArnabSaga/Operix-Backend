@@ -12,6 +12,7 @@ import { createNotification } from '../../shared/notification/notification-write
 import { TASK_ACTIVITY, TASK_NOTIFICATION } from './task.constant.js';
 import { TaskRecurrenceService } from './task-recurrence.service.js';
 import { TaskDistributionService } from './task-distribution.service.js';
+import { TaskBulkService } from './task-bulk.service.js';
 
 const REMINDER_BATCH_SIZE = 50;
 
@@ -24,15 +25,17 @@ export class TaskAutomationService {
     private readonly recurrenceService: TaskRecurrenceService,
     private readonly mailService: MailService,
     private readonly distributionService: TaskDistributionService,
+    private readonly bulkService: TaskBulkService,
   ) {}
 
   async run(now = new Date()) {
     const reminders = await this.processDueReminders(now);
     const recurrences =
       await this.recurrenceService.reconcileDueRecurrences(now);
+    const bulkRecurrences = await this.bulkService.reconcileDueRecurrences(now);
     const distributions =
       await this.distributionService.processDueDistributions(now);
-    return { reminders, recurrences, distributions };
+    return { reminders, recurrences, bulkRecurrences, distributions };
   }
 
   async processDueReminders(now: Date): Promise<{

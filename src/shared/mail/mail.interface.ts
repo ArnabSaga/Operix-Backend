@@ -1,3 +1,11 @@
+/**
+ * Outcome of an onboarding mail dispatch.
+ *
+ * `ACCEPTED` means the configured SMTP server accepted the message. It is not
+ * proof that the recipient inbox received it.
+ */
+export type MailOutcome = 'ACCEPTED' | 'FAILED';
+
 export interface TaskAssignedEmailInput {
   responsibleUserId: string;
   responsibleName: string;

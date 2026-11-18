@@ -52,6 +52,13 @@ function createConfig(
       rateLimitSecret: 'registration-rate-limit-secret-32-characters',
       cronSecret: 'registration-cron-secret-32-characters-long',
     },
+    ai: {
+      enabled: false,
+      provider: 'gemini',
+      apiKey: '',
+      model: '',
+      timeoutMs: 30_000,
+    },
     rateLimit: {
       apiSecret: 'api-rate-limit-secret-at-least-32-characters',
     },
@@ -354,6 +361,49 @@ describe('MailService', () => {
       expect(getAppErrorCode(error)).toBe(
         APP_ERROR_CODE.MAIL_DELIVERY_UNAVAILABLE,
       );
+    }
+  });
+
+  it('reports unavailable delivery for strict onboarding mail', async () => {
+    const service = new MailService(
+      createConfig() as unknown as ConfigService<
+        ApplicationConfiguration,
+        true
+      >,
+      new MailTemplateRenderer(),
+    );
+
+    const strictCalls = [
+      () =>
+        service.sendRegistrationReceivedEmail({
+          requestId: 'req-a',
+          recipientName: 'Applicant A',
+          email: 'applicant@example.com',
+        }),
+      () =>
+        service.sendRegistrationRejectedEmail({
+          requestId: 'req-a',
+          recipientName: 'Applicant A',
+          email: 'applicant@example.com',
+        }),
+      () =>
+        service.sendAccountSetupEmail({
+          userId: 'admin-a',
+          recipientName: 'Admin A',
+          email: 'admin@example.com',
+          setupUrl: 'https://api.operix.test/reset-password/token',
+        }),
+    ];
+
+    for (const call of strictCalls) {
+      try {
+        await call();
+        throw new Error('Expected delivery to fail.');
+      } catch (error) {
+        expect(getAppErrorCode(error)).toBe(
+          APP_ERROR_CODE.MAIL_DELIVERY_UNAVAILABLE,
+        );
+      }
     }
   });
 

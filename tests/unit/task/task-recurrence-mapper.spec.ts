@@ -54,6 +54,8 @@ function createTaskSource(
     occurrenceKey: '2026-10-05',
     team: null,
     category: null,
+    reviewer: null,
+    batch: null,
     createdBy: {
       publicId: '22222222-2222-4222-8222-222222222222',
       name: 'Owner',

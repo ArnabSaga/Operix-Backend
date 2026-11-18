@@ -9,6 +9,7 @@ import { createOperixSeedAuth } from '../../../../src/modules/auth/auth.factory'
 import { APP_ERROR_CODE } from '../../../../src/shared/errors/app-error-code.constant';
 import { getTestDatabaseUrl } from '../../../support/database/test-database-url';
 import { createTestApplication } from '../../../support/server/create-test-application';
+import { signInAndCaptureCookie } from '../../../support/auth/session-client';
 
 describe('Auth integration', () => {
   let app: NestExpressApplication | undefined;
@@ -87,14 +88,19 @@ describe('Auth integration', () => {
         password: 'safe-password',
         name: 'Public Signup',
       })
-      .expect(403);
+      .expect(400)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          code: 'EMAIL_PASSWORD_SIGN_UP_DISABLED',
+        });
+      });
   });
 
   it('signs in, reads the Better Auth session, returns Operix viewer, and signs out', async () => {
     const testApp = getApplication(app);
-    const agent = request.agent(testApp.getHttpServer());
+    const server = testApp.getHttpServer();
 
-    await agent
+    await request(server)
       .get('/api/v1/viewer/me')
       .expect(401)
       .expect((response) => {
@@ -103,16 +109,14 @@ describe('Auth integration', () => {
         });
       });
 
-    await agent
-      .post('/api/v1/auth/sign-in/email')
-      .send({
-        email: seededEmail,
-        password: seededPassword,
-      })
-      .expect(200);
+    const cookie = await signInAndCaptureCookie(server, {
+      email: seededEmail!,
+      password: seededPassword,
+    });
 
-    const sessionResponse = await agent
+    const sessionResponse = await request(server)
       .get('/api/v1/auth/get-session')
+      .set('Cookie', cookie)
       .expect(200);
 
     expect(sessionResponse.body).toMatchObject({
@@ -121,8 +125,9 @@ describe('Auth integration', () => {
       },
     });
 
-    await agent
+    await request(server)
       .get('/api/v1/viewer/me')
+      .set('Cookie', cookie)
       .expect(200)
       .expect((response) => {
         const body = response.body as unknown;
@@ -139,16 +144,21 @@ describe('Auth integration', () => {
         expect(viewer.scope).toEqual({ type: 'GLOBAL' });
       });
 
-    await agent.post('/api/v1/auth/sign-out').expect(200);
+    await request(server)
+      .post('/api/v1/auth/sign-out')
+      .set('Cookie', cookie)
+      .expect(200);
 
-    const signedOutSession = await agent
+    const signedOutSession = await request(server)
       .get('/api/v1/auth/get-session')
+      .set('Cookie', cookie)
       .expect(200);
 
     expect(signedOutSession.body).toBeNull();
 
-    await agent
+    await request(server)
       .get('/api/v1/viewer/me')
+      .set('Cookie', cookie)
       .expect(401)
       .expect((response) => {
         expect(response.body).toMatchObject({

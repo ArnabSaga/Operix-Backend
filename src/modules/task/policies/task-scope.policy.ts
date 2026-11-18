@@ -12,9 +12,22 @@ export function buildTaskScopeWhere(
 
   if (viewer.role === UserRole.ADMIN) {
     return {
-      teamId: {
-        in: viewer.scope.type === 'ADMIN' ? viewer.scope.teamIds : [],
-      },
+      OR: [
+        {
+          teamId: {
+            in: viewer.scope.type === 'ADMIN' ? viewer.scope.teamIds : [],
+          },
+        },
+        {
+          assignments: {
+            some: {
+              responsibleUserId: viewer.userId,
+              unassignedAt: null,
+            },
+          },
+        },
+        { reviewerUserId: viewer.userId },
+      ],
     };
   }
 
@@ -37,6 +50,10 @@ export function buildTaskArtifactScopeWhere(
       { scope: TaskScope.GLOBAL },
       {
         scope: TaskScope.TEAM,
+        AND: [buildTaskScopeWhere(viewer)],
+      },
+      {
+        scope: TaskScope.INDIVIDUAL,
         AND: [buildTaskScopeWhere(viewer)],
       },
     ],

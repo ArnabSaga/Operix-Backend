@@ -10,6 +10,8 @@ model Notification {
   targetId   String?
   targetPublicId String? @map("target_public_id") @db.Uuid
   readAt     DateTime?
+  resolvedAt DateTime?
+  resolution String?
   createdAt  DateTime  @default(now())
 
   receiver User  @relation("ReceivedNotifications", fields: [receiverId], references: [id], onDelete: Cascade)
@@ -20,5 +22,6 @@ model Notification {
   @@index([type, createdAt])
   @@index([targetType, targetId])
   @@index([targetType, targetPublicId])
+  @@index([targetType, targetId, resolvedAt])
   @@map("notification")
 }

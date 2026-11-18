@@ -11,14 +11,21 @@ import { USER_MANAGEMENT_ERROR_CODE } from '../../../../src/modules/user-managem
 import { APP_ERROR_CODE } from '../../../../src/shared/errors/app-error-code.constant';
 import { getTestDatabaseUrl } from '../../../support/database/test-database-url';
 import { createTestApplication } from '../../../support/server/create-test-application';
+import {
+  signInAs,
+  type SessionClient,
+} from '../../../support/auth/session-client';
+
+const jestApi: typeof jest = import.meta.jest as unknown as typeof jest;
+jestApi.setTimeout(60_000);
 
 describe('User and Team management integration', () => {
   let app: NestExpressApplication | undefined;
   let prisma: PrismaService | undefined;
-  let superAdminAgent: ReturnType<typeof request.agent> | undefined;
-  let adminAAgent: ReturnType<typeof request.agent> | undefined;
-  let adminBAgent: ReturnType<typeof request.agent> | undefined;
-  let memberAgent: ReturnType<typeof request.agent> | undefined;
+  let superAdminAgent: SessionClient | undefined;
+  let adminAAgent: SessionClient | undefined;
+  let adminBAgent: SessionClient | undefined;
+  let memberAgent: SessionClient | undefined;
   const runId = randomUUID();
   const password = 'integration-password';
   const emails = {
@@ -87,22 +94,28 @@ describe('User and Team management integration', () => {
     await app?.close();
 
     if (prisma) {
+      // `ids.*` hold public UUIDs (the API only exposes public ids), so direct
+      // Prisma cleanup must resolve internal ids. Scoping by the run's email
+      // suffix also covers users created by individual tests below.
+      const runUsers = await prisma.user.findMany({
+        where: { email: { endsWith: `-${runId}@operix.test` } },
+        select: { id: true },
+      });
+      const runUserIds = runUsers.map((user) => user.id);
+
       await prisma.teamMember.deleteMany({
         where: {
-          OR: [{ memberId: ids.memberA }, { memberId: ids.memberB }],
+          OR: [
+            { memberId: { in: runUserIds } },
+            { team: { adminId: { in: runUserIds } } },
+          ],
         },
       });
       await prisma.team.deleteMany({
-        where: {
-          OR: [{ id: ids.teamA }, { id: ids.teamB }],
-        },
+        where: { adminId: { in: runUserIds } },
       });
       await prisma.user.deleteMany({
-        where: {
-          email: {
-            in: Object.values(emails),
-          },
-        },
+        where: { id: { in: runUserIds } },
       });
       await prisma.onModuleDestroy();
     }
@@ -293,7 +306,7 @@ describe('User and Team management integration', () => {
 
     await prismaOrThrow().user.update({
       where: {
-        id: ids.adminA,
+        publicId: ids.adminA,
       },
       data: {
         status: UserStatus.INACTIVE,
@@ -432,26 +445,15 @@ describe('User and Team management integration', () => {
 
     const membershipCount = await prismaOrThrow().teamMember.count({
       where: {
-        memberId,
+        member: { publicId: memberId },
       },
     });
 
     expect(membershipCount).toBe(1);
   });
 
-  async function signIn(
-    email: string,
-  ): Promise<ReturnType<typeof request.agent>> {
-    const agent = request.agent(getApp().getHttpServer());
-    await agent
-      .post('/api/v1/auth/sign-in/email')
-      .send({
-        email,
-        password,
-      })
-      .expect(200);
-
-    return agent;
+  async function signIn(email: string): Promise<SessionClient> {
+    return signInAs(getApp().getHttpServer(), { email, password });
   }
 
   function getApp(): NestExpressApplication {
@@ -470,7 +472,7 @@ describe('User and Team management integration', () => {
     return prisma;
   }
 
-  function getSuperAdminAgent(): ReturnType<typeof request.agent> {
+  function getSuperAdminAgent(): SessionClient {
     if (!superAdminAgent) {
       throw new Error('Super Admin agent was not initialized');
     }
@@ -478,7 +480,7 @@ describe('User and Team management integration', () => {
     return superAdminAgent;
   }
 
-  function getAdminAAgent(): ReturnType<typeof request.agent> {
+  function getAdminAAgent(): SessionClient {
     if (!adminAAgent) {
       throw new Error('Admin A agent was not initialized');
     }
@@ -486,7 +488,7 @@ describe('User and Team management integration', () => {
     return adminAAgent;
   }
 
-  function getAdminBAgent(): ReturnType<typeof request.agent> {
+  function getAdminBAgent(): SessionClient {
     if (!adminBAgent) {
       throw new Error('Admin B agent was not initialized');
     }
@@ -494,7 +496,7 @@ describe('User and Team management integration', () => {
     return adminBAgent;
   }
 
-  function getMemberAgent(): ReturnType<typeof request.agent> {
+  function getMemberAgent(): SessionClient {
     if (!memberAgent) {
       throw new Error('Member agent was not initialized');
     }

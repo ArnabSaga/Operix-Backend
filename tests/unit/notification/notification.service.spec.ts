@@ -31,6 +31,8 @@ function notification(overrides = {}) {
     targetType: 'TASK',
     targetId: 'task-a',
     readAt: null,
+    resolvedAt: null,
+    resolution: null,
     createdAt,
     actor: {
       id: 'admin-a',
@@ -85,6 +87,7 @@ describe('NotificationService', () => {
         {
           ...withoutActorId(notification()),
           isRead: false,
+          actionState: 'ACTIONABLE',
         },
       ],
       meta: {

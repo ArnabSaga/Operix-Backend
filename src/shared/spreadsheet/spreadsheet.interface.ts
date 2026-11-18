@@ -54,7 +54,37 @@ export interface SpreadsheetWriteCell {
   value: string | number | boolean | Date | null;
 }
 
+export interface SpreadsheetTextLimits {
+  maxSheets: number;
+  maxRowsPerSheet: number;
+  maxColumnsPerSheet: number;
+  maxCellLength: number;
+}
+
+export interface SpreadsheetTextSheet {
+  name: string;
+  rows: string[];
+}
+
+/**
+ * Bounded text view of a workbook. Unlike `SpreadsheetWorkbook`, this never
+ * expands the full `!ref` range, so a crafted sheet cannot force a huge
+ * allocation just by declaring a far-away cell.
+ */
+export interface SpreadsheetTextResult {
+  sheets: SpreadsheetTextSheet[];
+  totalSheets: number;
+  truncatedSheets: boolean;
+  truncatedRows: boolean;
+  truncatedColumns: boolean;
+  truncatedCells: boolean;
+}
+
 export interface SpreadsheetAdapter {
   parse(buffer: Buffer): SpreadsheetWorkbook;
+  readText(
+    buffer: Buffer,
+    limits: SpreadsheetTextLimits,
+  ): SpreadsheetTextResult;
   write(workbook: SpreadsheetWriteWorkbook): Buffer;
 }

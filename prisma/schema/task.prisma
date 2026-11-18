@@ -9,8 +9,69 @@ model TaskCategory {
 
   tasks       Task[]
   recurrences TaskRecurrence[]
+  batchRecurrences TaskBatchRecurrence[]
 
   @@map("task_category")
+}
+
+model TaskBatch {
+  id             String   @id @default(cuid())
+  publicId       String   @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
+  createdById    String
+  recipientCount Int
+  scope          TaskBatchScope
+  teamId         String?
+  recurrenceId   String?
+  occurrenceKey  String?
+  createdAt      DateTime @default(now())
+
+  createdBy  User                 @relation("TaskBatchCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  team       Team?                @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  recurrence TaskBatchRecurrence? @relation(fields: [recurrenceId], references: [id], onDelete: Restrict)
+  tasks      Task[]
+
+  @@unique([recurrenceId, occurrenceKey])
+  @@index([createdById, createdAt])
+  @@index([scope, createdAt])
+  @@index([teamId])
+  @@index([recurrenceId])
+  @@map("task_batch")
+}
+
+model TaskBatchRecurrence {
+  id                       String                       @id @default(cuid())
+  publicId                 String                       @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
+  createdById              String
+  scope                    TaskBatchScope
+  teamId                   String?
+  categoryId               String?
+  title                    String
+  description              String?
+  remarks                  String?
+  priority                 TaskPriority                 @default(MEDIUM)
+  frequency                TaskRecurrenceFrequency
+  anchorDueAt              DateTime
+  anchorLocalDay           Int?
+  anchorLocalWeekday       Int?
+  anchorLocalTime          String
+  nextOccurrenceAt         DateTime
+  reminderLeadMinutes      Int?
+  isActive                 Boolean                      @default(true)
+  lastBlockedOccurrenceKey String?
+  lastBlockedReason        TaskRecurrenceBlockedReason?
+  lastBlockedNotifiedAt    DateTime?
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+
+  createdBy User          @relation("TaskBatchRecurrenceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  team      Team?         @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  category  TaskCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  batches   TaskBatch[]
+
+  @@index([isActive, nextOccurrenceAt])
+  @@index([createdById])
+  @@index([teamId])
+  @@map("task_batch_recurrence")
 }
 
 model Task {
@@ -33,6 +94,8 @@ model Task {
   scheduledStartAt DateTime?
   recurrenceId     String?
   occurrenceKey    String?
+  batchId          String?
+  reviewerUserId   String?
 
   teamId      String?
   categoryId  String?
@@ -44,6 +107,8 @@ model Task {
   team      Team?         @relation(fields: [teamId], references: [id], onDelete: Restrict)
   category  TaskCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   createdBy User          @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  reviewer User?          @relation("TaskReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
+  batch    TaskBatch?     @relation(fields: [batchId], references: [id], onDelete: Restrict)
 
   assignments   TaskAssignment[]    @relation("TaskAssignments")
   statusHistory TaskStatusHistory[]
@@ -62,6 +127,8 @@ model Task {
   @@index([dueAt])
   @@index([createdById])
   @@index([categoryId])
+  @@index([batchId])
+  @@index([reviewerUserId])
   @@map("task")
 }
 

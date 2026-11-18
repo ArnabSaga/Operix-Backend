@@ -1,26 +1,21 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
-  TaskCompletionMode,
   TaskReviewAction,
   TaskStatus,
-  UserRole,
 } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { writeActivity } from '../../shared/activity/activity-write.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import { runSerializableTransaction } from '../../shared/database/serializable-transaction.js';
-import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
-import { AppException } from '../../shared/errors/app.exception.js';
 import { createNotification } from '../../shared/notification/notification-write.js';
 import type { CreateReviewDto } from './dto/create-review.dto.js';
-import {
-  REVIEW_ACTIVITY,
-  REVIEW_ERROR_CODE,
-  REVIEW_NOTIFICATION,
-} from './review.constant.js';
+import { REVIEW_ACTIVITY, REVIEW_NOTIFICATION } from './review.constant.js';
 import type { SafeReviewResponse } from './review.interface.js';
 import { reviewSelect } from './review.select.js';
-import { SUBMISSION_ERROR_CODE } from './submission.constant.js';
+import {
+  assertReviewAuthority,
+  resolveReviewableSubmission,
+} from './submission-review.policy.js';
 
 @Injectable()
 export class ReviewService {
@@ -31,78 +26,14 @@ export class ReviewService {
     submissionId: string,
     dto: CreateReviewDto,
   ): Promise<SafeReviewResponse> {
-    this.assertAdmin(viewer);
+    assertReviewAuthority(viewer);
 
     return runSerializableTransaction(this.prisma, async (tx) => {
-      const submission = await tx.taskSubmission.findFirst({
-        where: {
-          publicId: submissionId,
-        },
-        select: {
-          id: true,
-          taskId: true,
-          submittedById: true,
-          version: true,
-          task: {
-            select: {
-              id: true,
-              status: true,
-              completionMode: true,
-              team: { select: { adminId: true } },
-            },
-          },
-        },
-      });
-
-      if (!submission) {
-        throw this.submissionNotFound();
-      }
-
-      if (
-        submission.task.completionMode === TaskCompletionMode.DIRECT ||
-        submission.task.team === null
-      ) {
-        throw this.reviewNotAllowed();
-      }
-      if (submission.task.team.adminId !== viewer.userId) {
-        throw this.submissionNotFound();
-      }
-
-      const latestSubmission = await tx.taskSubmission.findFirst({
-        where: {
-          taskId: submission.taskId,
-        },
-        orderBy: {
-          version: 'desc',
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      if (latestSubmission?.id !== submission.id) {
-        throw this.reviewNotAllowed();
-      }
-
-      const existingReview = await tx.taskReview.findFirst({
-        where: {
-          submissionId: submission.id,
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      if (existingReview) {
-        throw this.reviewNotAllowed();
-      }
-
-      if (
-        submission.task.status !== TaskStatus.SUBMITTED &&
-        submission.task.status !== TaskStatus.RESUBMITTED
-      ) {
-        throw this.reviewNotAllowed();
-      }
+      const submission = await resolveReviewableSubmission(
+        tx,
+        viewer,
+        submissionId,
+      );
 
       const reviewStartedAt = new Date();
 
@@ -221,32 +152,6 @@ export class ReviewService {
         createdAt: review.createdAt,
       };
     });
-  }
-
-  private assertAdmin(viewer: OperixViewer): void {
-    if (viewer.role !== UserRole.ADMIN) {
-      throw new AppException(
-        HttpStatus.FORBIDDEN,
-        APP_ERROR_CODE.FORBIDDEN,
-        'You do not have access to this resource.',
-      );
-    }
-  }
-
-  private submissionNotFound(): AppException {
-    return new AppException(
-      HttpStatus.NOT_FOUND,
-      SUBMISSION_ERROR_CODE.SUBMISSION_NOT_FOUND,
-      'Submission not found.',
-    );
-  }
-
-  private reviewNotAllowed(): AppException {
-    return new AppException(
-      HttpStatus.CONFLICT,
-      REVIEW_ERROR_CODE.REVIEW_NOT_ALLOWED,
-      'Submission is not reviewable.',
-    );
   }
 }
 

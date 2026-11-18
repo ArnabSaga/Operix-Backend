@@ -11,6 +11,12 @@ export const REGISTRATION_NOTIFICATION = {
   REQUESTED: 'REGISTRATION_REQUESTED',
 } as const;
 
+/**
+ * Value stored in `notification.targetType` and used by the purge and
+ * resolution paths to find notifications about a registration request.
+ */
+export const REGISTRATION_NOTIFICATION_TARGET = 'REGISTRATION_REQUEST';
+
 export const REGISTRATION_ERROR_CODE = {
   NOT_FOUND: 'REGISTRATION_REQUEST_NOT_FOUND',
   NOT_PENDING: 'REGISTRATION_REQUEST_NOT_PENDING',
@@ -20,6 +26,7 @@ export const REGISTRATION_ERROR_CODE = {
   TEAM_NOT_FOUND: 'REGISTRATION_TEAM_NOT_FOUND',
   EMAIL_UNAVAILABLE: 'REGISTRATION_EMAIL_UNAVAILABLE',
   SETUP_ALREADY_COMPLETED: 'REGISTRATION_SETUP_ALREADY_COMPLETED',
+  SETUP_RESEND_COOLDOWN: 'REGISTRATION_SETUP_RESEND_COOLDOWN',
   RATE_LIMITED: 'RATE_LIMITED',
 } as const;
 
@@ -29,6 +36,13 @@ export const REGISTRATION_GENERIC_RESPONSE = {
 } as const;
 
 export const REGISTRATION_APPROVAL_CLAIM_TIMEOUT_MS = 5 * 60 * 1000;
+/**
+ * Anti-abuse window between individual setup-email resends.
+ *
+ * The claim is written before the SMTP send, so a failed send still consumes
+ * the window. It is not proof of successful delivery.
+ */
+export const REGISTRATION_SETUP_RESEND_COOLDOWN_MS = 60 * 1000;
 export const REGISTRATION_RATE_LIMIT = 5;
 export const REGISTRATION_REJECTION_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 export const REGISTRATION_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;

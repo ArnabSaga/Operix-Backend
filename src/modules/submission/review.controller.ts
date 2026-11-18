@@ -18,7 +18,7 @@ export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
 
   @Post()
-  @RequireRoles(UserRole.ADMIN)
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   createReview(
     @CurrentViewer() viewer: OperixViewer,
     @Param('submissionId', PublicIdPipe) submissionId: string,
