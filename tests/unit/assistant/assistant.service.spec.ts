@@ -6,6 +6,8 @@ import {
   UserStatus,
 } from '../../../generated/prisma/enums';
 import { AssistantService } from '../../../src/modules/assistant/assistant.service';
+import type { ApplicationConfiguration } from '../../../src/config/configuration';
+import type { ConfigService } from '@nestjs/config';
 import type { DashboardService } from '../../../src/modules/dashboard/dashboard.service';
 import type { TaskService } from '../../../src/modules/task/task.service';
 import type { AiService } from '../../../src/shared/ai/ai.service';
@@ -86,7 +88,7 @@ function harness(outputs: string[], total = 1) {
           ],
     meta: { page: 1, limit: 10, total, totalPages: total === 0 ? 0 : 1 },
   });
-  const getOperationalSnapshot = jestApi.fn();
+  const getAiOperationalSnapshot = jestApi.fn();
   const service = new AssistantService(
     {
       assertEnabled: jestApi.fn(),
@@ -95,9 +97,18 @@ function harness(outputs: string[], total = 1) {
       generate,
     } as unknown as AiService,
     { listTasks } as unknown as TaskService,
-    { getOperationalSnapshot } as unknown as DashboardService,
+    { getAiOperationalSnapshot } as unknown as DashboardService,
+    {
+      get: () => 'Asia/Dhaka',
+    } as unknown as ConfigService<ApplicationConfiguration, true>,
   );
-  return { service, generate, requests, listTasks, getOperationalSnapshot };
+  return {
+    service,
+    generate,
+    requests,
+    listTasks,
+    getAiOperationalSnapshot,
+  };
 }
 
 describe('AssistantService', () => {
@@ -134,7 +145,7 @@ describe('AssistantService', () => {
       'Give me an operations summary',
     );
     expect(result.status).toBe('UNSUPPORTED');
-    expect(test.getOperationalSnapshot).not.toHaveBeenCalled();
+    expect(test.getAiOperationalSnapshot).not.toHaveBeenCalled();
     expect(test.generate).toHaveBeenCalledTimes(1);
   });
 

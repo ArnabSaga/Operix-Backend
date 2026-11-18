@@ -28,6 +28,12 @@ function snapshot(): DashboardOperationalSnapshot {
     overdueTasks: index,
     statusCounts,
     activePriorityCounts: priorityCounts,
+    monthly: {
+      assigned: index,
+      completed: 0,
+      onTime: 0,
+      overdueCreated: 0,
+    },
   }));
 
   return {
@@ -87,6 +93,11 @@ function snapshot(): DashboardOperationalSnapshot {
         reviewQueueTasks: 0,
         revisionRequiredTasks: 0,
         statusCounts,
+        monthly: {
+          assigned: index,
+          completed: 0,
+          reviewsCompleted: 0,
+        },
       })),
       byMember: {
         data: members,
@@ -120,11 +131,55 @@ describe('buildDashboardAiContext', () => {
     });
     expect(built.context.completionTrend).toMatchObject({
       completedInWindow: 5,
-      recent7DayCompleted: 5,
-      previous7DayCompleted: 0,
+      recentWindowDays: 7,
+      recentWindowCompleted: 5,
+      priorWindowDays: 7,
+      priorWindowCompleted: 0,
       zeroCompletionDays: 29,
       peakDay: { date: '2026-10-30', completedTasks: 5 },
     });
+  });
+
+  it('reports a one-day window as one recent day, not a seven-day figure', () => {
+    const base = snapshot();
+    const built = buildDashboardAiContext({
+      ...base,
+      days: 1,
+      trends: {
+        ...base.trends,
+        completionTrend: [{ date: 'today', completedTasks: 3 }],
+      },
+    });
+
+    expect(built.context.period).toBe('TODAY');
+    expect(built.context.completionTrend).toMatchObject({
+      completedInWindow: 3,
+      recentWindowDays: 1,
+      recentWindowCompleted: 3,
+      priorWindowDays: null,
+      priorWindowCompleted: null,
+    });
+  });
+
+  it('labels a 90-day window truthfully instead of falling back to 7 days', () => {
+    const base = snapshot();
+    const built = buildDashboardAiContext({
+      ...base,
+      days: 90,
+      trends: {
+        ...base.trends,
+        completionTrend: Array.from({ length: 90 }, (_, index) => ({
+          date: `day-${index}`,
+          completedTasks: 0,
+        })),
+      },
+    });
+
+    expect(built.context.period).toBe('LAST_90_DAYS');
+    expect(built.context.trendDays).toBe(90);
+    expect(built.context.completionTrend.points).toHaveLength(90);
+    expect(built.context.completionTrend.recentWindowDays).toBe(7);
+    expect(built.context.completionTrend.priorWindowDays).toBe(7);
   });
 
   it('caps Team and Member context and adds deterministic limitations', () => {

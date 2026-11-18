@@ -39,6 +39,7 @@ export const reviewableSubmissionSelect = {
       status: true,
       dueAt: true,
       completionMode: true,
+      reviewerUserId: true,
       team: { select: { adminId: true, publicId: true, name: true } },
     },
   },
@@ -59,12 +60,14 @@ export type SubmissionReviewClient = Pick<
 >;
 
 /**
- * Exactly the review authority the workflow grants: an Admin whose Team
- * administers the Task. Super Admin and Member are denied deliberately, because
- * neither can create a Review.
+ * Role gate for review: `ADMIN` or `SUPER_ADMIN`. `MEMBER` is denied.
+ *
+ * The authoritative check is the explicit `Task.reviewerUserId` match inside
+ * `resolveReviewableSubmission`, so a Super Admin can only review work for which
+ * they are the named reviewer. Neither role bypasses that match.
  */
 export function assertReviewAuthority(viewer: OperixViewer): void {
-  if (viewer.role !== UserRole.ADMIN) {
+  if (viewer.role !== UserRole.ADMIN && viewer.role !== UserRole.SUPER_ADMIN) {
     throw new AppException(
       HttpStatus.FORBIDDEN,
       APP_ERROR_CODE.FORBIDDEN,
@@ -100,12 +103,12 @@ export async function resolveReviewableSubmission(
 
   if (
     submission.task.completionMode === TaskCompletionMode.DIRECT ||
-    submission.task.team === null
+    submission.task.reviewerUserId === null
   ) {
     throw reviewNotAllowed();
   }
 
-  if (submission.task.team.adminId !== viewer.userId) {
+  if (submission.task.reviewerUserId !== viewer.userId) {
     throw submissionNotFound();
   }
 

@@ -84,6 +84,7 @@ function createService(prismaOverrides = {}) {
     },
     managementReport: {
       groupBy: jestApi.fn().mockResolvedValue([]),
+      count: jestApi.fn().mockResolvedValue(0),
     },
     teamMember: {
       count: jestApi.fn().mockResolvedValue(0),
@@ -95,6 +96,9 @@ function createService(prismaOverrides = {}) {
     taskAssignment: {
       findMany: jestApi.fn().mockResolvedValue([]),
     },
+    taskReview: {
+      findMany: jestApi.fn().mockResolvedValue([]),
+    },
     ...prismaOverrides,
   };
   const activityService = {
@@ -103,6 +107,9 @@ function createService(prismaOverrides = {}) {
   const notificationService = {
     getUnreadCount: jestApi.fn().mockResolvedValue({ count: 3 }),
     listPreview: jestApi.fn().mockResolvedValue([{ id: 'notification-a' }]),
+  };
+  const configService = {
+    get: jestApi.fn().mockReturnValue('Asia/Dhaka'),
   };
 
   return {
@@ -113,6 +120,7 @@ function createService(prismaOverrides = {}) {
       prisma as never,
       activityService as never,
       notificationService as never,
+      configService as never,
     ),
   };
 }
@@ -126,7 +134,7 @@ describe('DashboardService', () => {
     jestApi.useRealTimers();
   });
 
-  it('builds Super Admin overview from global data and zero-filled report statuses', async () => {
+  it('builds Super Admin overview from global data with a current-month report breakdown', async () => {
     const { service, prisma, activityService } = createService({
       user: {
         count: jestApi.fn().mockResolvedValueOnce(2).mockResolvedValueOnce(10),
@@ -160,6 +168,7 @@ describe('DashboardService', () => {
             _count: { status: 1 },
           },
         ]),
+        count: jestApi.fn().mockResolvedValueOnce(3).mockResolvedValueOnce(1),
       },
     });
 
@@ -203,6 +212,25 @@ describe('DashboardService', () => {
       createViewer(UserRole.SUPER_ADMIN),
       5,
     );
+    expect(prisma.managementReport.groupBy).toHaveBeenCalledWith({
+      by: ['status'],
+      where: {
+        createdAt: {
+          // 2026-08-01 00:00 in Asia/Dhaka.
+          gte: new Date('2026-07-31T18:00:00.000Z'),
+          // 2026-09-01 00:00 in Asia/Dhaka.
+          lt: new Date('2026-08-31T18:00:00.000Z'),
+        },
+      },
+      _count: { status: true },
+    });
+    // Pending-review KPIs stay live and are not scoped to the month.
+    expect(prisma.managementReport.count).toHaveBeenCalledWith({
+      where: { status: ManagementReportStatus.SUBMITTED },
+    });
+    expect(prisma.managementReport.count).toHaveBeenCalledWith({
+      where: { status: ManagementReportStatus.REVISION_REQUIRED },
+    });
   });
 
   it('keeps Admin Task scope and authored Report counters separate', async () => {
@@ -487,15 +515,146 @@ describe('DashboardService', () => {
     });
   });
 
-  it('uses UTC zero-filled trend buckets and current-assignment Member scope', async () => {
-    const { service, prisma } = createService({
+  it('keeps current workload live while monthly throughput uses the business month', async () => {
+    const { service } = createService({
+      taskAssignment: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValueOnce([
+            {
+              responsibleUserId: 'member-a',
+              task: task({
+                id: 'carried-over-overdue',
+                status: TaskStatus.IN_PROGRESS,
+                dueAt: new Date('2026-07-15T10:00:00.000Z'),
+              }),
+            },
+          ])
+          .mockResolvedValueOnce([
+            { responsibleUserId: 'member-a' },
+            { responsibleUserId: 'member-a' },
+          ]),
+      },
       task: {
+        findMany: jestApi.fn().mockResolvedValue([
+          {
+            createdAt: new Date('2026-08-05T10:00:00.000Z'),
+            completedAt: new Date('2026-08-10T10:00:00.000Z'),
+            dueAt: new Date('2026-08-12T10:00:00.000Z'),
+            status: TaskStatus.COMPLETED,
+            assignments: [{ responsibleUserId: 'member-a' }],
+          },
+          {
+            createdAt: new Date('2026-08-04T10:00:00.000Z'),
+            completedAt: null,
+            dueAt: new Date('2026-08-06T10:00:00.000Z'),
+            status: TaskStatus.IN_PROGRESS,
+            assignments: [{ responsibleUserId: 'member-a' }],
+          },
+        ]),
+      },
+    });
+
+    await expect(
+      service.getWorkload(createViewer(UserRole.MEMBER), {}),
+    ).resolves.toMatchObject({
+      self: {
+        // A Task that went overdue before this month is still current workload.
+        activeTasks: 1,
+        overdueTasks: 1,
+        monthly: {
+          assigned: 2,
+          completed: 1,
+          onTime: 1,
+          overdueCreated: 1,
+        },
+      },
+    });
+  });
+
+  it('reports Team monthly throughput alongside live Team workload', async () => {
+    const { service } = createService({
+      team: {
+        findMany: jestApi.fn().mockResolvedValue([
+          {
+            id: 'team-a',
+            publicId: 'team-a',
+            name: 'Alpha',
+            adminId: 'admin-a',
+            admin: { publicId: 'admin-a' },
+          },
+        ]),
+      },
+      teamMember: {
         findMany: jestApi
           .fn()
           .mockResolvedValue([
-            { completedAt: new Date('2026-08-16T00:01:00.000Z') },
-            { completedAt: new Date('2026-08-18T00:01:00.000Z') },
+            { teamId: 'team-a', member: { status: UserStatus.ACTIVE } },
           ]),
+        count: jestApi.fn(),
+      },
+      task: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValueOnce([
+            {
+              teamId: 'team-a',
+              ...task({
+                id: 'carried-over-overdue',
+                status: TaskStatus.IN_PROGRESS,
+                dueAt: new Date('2026-07-01T10:00:00.000Z'),
+              }),
+            },
+          ])
+          .mockResolvedValueOnce([{ teamId: 'team-a' }]),
+      },
+      taskAssignment: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([{ task: { teamId: 'team-a' } }]),
+      },
+      taskReview: {
+        findMany: jestApi
+          .fn()
+          .mockResolvedValue([
+            { submission: { task: { teamId: 'team-a' } } },
+            { submission: { task: { teamId: 'team-a' } } },
+          ]),
+      },
+      user: {
+        count: jestApi.fn(),
+        findUnique: jestApi.fn(),
+        findMany: jestApi.fn().mockResolvedValue([]),
+      },
+    });
+
+    await expect(
+      service.getWorkload(createViewer(UserRole.SUPER_ADMIN), {}),
+    ).resolves.toMatchObject({
+      byTeam: [
+        {
+          teamId: 'team-a',
+          activeTasks: 1,
+          overdueTasks: 1,
+          monthly: {
+            assigned: 1,
+            completed: 1,
+            reviewsCompleted: 2,
+          },
+        },
+      ],
+    });
+  });
+
+  it('uses Asia/Dhaka zero-filled trend buckets and current-assignment Member scope', async () => {
+    const { service, prisma } = createService({
+      task: {
+        findMany: jestApi.fn().mockResolvedValue([
+          { completedAt: new Date('2026-08-16T00:01:00.000Z') },
+          { completedAt: new Date('2026-08-18T00:01:00.000Z') },
+          // 2026-08-18T20:00Z is 2026-08-19 02:00 in Asia/Dhaka.
+          { completedAt: new Date('2026-08-18T20:00:00.000Z') },
+        ]),
       },
     });
 
@@ -507,7 +666,7 @@ describe('DashboardService', () => {
         { date: '2026-08-16', completedTasks: 1 },
         { date: '2026-08-17', completedTasks: 0 },
         { date: '2026-08-18', completedTasks: 1 },
-        { date: '2026-08-19', completedTasks: 0 },
+        { date: '2026-08-19', completedTasks: 1 },
         { date: '2026-08-20', completedTasks: 0 },
         { date: '2026-08-21', completedTasks: 0 },
         { date: '2026-08-22', completedTasks: 0 },
@@ -526,7 +685,8 @@ describe('DashboardService', () => {
           },
           {
             completedAt: {
-              gte: new Date('2026-08-16T00:00:00.000Z'),
+              // 2026-08-16 00:00 in Asia/Dhaka.
+              gte: new Date('2026-08-15T18:00:00.000Z'),
               lte: fixedNow,
             },
           },

@@ -1,5 +1,4 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { UserRole } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { writeActivity } from '../../shared/activity/activity-write.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
@@ -14,7 +13,11 @@ import { safeAttachmentSelect } from '../file/file.select.js';
 import type { SafeAttachmentResponse } from '../file/file.interface.js';
 import { buildTaskArtifactScopeWhere } from './policies/task-scope.policy.js';
 import { TASK_ACTIVITY, TASK_ERROR_CODE } from './task.constant.js';
-import { getTaskAttachmentMutationDecision } from './policies/task-attachment.policy.js';
+import {
+  getTaskAttachmentMutationDecision,
+  TASK_ATTACHMENT_AUTHORITY,
+  type TaskAttachmentMutationAuthority,
+} from './policies/task-attachment.policy.js';
 
 @Injectable()
 export class TaskAttachmentService {
@@ -180,7 +183,7 @@ export class TaskAttachmentService {
           throw this.fileNotFound();
         }
         if (
-          viewer.role === UserRole.MEMBER &&
+          task.authority === TASK_ATTACHMENT_AUTHORITY.RESPONSIBLE_USER &&
           attachment.file.uploadedById !== viewer.userId
         ) {
           throw this.forbidden();
@@ -261,7 +264,7 @@ export class TaskAttachmentService {
     prisma: Pick<PrismaTransactionClient, 'task'>,
     viewer: OperixViewer,
     taskId: string,
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; authority: TaskAttachmentMutationAuthority }> {
     const task = await prisma.task.findFirst({
       where: {
         publicId: taskId,
@@ -312,7 +315,7 @@ export class TaskAttachmentService {
         'Task attachments can no longer be changed.',
       );
     }
-    return { id: task.id };
+    return { id: task.id, authority: decision.authority };
   }
 
   private async assertTaskAttachmentCapacity(

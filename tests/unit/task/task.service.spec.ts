@@ -138,6 +138,8 @@ function baseTask(): SafeTaskResponse {
       designation: null,
     },
     responsible: null,
+    reviewer: null,
+    batchId: null,
     scheduledStartAt: null,
     completionMode: 'REVIEW_REQUIRED' as const,
     completionNote: null,
@@ -176,9 +178,15 @@ describe('task scope policy', () => {
   it('scopes Admin and Member task queries correctly', () => {
     expect(buildTaskScopeWhere(createViewer(UserRole.SUPER_ADMIN))).toEqual({});
     expect(buildTaskScopeWhere(createViewer(UserRole.ADMIN))).toEqual({
-      teamId: {
-        in: ['team-a'],
-      },
+      OR: [
+        { teamId: { in: ['team-a'] } },
+        {
+          assignments: {
+            some: { responsibleUserId: 'admin-a', unassignedAt: null },
+          },
+        },
+        { reviewerUserId: 'admin-a' },
+      ],
     });
     expect(buildTaskScopeWhere(createViewer(UserRole.MEMBER))).toEqual({
       assignments: {
@@ -798,7 +806,17 @@ describe('TaskService', () => {
       where: {
         AND: [
           { publicId: 'task-a' },
-          { teamId: { in: ['team-a'] } },
+          {
+            OR: [
+              { teamId: { in: ['team-a'] } },
+              {
+                assignments: {
+                  some: { responsibleUserId: 'admin-a', unassignedAt: null },
+                },
+              },
+              { reviewerUserId: 'admin-a' },
+            ],
+          },
         ],
       },
       select: {
@@ -1198,7 +1216,17 @@ describe('task query helpers', () => {
       ),
     ).toEqual({
       AND: [
-        { teamId: { in: ['team-a'] } },
+        {
+          OR: [
+            { teamId: { in: ['team-a'] } },
+            {
+              assignments: {
+                some: { responsibleUserId: 'admin-a', unassignedAt: null },
+              },
+            },
+            { reviewerUserId: 'admin-a' },
+          ],
+        },
         { scope: TaskScope.TEAM },
         { team: { publicId: 'team-b' } },
       ],
@@ -1244,7 +1272,17 @@ describe('task query helpers', () => {
 
     expect(where).toEqual({
       AND: [
-        { teamId: { in: ['team-a'] } },
+        {
+          OR: [
+            { teamId: { in: ['team-a'] } },
+            {
+              assignments: {
+                some: { responsibleUserId: 'admin-a', unassignedAt: null },
+              },
+            },
+            { reviewerUserId: 'admin-a' },
+          ],
+        },
         {
           assignments: {
             some: {

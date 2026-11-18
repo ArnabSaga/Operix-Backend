@@ -35,7 +35,7 @@ export class TaskSubmissionController {
   constructor(private readonly submissionService: SubmissionService) {}
 
   @Post()
-  @RequireRoles(UserRole.MEMBER)
+  @RequireRoles(UserRole.MEMBER, UserRole.ADMIN)
   @UseInterceptors(
     FilesInterceptor('files', MAX_ATTACHMENT_FILES, {
       storage: memoryStorage(),

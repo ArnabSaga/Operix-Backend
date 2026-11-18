@@ -562,6 +562,7 @@ Operix-Backend/
 | `pnpm seed:super-admin` | Seed initial Super Admin                       |
 | `pnpm test:unit`        | Run unit tests                                 |
 | `pnpm test:integration` | Run integration tests with `TEST_DATABASE_URL` |
+| `pnpm test:ai:live`     | Run the opt-in real-provider AI smoke          |
 | `pnpm verify`           | Run the full verification pipeline             |
 
 ---
@@ -588,6 +589,18 @@ pnpm test:integration
 ```
 
 Never run destructive integration tests against a development or production database.
+
+The AI live smoke is opt-in and makes real provider calls. It is excluded from
+both Jest runners and runs on plain Node against the compiled build:
+
+```bash
+RUN_LIVE_AI_TESTS=true pnpm test:ai:live
+```
+
+It requires `AI_ENABLED=true`, `GEMINI_API_KEY`, and `GEMINI_MODEL`, prints no
+key, prompt, or raw provider payload, and covers structured output, the shared
+deadline, provider error classification, and every AI feature's real schema and
+validator. Without `RUN_LIVE_AI_TESTS=true` it skips and exits successfully.
 
 ---
 

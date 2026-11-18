@@ -8,6 +8,10 @@ import {
   AI_MIN_RETRY_BUDGET_MS,
 } from '../../shared/ai/ai.constant.js';
 import { AiService } from '../../shared/ai/ai.service.js';
+import {
+  AiRequestTimeoutError,
+  runWithinAiDeadline,
+} from '../../shared/ai/ai-deadline.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import { DocumentTextService } from '../../shared/document-text/document-text.service.js';
 import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
@@ -98,10 +102,22 @@ export class SubmissionAiService {
 
     const today = this.currentBusinessDate(new Date());
 
-    const [attachmentRead, previousRevision] = await Promise.all([
-      this.loadAttachmentEvidence(submission.id),
-      this.loadPreviousRevision(submission),
-    ]);
+    // The shared AI budget covers attachment download and extraction too: a
+    // Submission with several large attachments must not run past
+    // AI_TIMEOUT_MS before the provider is even called.
+    const startedAt = Date.now();
+    const timeoutMs = this.aiService.getTimeoutMs();
+    const deadline = startedAt + timeoutMs;
+    const signal = AbortSignal.timeout(timeoutMs);
+
+    const [attachmentRead, previousRevision] = await this.withinDeadline(
+      Promise.all([
+        this.loadAttachmentEvidence(submission.id, signal, deadline),
+        this.loadPreviousRevision(submission),
+      ]),
+      signal,
+      deadline,
+    );
 
     const prompt = buildSubmissionAiUserPrompt({
       businessDate: today,
@@ -130,11 +146,6 @@ export class SubmissionAiService {
       ],
       submission.version,
     );
-
-    const startedAt = Date.now();
-    const timeoutMs = this.aiService.getTimeoutMs();
-    const deadline = startedAt + timeoutMs;
-    const signal = AbortSignal.timeout(timeoutMs);
 
     let attempts = 0;
     let lastReason: SubmissionAiValidationFailureReason | 'unknown' = 'unknown';
@@ -176,10 +187,10 @@ export class SubmissionAiService {
         this.logger.log(
           JSON.stringify({
             event: 'submission_ai_review_succeeded',
-            feature: 'submission_ai_review',
+            feature: 'SUBMISSION_AI_REVIEW',
             provider: this.aiService.getProviderName(),
             model: generated.model,
-            actorId: viewer.userId,
+            viewerRole: viewer.role,
             submissionId: submission.publicId,
             version: submission.version,
             attempts,
@@ -209,9 +220,9 @@ export class SubmissionAiService {
       this.logger.warn(
         JSON.stringify({
           event: 'submission_ai_review_invalid',
-          feature: 'submission_ai_review',
+          feature: 'SUBMISSION_AI_REVIEW',
           provider: this.aiService.getProviderName(),
-          actorId: viewer.userId,
+          viewerRole: viewer.role,
           submissionId: submission.publicId,
           version: submission.version,
           attempt: attempts,
@@ -225,9 +236,9 @@ export class SubmissionAiService {
     this.logger.warn(
       JSON.stringify({
         event: 'submission_ai_review_rejected',
-        feature: 'submission_ai_review',
+        feature: 'SUBMISSION_AI_REVIEW',
         provider: this.aiService.getProviderName(),
-        actorId: viewer.userId,
+        viewerRole: viewer.role,
         submissionId: submission.publicId,
         version: submission.version,
         attempts,
@@ -245,6 +256,8 @@ export class SubmissionAiService {
 
   private async loadAttachmentEvidence(
     submissionId: string,
+    signal: AbortSignal,
+    deadline: number,
   ): Promise<SubmissionAiAttachmentRead> {
     const rows = await this.prisma.submissionAttachment.findMany({
       where: {
@@ -277,6 +290,10 @@ export class SubmissionAiService {
     let attachmentTextTruncated = false;
 
     for (const row of selectedRows) {
+      if (signal.aborted || deadline - Date.now() <= 0) {
+        throw new AiRequestTimeoutError();
+      }
+
       const { file } = row;
       const base = {
         originalName: file.originalName,
@@ -320,14 +337,20 @@ export class SubmissionAiService {
       }
 
       try {
-        const download = await this.fileStorage.download(file.storageKey);
-        const buffer = await readStreamToBufferWithLimit(
-          download.stream,
-          MAX_FILE_SIZE_BYTES,
+        const download = await runWithinAiDeadline(
+          this.fileStorage.download(file.storageKey),
+          signal,
+          deadline,
         );
-        const extraction = await this.documentTextService.extract(
-          buffer,
-          file.mimeType,
+        const buffer = await runWithinAiDeadline(
+          readStreamToBufferWithLimit(download.stream, MAX_FILE_SIZE_BYTES),
+          signal,
+          deadline,
+        );
+        const extraction = await runWithinAiDeadline(
+          this.documentTextService.extract(buffer, file.mimeType),
+          signal,
+          deadline,
         );
         const allowedChars = Math.min(
           SUBMISSION_AI_ATTACHMENT_TEXT_MAX_LENGTH,
@@ -348,6 +371,12 @@ export class SubmissionAiService {
           extractedText,
         });
       } catch (error) {
+        // A deadline breach ends the whole request; it is not a per-attachment
+        // failure to be counted and skipped.
+        if (error instanceof AiRequestTimeoutError) {
+          throw error;
+        }
+
         if (
           this.getAppErrorCode(error) === APP_ERROR_CODE.DOCUMENT_TEXT_EMPTY
         ) {
@@ -409,6 +438,22 @@ export class SubmissionAiService {
       charactersProvided:
         SUBMISSION_AI_ATTACHMENT_TEXT_COMBINED_MAX_LENGTH - remainingChars,
     };
+  }
+
+  private async withinDeadline<T>(
+    work: Promise<T>,
+    signal: AbortSignal,
+    deadline: number,
+  ): Promise<T> {
+    try {
+      return await runWithinAiDeadline(work, signal, deadline);
+    } catch (error) {
+      if (error instanceof AiRequestTimeoutError) {
+        throw this.timedOut();
+      }
+
+      throw error;
+    }
   }
 
   private getAppErrorCode(error: unknown): string | null {
@@ -507,7 +552,7 @@ export class SubmissionAiService {
   private timedOut(): AppException {
     return new AppException(
       HttpStatus.SERVICE_UNAVAILABLE,
-      APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
+      APP_ERROR_CODE.AI_TIMEOUT,
       'AI request timed out.',
     );
   }

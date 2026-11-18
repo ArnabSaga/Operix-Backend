@@ -10,7 +10,7 @@ import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import { OperixUserThrottlerGuard } from '../../shared/rate-limit/operix-user-throttler.guard.js';
 import { DashboardAiService } from './dashboard-ai.service.js';
-import { DashboardTrendDays } from './dashboard.constant.js';
+import { DASHBOARD_AI_PERIOD } from './dashboard-ai.constant.js';
 import { DashboardAiQueryDto } from './dto/dashboard-ai-query.dto.js';
 
 @ApiTags('dashboard')
@@ -33,7 +33,7 @@ export class DashboardAiController {
   ) {
     return this.dashboardAiService.generate(
       viewer,
-      query.days ?? DashboardTrendDays.SEVEN,
+      query.period ?? DASHBOARD_AI_PERIOD.LAST_7_DAYS,
     );
   }
 }

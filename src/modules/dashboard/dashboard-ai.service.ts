@@ -1,5 +1,7 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../../../generated/prisma/enums.js';
+import type { ApplicationConfiguration } from '../../config/configuration.js';
 import {
   AI_MAX_ATTEMPTS,
   AI_MIN_RETRY_BUDGET_MS,
@@ -15,8 +17,11 @@ import {
   DASHBOARD_AI_MAX_OUTPUT_TOKENS,
   DASHBOARD_AI_MEMBER_LIMIT,
   DASHBOARD_AI_NO_MUTATION_LIMITATION,
+  DASHBOARD_AI_PERIOD,
+  DASHBOARD_AI_PERIOD_DAYS,
   DASHBOARD_AI_SYSTEM_INSTRUCTION,
   DASHBOARD_AI_TEMPERATURE,
+  type DashboardAiPeriod,
 } from './dashboard-ai.constant.js';
 import { buildDashboardAiContext } from './dashboard-ai.context.js';
 import type {
@@ -25,31 +30,38 @@ import type {
 } from './dashboard-ai.interface.js';
 import { buildDashboardAiPrompt } from './dashboard-ai.prompt.js';
 import { parseDashboardAiBrief } from './dashboard-ai.validator.js';
-import { DashboardTrendDays } from './dashboard.constant.js';
 import { DashboardService } from './dashboard.service.js';
 
 @Injectable()
 export class DashboardAiService {
   private readonly logger = new Logger(DashboardAiService.name);
+  private readonly businessTimezone: string;
 
   constructor(
     private readonly dashboardService: DashboardService,
     private readonly aiService: AiService,
-  ) {}
+    configService: ConfigService<ApplicationConfiguration, true>,
+  ) {
+    this.businessTimezone = configService.get('app.businessTimezone', {
+      infer: true,
+    });
+  }
 
   async generate(
     viewer: OperixViewer,
-    days: DashboardTrendDays = DashboardTrendDays.SEVEN,
+    period: DashboardAiPeriod = DASHBOARD_AI_PERIOD.LAST_7_DAYS,
   ): Promise<DashboardAiBriefResponse> {
     this.assertRole(viewer);
     this.aiService.assertEnabled();
 
-    const snapshot = await this.dashboardService.getOperationalSnapshot(
+    const days = DASHBOARD_AI_PERIOD_DAYS[period];
+    const snapshot = await this.dashboardService.getAiOperationalSnapshot(
       viewer,
       days,
       DASHBOARD_AI_MEMBER_LIMIT,
+      this.businessTimezone,
     );
-    const built = buildDashboardAiContext(snapshot);
+    const built = buildDashboardAiContext(snapshot, period);
     const prompt = buildDashboardAiPrompt(built.context);
     const serverLimitations = [
       DASHBOARD_AI_ADVISORY_LIMITATION,
@@ -87,8 +99,8 @@ export class DashboardAiService {
           JSON.stringify({
             event: 'dashboard_ai_brief_succeeded',
             feature: 'DASHBOARD_OPERATIONS_BRIEF',
-            role: viewer.role,
-            days,
+            viewerRole: viewer.role,
+            period,
             provider: this.aiService.getProviderName(),
             model: generated.model,
             attempts,
@@ -98,16 +110,24 @@ export class DashboardAiService {
         );
 
         return {
-          ...parsed.brief,
-          limitations: this.mergeLimitations(
-            serverLimitations,
-            parsed.brief.limitations,
+          snapshot: this.toSnapshot(
+            built.context,
+            snapshot.periodStart,
+            period,
           ),
+          brief: {
+            ...parsed.brief,
+            limitations: this.mergeLimitations(
+              serverLimitations,
+              parsed.brief.limitations,
+            ),
+          },
           meta: {
             provider: this.aiService.getProviderName(),
             model: generated.model,
             attempts,
             latencyMs,
+            period,
             days,
             asOf: built.context.asOf,
           },
@@ -119,8 +139,8 @@ export class DashboardAiService {
         JSON.stringify({
           event: 'dashboard_ai_brief_invalid',
           feature: 'DASHBOARD_OPERATIONS_BRIEF',
-          role: viewer.role,
-          days,
+          viewerRole: viewer.role,
+          period,
           provider: this.aiService.getProviderName(),
           attempt: attempts,
           reason: parsed.reason,
@@ -133,8 +153,8 @@ export class DashboardAiService {
       JSON.stringify({
         event: 'dashboard_ai_brief_rejected',
         feature: 'DASHBOARD_OPERATIONS_BRIEF',
-        role: viewer.role,
-        days,
+        viewerRole: viewer.role,
+        period,
         provider: this.aiService.getProviderName(),
         attempts,
         reason: lastReason,
@@ -168,10 +188,58 @@ export class DashboardAiService {
     );
   }
 
+  /**
+   * KPI keys are role-specific, so the snapshot is resolved from the built
+   * context by name. A renamed key must never silently become a confident `0`:
+   * every miss is collected and logged, and the unit suite asserts that both
+   * role shapes resolve without a miss.
+   */
+  private toSnapshot(
+    context: ReturnType<typeof buildDashboardAiContext>['context'],
+    periodStart: Date | undefined,
+    period: DashboardAiPeriod,
+  ): DashboardAiBriefResponse['snapshot'] {
+    const missing: string[] = [];
+    const value = (...keys: string[]): number => {
+      for (const key of keys) {
+        const candidate = context.kpis[key];
+        if (typeof candidate === 'number') return candidate;
+      }
+
+      missing.push(keys.join('|'));
+      return 0;
+    };
+
+    const snapshot: DashboardAiBriefResponse['snapshot'] = {
+      period,
+      periodStart: (periodStart ?? new Date(context.asOf)).toISOString(),
+      asOf: context.asOf,
+      activeTasks: value('activeTasks', 'activeTeamTasks'),
+      overdueTasks: value('overdueTasks'),
+      reviewQueueTasks: value('taskReviewQueue', 'reviewQueueTasks'),
+      revisionRequiredTasks: value('revisionRequiredTasks'),
+      completedInPeriod: context.completionTrend.completedInWindow,
+    };
+
+    if (missing.length > 0) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'dashboard_ai_snapshot_kpi_missing',
+          feature: 'DASHBOARD_OPERATIONS_BRIEF',
+          viewerRole: context.role,
+          period,
+          missing,
+        }),
+      );
+    }
+
+    return snapshot;
+  }
+
   private timedOut(): AppException {
     return new AppException(
       HttpStatus.SERVICE_UNAVAILABLE,
-      APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
+      APP_ERROR_CODE.AI_TIMEOUT,
       'AI request timed out.',
     );
   }

@@ -2,6 +2,7 @@ import {
   ManagementReportStatus,
   TaskStatus,
 } from '../../../generated/prisma/enums.js';
+import { DateTime } from 'luxon';
 import {
   calculatePerformanceMetrics,
   calculateWorkloadMetrics,
@@ -70,57 +71,43 @@ export function isTaskDueSoon(
   );
 }
 
-export function startOfUtcDay(date: Date): Date {
-  return new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-  );
-}
-
-export function buildUtcTrendBuckets(
-  days: number,
-  now: Date,
-): CompletionTrendPoint[] {
-  const start = startOfUtcTrendWindow(days, now);
-
-  return Array.from({ length: days }, (_, index) => {
-    const bucketDate = new Date(start);
-    bucketDate.setUTCDate(start.getUTCDate() + index);
-
-    return {
-      date: formatUtcDate(bucketDate),
-      completedTasks: 0,
-    };
-  });
-}
-
-export function startOfUtcTrendWindow(days: number, now: Date): Date {
-  const start = startOfUtcDay(now);
-  start.setUTCDate(start.getUTCDate() - (days - 1));
-
-  return start;
-}
-
-export function buildCompletionTrend(
+export function buildZonedCompletionTrend(
   completedTasks: { completedAt: Date | null }[],
   days: number,
   now: Date,
+  timezone: string,
 ): CompletionTrendPoint[] {
-  const buckets = buildUtcTrendBuckets(days, now);
+  const end = DateTime.fromJSDate(now, { zone: 'utc' }).setZone(timezone);
+  const start = end.startOf('day').minus({ days: days - 1 });
+  const buckets = Array.from({ length: days }, (_, index) => ({
+    date: start.plus({ days: index }).toFormat('yyyy-LL-dd'),
+    completedTasks: 0,
+  }));
   const bucketByDate = new Map(buckets.map((bucket) => [bucket.date, bucket]));
 
   for (const task of completedTasks) {
-    if (task.completedAt === null) {
-      continue;
-    }
-
-    const bucket = bucketByDate.get(formatUtcDate(task.completedAt));
-
-    if (bucket) {
-      bucket.completedTasks += 1;
-    }
+    if (task.completedAt === null) continue;
+    const date = DateTime.fromJSDate(task.completedAt, { zone: 'utc' })
+      .setZone(timezone)
+      .toFormat('yyyy-LL-dd');
+    const bucket = bucketByDate.get(date);
+    if (bucket) bucket.completedTasks += 1;
   }
 
   return buckets;
+}
+
+export function startOfZonedTrendWindow(
+  days: number,
+  now: Date,
+  timezone: string,
+): Date {
+  return DateTime.fromJSDate(now, { zone: 'utc' })
+    .setZone(timezone)
+    .startOf('day')
+    .minus({ days: days - 1 })
+    .toUTC()
+    .toJSDate();
 }
 
 export function createTaskStatusCountsFromTasks(
@@ -133,8 +120,4 @@ export function createTaskStatusCountsFromTasks(
   }
 
   return counts;
-}
-
-function formatUtcDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
 }

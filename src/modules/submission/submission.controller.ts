@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { UserRole } from '../../../generated/prisma/enums.js';
 import { AccountStatusGuard } from '../../shared/auth/account-status.guard.js';
@@ -9,6 +9,7 @@ import { ViewerContextGuard } from '../../shared/auth/viewer-context.guard.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import { PublicIdPipe } from '../../shared/identity/public-id.pipe.js';
 import { SubmissionService } from './submission.service.js';
+import { UpdateSubmissionDto } from './dto/update-submission.dto.js';
 
 @ApiTags('submissions')
 @Controller('submissions')
@@ -23,5 +24,15 @@ export class SubmissionController {
     @Param('submissionId', PublicIdPipe) submissionId: string,
   ) {
     return this.submissionService.getSubmission(viewer, submissionId);
+  }
+
+  @Patch(':submissionId')
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MEMBER)
+  updateSubmission(
+    @CurrentViewer() viewer: OperixViewer,
+    @Param('submissionId', PublicIdPipe) submissionId: string,
+    @Body() dto: UpdateSubmissionDto,
+  ) {
+    return this.submissionService.updateSubmission(viewer, submissionId, dto);
   }
 }

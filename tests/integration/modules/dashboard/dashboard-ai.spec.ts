@@ -163,12 +163,12 @@ describe('Dashboard AI operations brief integration', () => {
     const response = await postAs(
       adminCookie,
       '198.51.100.71',
-      '/api/v1/dashboard/ai-brief?days=7',
+      '/api/v1/dashboard/ai-brief?period=LAST_7_DAYS',
     ).expect(201);
     const body = response.body as DashboardAiBriefResponse;
 
     expect(body).toMatchObject({
-      headline: 'Operations remain stable',
+      brief: { headline: 'Operations remain stable' },
       meta: {
         provider: 'gemini',
         model: 'integration-fake-model',
@@ -177,7 +177,7 @@ describe('Dashboard AI operations brief integration', () => {
       },
     });
     expect(body.meta.asOf).toEqual(expect.any(String));
-    expect(body.limitations).toEqual(
+    expect(body.brief.limitations).toEqual(
       expect.arrayContaining([
         expect.stringContaining('advisory AI summary'),
         expect.stringContaining('does not change Tasks'),
@@ -194,24 +194,24 @@ describe('Dashboard AI operations brief integration', () => {
     await postAs(
       superAdminCookie,
       '198.51.100.72',
-      '/api/v1/dashboard/ai-brief?days=30',
+      '/api/v1/dashboard/ai-brief?period=LAST_30_DAYS',
     ).expect(201);
 
     const callsBefore = aiGenerate.mock.calls.length;
     await postAs(
       memberCookie,
       '198.51.100.73',
-      '/api/v1/dashboard/ai-brief?days=7',
+      '/api/v1/dashboard/ai-brief?period=LAST_7_DAYS',
     ).expect(403);
     expect(aiGenerate).toHaveBeenCalledTimes(callsBefore);
   });
 
-  it('rejects unsupported trend periods before provider work', async () => {
+  it('rejects unsupported brief periods before provider work', async () => {
     const callsBefore = aiGenerate.mock.calls.length;
     await postAs(
       adminCookie,
       '198.51.100.74',
-      '/api/v1/dashboard/ai-brief?days=14',
+      '/api/v1/dashboard/ai-brief?period=LAST_90_DAYS',
     ).expect(400);
     expect(aiGenerate).toHaveBeenCalledTimes(callsBefore);
   });

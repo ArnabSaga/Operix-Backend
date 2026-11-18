@@ -59,6 +59,12 @@ enum TaskCompletionMode {
 enum TaskScope {
   TEAM
   GLOBAL
+  INDIVIDUAL
+}
+
+enum TaskBatchScope {
+  TEAM
+  GLOBAL
 }
 
 enum TaskRecurrenceFrequency {

@@ -428,6 +428,39 @@ SUSPENDED
 
 Inactive or suspended accounts must not access protected operational workflows.
 
+### 12.1 Password Recovery
+
+Operix supports two distinct recovery paths and they must not be merged:
+
+```text
+Initial account setup (never completed)
+→ Super Admin resends the setup email
+
+Normal forgotten password (ACTIVE user)
+→ self-service reset from the Sign In page
+```
+
+Self-service recovery:
+
+```text
+Sign In → Forgot password? → enter work email
+→ request a reset link
+→ generic confirmation
+→ open the emailed link → choose a new password → Sign In
+```
+
+Rules:
+
+- the reset request answers identically for known and unknown email addresses;
+- no screen may reveal whether an account exists, and no recovery screen may
+  instruct an ACTIVE user to contact an administrator to regain access;
+- the reset link is single use and expires after 24 hours;
+- an expired or already-used reset link offers a fresh self-service request;
+- an ACTIVE user resetting a forgotten password never enters the first-time
+  activation path;
+- Super Admin setup resend remains limited to accounts that never completed
+  initial password setup.
+
 Future options:
 
 - two-factor authentication;
@@ -690,6 +723,28 @@ and real capacity are not modeled and that the recommendation is not a
 comprehensive employee evaluation. The Admin or Super Admin must explicitly
 select a Member and use the ordinary Assign action. No new performance score is
 created for this feature.
+
+### 20.1.1 AI Generate & Fill for Task Creation
+
+Super Admins and Admins may ask AI to fill a new Task form from a short prompt.
+AI assistance is limited to the Task definition fields the form already accepts:
+title, description, priority, due date, and completion mode.
+
+AI is form assistance only:
+
+- it never creates, assigns, starts, submits, reviews, or distributes a Task;
+- it never sets Assignment Mode, Task Scope, Target Team, Responsible User,
+  Everyone/Standard selection, self claim, distribution, recurrence, reminder, or
+  batch settings, because those remain deliberate human choices;
+- deterministic product rules stay authoritative, so Global and recurring Tasks
+  still complete directly regardless of any AI suggestion;
+- AI-filled values pass through the same validation as manually entered values;
+- the human still clicks Create Task, which uses the ordinary creation endpoint.
+
+Filling is immediate, with no separate review-and-apply step. The user may undo a
+fill, restoring the exact values that existed before it. A failed AI request must
+leave the form untouched, and a superseded request must never overwrite a newer
+result.
 
 ## 20.2 Task V2 Ownership and Recurrence
 
@@ -1095,6 +1150,35 @@ Member D
 
 High performance should not automatically mean high capacity.
 
+## 31.1 Current Workload vs Monthly Throughput
+
+These are two different questions and must never be merged:
+
+```text
+Current workload
+→ what the Member or Team is carrying right now
+
+Monthly throughput
+→ what the Member or Team completed during the current business month
+```
+
+Current workload (`Active`, `Overdue`, `Pending`, `Assigned`, `In Progress`,
+`Capacity`, `Review Queue`, `Revision Required`) is always live. It never resets
+at a month boundary. A Task that went overdue in November is still this Member's
+current overdue workload in December.
+
+Monthly throughput restarts naturally because it is a query window, not a data
+reset:
+
+```text
+Member: Assigned This Month, Completed This Month, On-Time This Month,
+        Overdue Created This Month
+Team:   Tasks Assigned This Month, Tasks Completed This Month,
+        Reviews Completed This Month
+```
+
+No scheduled job clears, deletes, or resets Dashboard counters.
+
 ---
 
 # 32. Super Admin Dashboard
@@ -1275,6 +1359,33 @@ Responses must be authorization-aware.
 
 The same endpoint may return different scope depending on viewer role.
 
+## 36.1 Completion Trends
+
+Completion Trends answers one question: how many authorized Tasks completed on
+each day of the selected window (7, 30, or 90 days).
+
+Canonical completion timestamp:
+
+```text
+Task.completedAt
+```
+
+It is written when a Task review is approved, or supplied by historical import
+for work completed before rollout. `createdAt`, `updatedAt`, and `submittedAt`
+are never used as completion timestamps.
+
+Rules:
+
+- day boundaries and the window start use the configured business timezone
+  (`Asia/Dhaka` by default), never UTC calendar days;
+- every day in the window is returned, including days with zero completions;
+- bucketing is owned by the backend, and the frontend never manufactures
+  buckets;
+- `No completions in this period` appears only when the sum of all buckets is
+  zero;
+- role scope is applied before bucketing, so Admins see Team Tasks, Members see
+  their own assigned Tasks, and the Super Admin sees the organization.
+
 ---
 
 # 37. Real-Time Updates
@@ -1402,7 +1513,37 @@ Additional external channels should only be added when confirmed.
 
 ---
 
-# 40. Reporting — Two Separate Concepts
+## 39.1 Read, Resolution, and Action State
+
+`read` and `resolved` are different concepts and must never be overloaded:
+
+```text
+READ     → the receiver has seen the notification
+RESOLVED → the underlying job no longer requires action
+```
+
+Every notification response exposes an action state:
+
+```text
+ACTIONABLE  → the job still needs a decision; the notification offers Open target
+RESOLVED    → the job completed; the notification stays as history with Completed
+UNAVAILABLE → no usable target reference exists; no navigation is offered
+```
+
+A resolved notification may still be unread, and resolution never marks it read.
+
+Resolution is written by the domain that owns the lifecycle change, inside the
+same transaction that commits it. A committed approval therefore can never leave
+an actionable notification behind, and a rolled-back approval can never leave a
+resolved one. Registration request approval and rejection are the first adopters;
+Task review, Management Report review, and Submission review reuse the same
+mechanism instead of inventing their own.
+
+Resolution never deletes notification history.
+
+---
+
+# 40. Reporting - Two Separate Concepts
 
 Operix V1 separates reports into two categories.
 
@@ -1510,6 +1651,24 @@ remain deferred.
 Read only system generated XLSX export of authorized Management Report data is
 supported. This export does not replace or change the Admin submitted
 Management Report workflow.
+
+## 42.1 Dashboard Breakdown Window
+
+The Super Admin Dashboard `Management Reports Breakdown` is scoped to the
+current business month in `Asia/Dhaka`:
+
+```text
+startOfCurrentMonth <= ManagementReport.createdAt < startOfNextMonth
+```
+
+On 1 December the breakdown therefore shows December reports. Nothing is
+deleted or reset: historical reports remain stored and queryable, and the
+current-month denominator simply moves.
+
+Open-work indicators (`Pending Management Reports`, `Revision Required
+Management Reports`, and an Admin's own Draft / Submitted / Revision Required
+counters) stay live and are never month-scoped, so unfinished work cannot
+disappear from the Dashboard on the first of the month.
 
 ---
 
@@ -1842,9 +2001,11 @@ this release. Users must verify important details against the source document.
 ### AI Operations Brief
 
 Super Admins and Admins may explicitly generate an advisory operations brief
-from their current authorized Dashboard snapshot for a 7, 30, or 90 day
-completion-trend window. Members do not have access. Generation is on demand
-and never runs automatically when the Dashboard loads or its period changes.
+from their current authorized Dashboard snapshot for Today, the last 7 days,
+the last 14 days, or the last 30 days. Today begins at the configured business
+timezone day boundary. This selector is independent from the Dashboard chart
+period. Members do not have access. Generation is on demand and never runs
+automatically when the Dashboard loads or its period changes.
 
 The Dashboard remains the source of truth for every metric. The brief may
 interpret supplied overview, workload, reporting, completion-trend, and recent
@@ -1852,12 +2013,14 @@ Activity facts, but it must not recalculate or invent metrics. Admin input is
 restricted to the Admin's current Team scope; Super Admin input is
 organization-wide. Context is bounded and excludes private IDs, email and
 employee identifiers, Task descriptions, Submission or Document content, and
-Activity metadata.
+Activity metadata. Operix supplies an authoritative KPI snapshot before the AI
+prose; Gemini may not derive percentages, rates, totals, averages, or deltas
+that Operix did not explicitly supply.
 
 The brief is advisory and read-only. It cannot create, assign, start, submit,
 review, complete, claim, distribute, notify, or otherwise mutate business
-data. Results live only in the client session, are invalidated when the trend
-period changes, and are not persisted. Provider failure must not prevent the
+data. Results live only in the client session, are invalidated when the AI
+brief period changes, and are not persisted. Provider failure must not prevent the
 ordinary Dashboard from loading or remaining usable.
 
 ---
@@ -2748,3 +2911,46 @@ Ask Operix provides stateless, read only operational questions using only the au
 V1 supports Task queries for every active role. It also supports current Operations Snapshot questions for Super Admin and Admin. Member and Team name resolution, Documents, Management Reports, Inventory, Todos, conversation history, retrieval augmented generation, and autonomous actions are outside V1.
 
 Ask Operix cannot execute SQL, access Prisma, create authoritative identifiers, call workflow mutations, widen authorization, or persist prompts, answers, conversations, or AI query history. Task reads use `TaskService.listTasks()`. Operations reads use `DashboardService.getOperationalSnapshot()`. The browser supplies only the question.
+
+## Bulk Assignment and Upward Review
+
+Super Admin may assign one work definition to every active recipient in either
+a selected Team or the organization-wide Global audience. Team scope contains
+the active Team Admin and active Team Members. Global scope contains every
+active Admin and Member. The creating Super Admin is not a recipient. The
+platform creates one independent `INDIVIDUAL`, `REVIEW_REQUIRED` Task per
+recipient and groups those Tasks under one Task Batch; batch scope never changes
+the child Task scope.
+
+Each Task keeps one active Responsible User and its own lifecycle. A Member recipient submits to the active Admin of the Member's Team. An Admin recipient submits to the Super Admin who created the batch. Review authority is the Task's explicit reviewer, not inferred from broad visibility or Task creation ownership.
+
+Bulk assignment excludes inactive users and fails before any Task is created
+when an active Member has no eligible Team Admin reviewer. It does not reuse
+GLOBAL distribution, self claim, or multi-assignment semantics.
+
+An Everyone batch may be one-time, weekly, or monthly. Recurrence is owned by a
+single `TaskBatchRecurrence`, not by each child Task. Every occurrence resolves
+the current active recipients and reviewers again, creates at most one batch
+for its occurrence key, and fails atomically when the full recipient/reviewer
+set is invalid. Each generated child may receive its own deadline reminder.
+
+## Task and Submission Editing
+
+Task definition editing is intentionally pre-execution only. A Super Admin may
+edit any eligible Task and an Admin may edit a Task they created while it is
+`PENDING`, or `ASSIGNED` without a start timestamp. Editable definition fields
+are title, description, instructions or remarks, priority, deadline, and
+category. Scope, responsibility, reviewer, batch, recurrence, completion mode,
+and workflow status are never changed through definition editing. Work that has
+started and a Global Task whose distribution is `SENT` are immutable through
+this command for every role.
+
+The original submitter who is still the current Responsible User may edit the
+latest Submission version while its Task is `SUBMITTED` or `RESUBMITTED`, no
+Review exists, and the deadline has not arrived. A missing Task deadline keeps
+the latest unreviewed Submission editable until review. Super Admin may edit
+another user's latest unreviewed Submission after the deadline, but cannot
+bypass latest-version, workflow, or Review immutability. The original
+`submittedBy` never changes; `lastEditedBy`, `updatedAt`, and Activity identify
+the actual editor. Submission attachment additions and removals use the same
+policy and existing five-file, 10 MiB authenticated-storage controls.

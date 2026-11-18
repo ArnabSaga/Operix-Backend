@@ -9,6 +9,7 @@ import type {
   OperixViewerResponse,
 } from '../../shared/auth/viewer.interface.js';
 import type { OperixViewerScope } from '../../shared/auth/scope/viewer-scope.interface.js';
+import type { MailOutcome } from '../../shared/mail/mail.interface.js';
 import { MailService } from '../../shared/mail/mail.service.js';
 import { createOperixAuth } from './auth.factory.js';
 
@@ -26,11 +27,19 @@ export class OperixAuthService {
     @Optional() private readonly mailService?: MailService,
   ) {}
 
-  async requestPasswordSetup(email: string): Promise<void> {
+  async requestPasswordSetup(email: string): Promise<MailOutcome> {
     if (!this.config || !this.mailService) {
       throw new Error('Authentication mail integration is unavailable.');
     }
-    const auth = createOperixAuth(this.prisma, this.config, this.mailService);
+    let outcome: MailOutcome | null = null;
+    const auth = createOperixAuth(
+      this.prisma,
+      this.config,
+      this.mailService,
+      (nextOutcome) => {
+        outcome = nextOutcome;
+      },
+    );
     await auth.api.requestPasswordReset({
       body: {
         email,
@@ -40,6 +49,9 @@ export class OperixAuthService {
         ).toString(),
       },
     });
+    // `null` means the callback never ran (for example the account was not
+    // found). Never report that as accepted delivery.
+    return outcome ?? 'FAILED';
   }
 
   async getViewer(userId: string): Promise<OperixViewer> {

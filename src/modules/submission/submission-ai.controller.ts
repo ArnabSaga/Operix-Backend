@@ -32,7 +32,7 @@ export class SubmissionAiController {
   constructor(private readonly submissionAiService: SubmissionAiService) {}
 
   @Post()
-  @RequireRoles(UserRole.ADMIN)
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @Throttle({ default: { limit: 6, ttl: 60_000 } })
   analyze(
     @CurrentViewer() viewer: OperixViewer,

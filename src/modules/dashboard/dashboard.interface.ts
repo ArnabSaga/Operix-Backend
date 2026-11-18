@@ -86,6 +86,24 @@ export type DashboardOverviewResponse =
   | AdminDashboardOverview
   | MemberDashboardOverview;
 
+/**
+ * Current-state workload above never resets. These counters describe activity
+ * inside the current business month and restart naturally through the query
+ * window at each month boundary.
+ */
+export interface MemberMonthlyThroughput {
+  assigned: number;
+  completed: number;
+  onTime: number;
+  overdueCreated: number;
+}
+
+export interface TeamMonthlyThroughput {
+  assigned: number;
+  completed: number;
+  reviewsCompleted: number;
+}
+
 export interface TeamWorkloadRow {
   teamId: string;
   teamName: string;
@@ -97,6 +115,7 @@ export interface TeamWorkloadRow {
   reviewQueueTasks: number;
   revisionRequiredTasks: number;
   statusCounts: StatusCounts;
+  monthly: TeamMonthlyThroughput;
 }
 
 export interface MemberWorkloadRow {
@@ -111,6 +130,7 @@ export interface MemberWorkloadRow {
   overdueTasks: number;
   statusCounts: StatusCounts;
   activePriorityCounts: PriorityCounts;
+  monthly: MemberMonthlyThroughput;
 }
 
 export interface WorkloadPaginationMeta {
@@ -170,7 +190,8 @@ export interface DashboardTrendsResponse extends DashboardResponseBase {
 export interface DashboardOperationalSnapshot {
   role: Extract<UserRole, 'SUPER_ADMIN' | 'ADMIN'>;
   asOf: Date;
-  days: import('./dashboard.constant.js').DashboardTrendDays;
+  periodStart?: Date;
+  days: number;
   overview: SuperAdminDashboardOverview | AdminDashboardOverview;
   workload: SuperAdminDashboardWorkload | AdminDashboardWorkload;
   trends: DashboardTrendsResponse;

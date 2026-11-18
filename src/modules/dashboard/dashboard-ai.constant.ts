@@ -1,9 +1,47 @@
-import {
-  DASHBOARD_AI_CATEGORIES,
-  DASHBOARD_AI_CONFIDENCE,
-  DASHBOARD_AI_SEVERITIES,
-  DASHBOARD_AI_SUBJECT_TYPES,
-} from './dashboard-ai.interface.js';
+/**
+ * Allowed value sets for the Operations Brief contract.
+ *
+ * These live in the constant module (not the interface module) so the schema
+ * builder and the validator can use them without the constant module importing
+ * back from the interface module.
+ */
+export const DASHBOARD_AI_SEVERITIES = ['HIGH', 'MEDIUM', 'LOW'] as const;
+export type DashboardAiSeverity = (typeof DASHBOARD_AI_SEVERITIES)[number];
+
+export const DASHBOARD_AI_CATEGORIES = [
+  'OVERDUE',
+  'REVIEW_QUEUE',
+  'REVISION',
+  'WORKLOAD',
+  'COMPLETION_TREND',
+  'MANAGEMENT_REPORTS',
+  'ACTIVITY',
+] as const;
+export type DashboardAiCategory = (typeof DASHBOARD_AI_CATEGORIES)[number];
+
+export const DASHBOARD_AI_SUBJECT_TYPES = ['TEAM', 'MEMBER'] as const;
+export type DashboardAiSubjectType =
+  (typeof DASHBOARD_AI_SUBJECT_TYPES)[number];
+
+export const DASHBOARD_AI_CONFIDENCE = ['LOW', 'MEDIUM', 'HIGH'] as const;
+export type DashboardAiConfidence = (typeof DASHBOARD_AI_CONFIDENCE)[number];
+
+export const DASHBOARD_AI_PERIOD = {
+  TODAY: 'TODAY',
+  LAST_7_DAYS: 'LAST_7_DAYS',
+  LAST_14_DAYS: 'LAST_14_DAYS',
+  LAST_30_DAYS: 'LAST_30_DAYS',
+} as const;
+
+export type DashboardAiPeriod =
+  (typeof DASHBOARD_AI_PERIOD)[keyof typeof DASHBOARD_AI_PERIOD];
+
+export const DASHBOARD_AI_PERIOD_DAYS: Record<DashboardAiPeriod, number> = {
+  TODAY: 1,
+  LAST_7_DAYS: 7,
+  LAST_14_DAYS: 14,
+  LAST_30_DAYS: 30,
+};
 
 export const DASHBOARD_AI_TEAM_LIMIT = 10;
 export const DASHBOARD_AI_MEMBER_LIMIT = 10;
@@ -43,7 +81,8 @@ Rules:
 3. Never classify a person or Team as overloaded, underperforming, efficient, inefficient, or a low performer. No capacity or performance threshold is supplied. You may make neutral comparisons such as highest active Task count among the included rows.
 4. Do not make workflow changes, assign Tasks, approve Reviews, submit Reports, create Notifications, or claim that any action occurred.
 5. Do not infer authorization or refer to data outside the supplied role-scoped snapshot.
-6. Keep the brief concise and operational. Return only the JSON object required by the response schema, with no prose, markdown, or extra fields.`;
+6. Never calculate or invent percentages, rates, deltas, averages, or totals. For example, if the snapshot supplies counts but no percentage, do not derive a percentage from those counts.
+7. Keep the brief concise and operational. Return only the JSON object required by the response schema, with no prose, markdown, or extra fields.`;
 
 export const DASHBOARD_AI_BRIEF_JSON_SCHEMA: Record<string, unknown> = {
   type: 'object',

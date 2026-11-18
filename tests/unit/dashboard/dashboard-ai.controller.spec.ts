@@ -8,6 +8,7 @@ import type { OperixViewer } from '../../../src/shared/auth/viewer.interface';
 import { OperixUserThrottlerGuard } from '../../../src/shared/rate-limit/operix-user-throttler.guard';
 import { DashboardAiController } from '../../../src/modules/dashboard/dashboard-ai.controller';
 import type { DashboardAiService } from '../../../src/modules/dashboard/dashboard-ai.service';
+import { DASHBOARD_AI_PERIOD } from '../../../src/modules/dashboard/dashboard-ai.constant';
 
 const jestApi = import.meta.jest;
 const THROTTLER_LIMIT_METADATA_KEY = 'THROTTLER:LIMITdefault';
@@ -55,8 +56,18 @@ describe('DashboardAiController', () => {
     } as unknown as DashboardAiService);
     const viewer = { role: UserRole.ADMIN } as OperixViewer;
     void controller.generate(viewer, {});
-    void controller.generate(viewer, { days: 30 });
-    expect(generate).toHaveBeenNthCalledWith(1, viewer, 7);
-    expect(generate).toHaveBeenNthCalledWith(2, viewer, 30);
+    void controller.generate(viewer, {
+      period: DASHBOARD_AI_PERIOD.LAST_30_DAYS,
+    });
+    expect(generate).toHaveBeenNthCalledWith(
+      1,
+      viewer,
+      DASHBOARD_AI_PERIOD.LAST_7_DAYS,
+    );
+    expect(generate).toHaveBeenNthCalledWith(
+      2,
+      viewer,
+      DASHBOARD_AI_PERIOD.LAST_30_DAYS,
+    );
   });
 });

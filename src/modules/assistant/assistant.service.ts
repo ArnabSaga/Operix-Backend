@@ -1,5 +1,7 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../../../generated/prisma/enums.js';
+import type { ApplicationConfiguration } from '../../config/configuration.js';
 import {
   AI_MAX_ATTEMPTS,
   AI_MIN_RETRY_BUDGET_MS,
@@ -50,12 +52,18 @@ interface GeneratedStage<T> {
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
+  private readonly businessTimezone: string;
 
   constructor(
     private readonly aiService: AiService,
     private readonly taskService: TaskService,
     private readonly dashboardService: DashboardService,
-  ) {}
+    configService: ConfigService<ApplicationConfiguration, true>,
+  ) {
+    this.businessTimezone =
+      configService.get('app.businessTimezone', { infer: true }) ||
+      'Asia/Dhaka';
+  }
 
   async ask(
     viewer: OperixViewer,
@@ -73,6 +81,7 @@ export class AssistantService {
       signal,
       deadline,
       'planner',
+      viewer.role,
     );
 
     if (planner.value.intent === 'NEEDS_CLARIFICATION') {
@@ -192,6 +201,7 @@ export class AssistantService {
       signal,
       deadline,
       'answer',
+      viewer.role,
     );
     const serverLimitations =
       result.meta.total > suppliedTasks.length && plan.responseMode !== 'COUNT'
@@ -229,10 +239,11 @@ export class AssistantService {
     deadline: number,
     startedAt: number,
   ): Promise<AskOperixResponse> {
-    const snapshot = await this.dashboardService.getOperationalSnapshot(
+    const snapshot = await this.dashboardService.getAiOperationalSnapshot(
       viewer,
       planner.value.days,
       10,
+      this.businessTimezone,
     );
     this.assertBudget(signal, deadline);
     const built = buildDashboardAiContext(snapshot);
@@ -247,6 +258,7 @@ export class AssistantService {
       signal,
       deadline,
       'answer',
+      viewer.role,
     );
     return this.finishAnswered({
       draft: {
@@ -279,6 +291,7 @@ export class AssistantService {
     signal: AbortSignal,
     deadline: number,
     stage: 'planner' | 'answer',
+    viewerRole: UserRole,
   ): Promise<GeneratedStage<T>> {
     let attempts = 0;
     let lastReason = 'unknown';
@@ -304,9 +317,12 @@ export class AssistantService {
         JSON.stringify({
           event: 'ask_operix_invalid_output',
           feature: 'ASK_OPERIX',
+          viewerRole,
+          provider: this.aiService.getProviderName(),
           stage,
           attempt: attempts,
           reason: lastReason,
+          outcome: 'invalid_output',
         }),
       );
     }
@@ -426,7 +442,7 @@ export class AssistantService {
     if (!signal.aborted && deadline - Date.now() > 0) return;
     throw new AppException(
       HttpStatus.SERVICE_UNAVAILABLE,
-      APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
+      APP_ERROR_CODE.AI_TIMEOUT,
       'AI request timed out.',
     );
   }

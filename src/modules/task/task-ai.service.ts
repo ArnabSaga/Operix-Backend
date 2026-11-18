@@ -11,10 +11,11 @@ import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
 import { AppException } from '../../shared/errors/app.exception.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import type { GenerateTaskAiDraftDto } from './dto/generate-task-ai-draft.dto.js';
+import { TASK_AI_DRAFT_JSON_SCHEMA } from './task-ai.constant.js';
 import {
-  TASK_AI_DRAFT_JSON_SCHEMA,
   TASK_AI_SYSTEM_INSTRUCTION,
-} from './task-ai.constant.js';
+  buildTaskAiUserPrompt,
+} from './task-ai.prompt.js';
 import type {
   TaskAiDraftResponse,
   TaskAiValidationFailureReason,
@@ -79,7 +80,11 @@ export class TaskAiService {
 
       const generated = await this.aiService.generate({
         systemInstruction: TASK_AI_SYSTEM_INSTRUCTION,
-        userPrompt: this.buildUserPrompt(dto.prompt, today),
+        userPrompt: buildTaskAiUserPrompt({
+          prompt: dto.prompt,
+          today,
+          businessTimezone: this.businessTimezone,
+        }),
         responseJsonSchema: TASK_AI_DRAFT_JSON_SCHEMA,
         signal,
         timeoutMs: remainingMs,
@@ -88,6 +93,19 @@ export class TaskAiService {
       const parsed = parseTaskAiDraft(generated.text);
 
       if (parsed.ok) {
+        this.logger.log(
+          JSON.stringify({
+            event: 'task_ai_draft_succeeded',
+            feature: 'TASK_AI_DRAFT',
+            viewerRole: viewer.role,
+            provider: this.aiService.getProviderName(),
+            model: generated.model,
+            attempts,
+            latencyMs: Date.now() - startedAt,
+            outcome: 'success',
+          }),
+        );
+
         return {
           ...parsed.draft,
           meta: {
@@ -103,9 +121,13 @@ export class TaskAiService {
       this.logger.warn(
         JSON.stringify({
           event: 'task_ai_draft_invalid',
+          feature: 'TASK_AI_DRAFT',
+          viewerRole: viewer.role,
+          provider: this.aiService.getProviderName(),
           attempt: attempts,
           reason: parsed.reason,
           remainingMs: deadline - Date.now(),
+          outcome: 'invalid_output',
         }),
       );
     }
@@ -113,8 +135,12 @@ export class TaskAiService {
     this.logger.warn(
       JSON.stringify({
         event: 'task_ai_draft_rejected',
+        feature: 'TASK_AI_DRAFT',
+        viewerRole: viewer.role,
+        provider: this.aiService.getProviderName(),
         attempts,
         reason: lastReason,
+        outcome: 'rejected',
       }),
     );
 
@@ -138,19 +164,6 @@ export class TaskAiService {
     }
   }
 
-  private buildUserPrompt(prompt: string, today: string): string {
-    return [
-      `Current business date (${this.businessTimezone}): ${today}`,
-      '',
-      'Administrator request:',
-      '"""',
-      // Prevents a trivial fence break; the system instruction already frames
-      // this block as data rather than instructions.
-      prompt.replace(/"{3,}/g, "'''"),
-      '"""',
-    ].join('\n');
-  }
-
   private currentBusinessDate(now: Date): string {
     return new Intl.DateTimeFormat('en-CA', {
       timeZone: this.businessTimezone,
@@ -163,7 +176,7 @@ export class TaskAiService {
   private timedOut(): AppException {
     return new AppException(
       HttpStatus.SERVICE_UNAVAILABLE,
-      APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
+      APP_ERROR_CODE.AI_TIMEOUT,
       'AI request timed out.',
     );
   }

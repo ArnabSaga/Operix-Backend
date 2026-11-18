@@ -1,26 +1,11 @@
 import type { UserRole } from '../../../generated/prisma/enums.js';
-import type { DashboardTrendDays } from './dashboard.constant.js';
-
-export const DASHBOARD_AI_SEVERITIES = ['HIGH', 'MEDIUM', 'LOW'] as const;
-export type DashboardAiSeverity = (typeof DASHBOARD_AI_SEVERITIES)[number];
-
-export const DASHBOARD_AI_CATEGORIES = [
-  'OVERDUE',
-  'REVIEW_QUEUE',
-  'REVISION',
-  'WORKLOAD',
-  'COMPLETION_TREND',
-  'MANAGEMENT_REPORTS',
-  'ACTIVITY',
-] as const;
-export type DashboardAiCategory = (typeof DASHBOARD_AI_CATEGORIES)[number];
-
-export const DASHBOARD_AI_SUBJECT_TYPES = ['TEAM', 'MEMBER'] as const;
-export type DashboardAiSubjectType =
-  (typeof DASHBOARD_AI_SUBJECT_TYPES)[number];
-
-export const DASHBOARD_AI_CONFIDENCE = ['LOW', 'MEDIUM', 'HIGH'] as const;
-export type DashboardAiConfidence = (typeof DASHBOARD_AI_CONFIDENCE)[number];
+import type {
+  DashboardAiCategory,
+  DashboardAiConfidence,
+  DashboardAiPeriod,
+  DashboardAiSeverity,
+  DashboardAiSubjectType,
+} from './dashboard-ai.constant.js';
 
 export interface DashboardAiPriority {
   severity: DashboardAiSeverity;
@@ -49,13 +34,27 @@ export interface DashboardAiBrief {
   limitations: string[];
 }
 
-export interface DashboardAiBriefResponse extends DashboardAiBrief {
+export interface DashboardAiSnapshot {
+  period: DashboardAiPeriod;
+  periodStart: string;
+  asOf: string;
+  activeTasks: number;
+  overdueTasks: number;
+  reviewQueueTasks: number;
+  revisionRequiredTasks: number;
+  completedInPeriod: number;
+}
+
+export interface DashboardAiBriefResponse {
+  snapshot: DashboardAiSnapshot;
+  brief: DashboardAiBrief;
   meta: {
     provider: string;
     model: string;
     attempts: number;
     latencyMs: number;
-    days: DashboardTrendDays;
+    period: DashboardAiPeriod;
+    days: number;
     asOf: string;
   };
 }
@@ -78,14 +77,27 @@ export interface DashboardAiMemberContext {
   activePriorityCounts: Record<string, number>;
 }
 
+export type DashboardManagementReportScope = 'CURRENT_MONTH' | 'CURRENT_STATE';
+
+/**
+ * Period label carried into the AI prompt.
+ *
+ * Ask Operix answers 90-day operations questions, which is a supported trend
+ * window but not an Operations Brief period. Widening only the prompt-side type
+ * keeps the public brief contract (`DashboardAiPeriod`) unchanged.
+ */
+export type DashboardAiContextPeriod = DashboardAiPeriod | 'LAST_90_DAYS';
+
 export interface DashboardAiContext {
   role: Extract<UserRole, 'SUPER_ADMIN' | 'ADMIN'>;
   asOf: string;
-  trendDays: DashboardTrendDays;
+  period: DashboardAiContextPeriod;
+  trendDays: number;
   kpis: Record<string, number | null>;
   taskStatusCounts: Record<string, number>;
   managementReports: {
     statusCounts: Record<string, number>;
+    scope: DashboardManagementReportScope;
   };
   teams: DashboardAiTeamContext[];
   teamSummary: {
@@ -99,8 +111,12 @@ export interface DashboardAiContext {
   completionTrend: {
     points: { date: string; completedTasks: number }[];
     completedInWindow: number;
-    recent7DayCompleted: number;
-    previous7DayCompleted: number | null;
+    /** Number of trailing days the "recent" comparison actually covers. */
+    recentWindowDays: number;
+    recentWindowCompleted: number;
+    /** Null when the window is too short for a prior comparison period. */
+    priorWindowDays: number | null;
+    priorWindowCompleted: number | null;
     peakDay: { date: string; completedTasks: number } | null;
     zeroCompletionDays: number;
   };

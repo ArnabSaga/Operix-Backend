@@ -17,6 +17,8 @@ import { TaskService } from './task.service.js';
 import { TaskDistributionService } from './task-distribution.service.js';
 import { TaskAssignmentAiController } from './task-assignment-ai.controller.js';
 import { TaskAssignmentAiService } from './task-assignment-ai.service.js';
+import { TaskBulkController } from './task-bulk.controller.js';
+import { TaskBulkService } from './task-bulk.service.js';
 
 @Module({
   imports: [
@@ -33,6 +35,7 @@ import { TaskAssignmentAiService } from './task-assignment-ai.service.js';
     TaskAutomationController,
     TaskAiController,
     TaskAssignmentAiController,
+    TaskBulkController,
   ],
   providers: [
     TaskService,
@@ -42,6 +45,7 @@ import { TaskAssignmentAiService } from './task-assignment-ai.service.js';
     TaskDistributionService,
     TaskAiService,
     TaskAssignmentAiService,
+    TaskBulkService,
   ],
   exports: [TaskService],
 })

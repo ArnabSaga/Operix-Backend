@@ -13,13 +13,14 @@ export type TaskAttachmentMutationDecision =
 export const TASK_ATTACHMENT_AUTHORITY = {
   SUPER_ADMIN: 'SUPER_ADMIN',
   OWNER_ADMIN: 'OWNER_ADMIN',
-  RESPONSIBLE_MEMBER: 'RESPONSIBLE_MEMBER',
+  RESPONSIBLE_USER: 'RESPONSIBLE_USER',
 } as const;
 
 export type TaskAttachmentMutationAuthority =
   (typeof TASK_ATTACHMENT_AUTHORITY)[keyof typeof TASK_ATTACHMENT_AUTHORITY];
 
 interface TaskAttachmentAuthoritySource {
+  scope: TaskScope;
   createdById: string;
   responsibleUserId: string | null;
 }
@@ -44,10 +45,12 @@ export function resolveTaskAttachmentMutationAuthority(
   }
 
   if (
-    viewer.role === UserRole.MEMBER &&
+    (viewer.role === UserRole.MEMBER ||
+      (viewer.role === UserRole.ADMIN &&
+        task.scope === TaskScope.INDIVIDUAL)) &&
     task.responsibleUserId === viewer.userId
   ) {
-    return TASK_ATTACHMENT_AUTHORITY.RESPONSIBLE_MEMBER;
+    return TASK_ATTACHMENT_AUTHORITY.RESPONSIBLE_USER;
   }
 
   return null;
@@ -93,7 +96,8 @@ export function getTaskAttachmentMutationDecision(
   if (task.distribution?.status === TaskDistributionStatus.SENT) {
     const responsibleMemberGlobalException =
       task.scope === TaskScope.GLOBAL &&
-      authority === TASK_ATTACHMENT_AUTHORITY.RESPONSIBLE_MEMBER;
+      viewer.role === UserRole.MEMBER &&
+      authority === TASK_ATTACHMENT_AUTHORITY.RESPONSIBLE_USER;
 
     if (!responsibleMemberGlobalException) {
       return { allowed: false, reason: 'LOCKED' };

@@ -12,7 +12,10 @@ import type {
   AiGenerationResult,
   AiProvider,
 } from './ai.interface.js';
-import { AiProviderError } from './ai-provider.error.js';
+import {
+  AiProviderError,
+  type AiProviderErrorClassification,
+} from './ai-provider.error.js';
 
 /**
  * Gemini implementation of the provider-neutral AI port.
@@ -21,7 +24,7 @@ import { AiProviderError } from './ai-provider.error.js';
  * that is the surface `models.generateContent` exposes in `@google/genai`
  * 2.30.0 (`responseFormat` lives on the lower-level `GenerationConfig` type
  * and is not accepted here). SDK retries are disabled per request so that the
- * only retry in the system is the one owned by `TaskAiService`.
+ * only retry in the system is the semantic retry owned by each feature service.
  */
 @Injectable()
 export class GeminiAiProvider implements AiProvider {
@@ -69,6 +72,8 @@ export class GeminiAiProvider implements AiProvider {
         throw new AiProviderError(
           'FAILED',
           'Gemini returned an empty response.',
+          null,
+          'PROVIDER_EMPTY_RESPONSE',
         );
       }
 
@@ -80,6 +85,7 @@ export class GeminiAiProvider implements AiProvider {
           event: 'ai_provider_call_failed',
           provider: this.name,
           kind: translated.kind,
+          errorClassification: translated.classification,
           providerStatus: translated.providerStatus,
         }),
       );
@@ -92,6 +98,8 @@ export class GeminiAiProvider implements AiProvider {
       throw new AiProviderError(
         'UNAVAILABLE',
         'Gemini credentials are not configured.',
+        null,
+        'PROVIDER_NOT_CONFIGURED',
       );
     }
 
@@ -110,6 +118,11 @@ export class GeminiAiProvider implements AiProvider {
    * Translates vendor failures into the neutral classification consumed by
    * `AiService`. The provider message is never forwarded to callers because it
    * can contain request URLs and account identifiers.
+   *
+   * Client-side 4xx responses are configuration or request defects, not
+   * outages. They are classified as `FAILED` so they surface as
+   * `AI_GENERATION_FAILED` and are never described as a transient provider
+   * outage, and they are never retried by a feature service.
    */
   private translateError(
     error: unknown,
@@ -120,7 +133,12 @@ export class GeminiAiProvider implements AiProvider {
     }
 
     if (signal?.aborted === true || isAbortError(error)) {
-      return new AiProviderError('UNAVAILABLE', 'Gemini request timed out.');
+      return new AiProviderError(
+        'TIMEOUT',
+        'Gemini request timed out.',
+        null,
+        'PROVIDER_TIMEOUT',
+      );
     }
 
     const status = resolveHttpStatus(error);
@@ -130,18 +148,53 @@ export class GeminiAiProvider implements AiProvider {
         'RATE_LIMITED',
         'Gemini rate limit reached.',
         status,
+        'PROVIDER_RATE_LIMITED',
       );
     }
 
-    if (status !== null && (status >= 500 || status >= 400)) {
+    const clientFailure = classifyClientFailure(status);
+
+    if (clientFailure !== null) {
+      return new AiProviderError(
+        'FAILED',
+        'Gemini rejected the request.',
+        status,
+        clientFailure,
+      );
+    }
+
+    if (status !== null && status >= 500) {
       return new AiProviderError(
         'UNAVAILABLE',
-        'Gemini rejected or failed the request.',
+        'Gemini is temporarily unavailable.',
         status,
+        'PROVIDER_SERVER_ERROR',
       );
     }
 
-    return new AiProviderError('FAILED', 'Gemini generation failed.', status);
+    return new AiProviderError(
+      'FAILED',
+      'Gemini generation failed.',
+      status,
+      'PROVIDER_UNKNOWN',
+    );
+  }
+}
+
+function classifyClientFailure(
+  status: number | null,
+): AiProviderErrorClassification | null {
+  if (status === null) return null;
+
+  switch (status) {
+    case 401:
+      return 'PROVIDER_AUTH_REJECTED';
+    case 403:
+      return 'PROVIDER_FORBIDDEN';
+    case 404:
+      return 'PROVIDER_MODEL_NOT_FOUND';
+    default:
+      return status >= 400 && status < 500 ? 'PROVIDER_BAD_REQUEST' : null;
   }
 }
 

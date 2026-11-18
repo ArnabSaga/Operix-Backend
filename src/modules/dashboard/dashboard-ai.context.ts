@@ -3,12 +3,14 @@ import {
   UserRole,
 } from '../../../generated/prisma/enums.js';
 import {
+  DASHBOARD_AI_PERIOD,
   DASHBOARD_AI_ACTIVITY_LIMIT,
   DASHBOARD_AI_MEMBER_LIMIT,
   DASHBOARD_AI_TEAM_LIMIT,
 } from './dashboard-ai.constant.js';
 import type {
   DashboardAiContextBuildResult,
+  DashboardAiContextPeriod,
   DashboardAiMemberContext,
   DashboardAiTeamContext,
 } from './dashboard-ai.interface.js';
@@ -25,6 +27,7 @@ import type {
 
 export function buildDashboardAiContext(
   snapshot: DashboardOperationalSnapshot,
+  period: DashboardAiContextPeriod = inferPeriod(snapshot.days),
 ): DashboardAiContextBuildResult {
   const limitations: string[] = [];
   const members = getMembers(snapshot.workload);
@@ -40,6 +43,11 @@ export function buildDashboardAiContext(
   }
 
   const activities = snapshot.overview.recentActivity
+    .filter(
+      (activity) =>
+        snapshot.periodStart === undefined ||
+        activity.createdAt >= snapshot.periodStart,
+    )
     .slice(0, DASHBOARD_AI_ACTIVITY_LIMIT)
     .map((activity) => ({
       action: activity.action,
@@ -72,11 +80,13 @@ export function buildDashboardAiContext(
       context: {
         role: snapshot.role,
         asOf: snapshot.asOf.toISOString(),
+        period,
         trendDays: snapshot.days,
         kpis: { ...overview.kpis },
         taskStatusCounts: { ...overview.taskStatusCounts },
         managementReports: {
           statusCounts: { ...overview.managementReportStatusCounts },
+          scope: 'CURRENT_MONTH',
         },
         teams: teamRows,
         teamSummary: null,
@@ -95,6 +105,7 @@ export function buildDashboardAiContext(
     context: {
       role: snapshot.role,
       asOf: snapshot.asOf.toISOString(),
+      period,
       trendDays: snapshot.days,
       kpis: { ...overview.kpis },
       taskStatusCounts: { ...overview.taskStatusCounts },
@@ -105,6 +116,7 @@ export function buildDashboardAiContext(
           [ManagementReportStatus.REVISION_REQUIRED]:
             overview.kpis.myRevisionRequiredReports,
         },
+        scope: 'CURRENT_STATE',
       },
       teams: [],
       teamSummary: {
@@ -120,6 +132,14 @@ export function buildDashboardAiContext(
     },
     limitations,
   };
+}
+
+function inferPeriod(days: number): DashboardAiContextPeriod {
+  if (days === 1) return DASHBOARD_AI_PERIOD.TODAY;
+  if (days === 14) return DASHBOARD_AI_PERIOD.LAST_14_DAYS;
+  if (days === 30) return DASHBOARD_AI_PERIOD.LAST_30_DAYS;
+  if (days === 90) return 'LAST_90_DAYS';
+  return DASHBOARD_AI_PERIOD.LAST_7_DAYS;
 }
 
 function getMembers(
@@ -167,8 +187,10 @@ function toTeam(team: TeamWorkloadRow): DashboardAiTeamContext {
 
 function buildTrendFacts(points: CompletionTrendPoint[]) {
   const completedInWindow = sum(points);
-  const recent = points.slice(-7);
-  const previous = points.length >= 14 ? points.slice(-14, -7) : null;
+  const recentWindowDays = Math.min(7, points.length);
+  const recent = points.slice(-recentWindowDays);
+  const priorWindowDays = points.length >= 14 ? 7 : null;
+  const prior = priorWindowDays === null ? null : points.slice(-14, -7);
   const peakDay = points.reduce<CompletionTrendPoint | null>((peak, point) => {
     if (peak === null || point.completedTasks > peak.completedTasks) {
       return point;
@@ -179,8 +201,10 @@ function buildTrendFacts(points: CompletionTrendPoint[]) {
   return {
     points: points.map((point) => ({ ...point })),
     completedInWindow,
-    recent7DayCompleted: sum(recent),
-    previous7DayCompleted: previous ? sum(previous) : null,
+    recentWindowDays,
+    recentWindowCompleted: sum(recent),
+    priorWindowDays,
+    priorWindowCompleted: prior ? sum(prior) : null,
     peakDay,
     zeroCompletionDays: points.filter((point) => point.completedTasks === 0)
       .length,

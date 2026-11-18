@@ -556,7 +556,10 @@ describe('DocumentAiService', () => {
     expect(request.responseJsonSchema).toBe(DOCUMENT_AI_ANALYSIS_JSON_SCHEMA);
     expect(request.temperature).toBe(DOCUMENT_AI_TEMPERATURE);
     expect(request.maxOutputTokens).toBe(DOCUMENT_AI_MAX_OUTPUT_TOKENS);
-    expect(request.timeoutMs).toBe(30_000);
+    // Storage read and extraction now consume the same budget, so the provider
+    // receives whatever remains rather than the full timeout.
+    expect(request.timeoutMs).toBeGreaterThan(0);
+    expect(request.timeoutMs).toBeLessThanOrEqual(30_000);
     expect(request.signal).toBeInstanceOf(AbortSignal);
 
     expect(request.userPrompt).toContain('Name: batch-record.pdf');
@@ -672,7 +675,7 @@ describe('DocumentAiService', () => {
     expect(aiService.generate).toHaveBeenCalledTimes(1);
   });
 
-  it('fails as provider unavailable before calling the model with no budget', async () => {
+  it('fails as a timeout before calling the model with no budget', async () => {
     const prisma = createPrisma(createDocument());
     const aiService = createAiService();
     aiService.getTimeoutMs.mockReturnValue(0);
@@ -684,7 +687,30 @@ describe('DocumentAiService', () => {
       ),
       {
         status: HttpStatus.SERVICE_UNAVAILABLE,
-        code: APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
+        code: APP_ERROR_CODE.AI_TIMEOUT,
+      },
+    );
+
+    expect(aiService.generate).not.toHaveBeenCalled();
+  });
+
+  it('bounds storage and extraction inside the shared AI budget', async () => {
+    const prisma = createPrisma(createDocument());
+    const aiService = createAiService();
+    aiService.getTimeoutMs.mockReturnValue(20);
+    const documentText = createDocumentText();
+    documentText.extract.mockReturnValue(new Promise<never>(() => undefined));
+
+    await expectRejects(
+      createService(
+        prisma,
+        aiService,
+        createFileStorage(),
+        documentText,
+      ).analyzeDocument(createViewer(), 'doc-public-a'),
+      {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        code: APP_ERROR_CODE.AI_TIMEOUT,
       },
     );
 

@@ -1,4 +1,6 @@
 import {
+  DASHBOARD_AI_CATEGORIES,
+  DASHBOARD_AI_CONFIDENCE,
   DASHBOARD_AI_EVIDENCE_MAX_LENGTH,
   DASHBOARD_AI_EXECUTIVE_SUMMARY_MAX_LENGTH,
   DASHBOARD_AI_HEADLINE_MAX_LENGTH,
@@ -11,23 +13,21 @@ import {
   DASHBOARD_AI_PRIORITIES_MAX_ITEMS,
   DASHBOARD_AI_PRIORITY_TITLE_MAX_LENGTH,
   DASHBOARD_AI_REPORTING_SUMMARY_MAX_LENGTH,
+  DASHBOARD_AI_SEVERITIES,
   DASHBOARD_AI_SUBJECT_MAX_LENGTH,
+  DASHBOARD_AI_SUBJECT_TYPES,
   DASHBOARD_AI_SUGGESTED_ACTION_MAX_LENGTH,
   DASHBOARD_AI_TREND_SUMMARY_MAX_LENGTH,
 } from './dashboard-ai.constant.js';
-import {
-  DASHBOARD_AI_CATEGORIES,
-  DASHBOARD_AI_CONFIDENCE,
-  DASHBOARD_AI_SEVERITIES,
-  DASHBOARD_AI_SUBJECT_TYPES,
-} from './dashboard-ai.interface.js';
 import type {
-  DashboardAiBrief,
   DashboardAiCategory,
   DashboardAiConfidence,
-  DashboardAiPriority,
   DashboardAiSeverity,
   DashboardAiSubjectType,
+} from './dashboard-ai.constant.js';
+import type {
+  DashboardAiBrief,
+  DashboardAiPriority,
   DashboardAiValidationResult,
   DashboardAiWorkloadObservation,
 } from './dashboard-ai.interface.js';

@@ -46,6 +46,7 @@ interface SubmissionOverrides {
   status?: TaskStatus;
   completionMode?: TaskCompletionMode;
   teamAdminId?: string | null;
+  reviewerUserId?: string | null;
   version?: number;
 }
 
@@ -69,6 +70,10 @@ function createSubmission(overrides: SubmissionOverrides = {}) {
       dueAt: null,
       completionMode:
         overrides.completionMode ?? TaskCompletionMode.REVIEW_REQUIRED,
+      reviewerUserId:
+        overrides.reviewerUserId === undefined
+          ? 'admin-a'
+          : overrides.reviewerUserId,
       team:
         overrides.teamAdminId === null
           ? null
@@ -161,14 +166,14 @@ const NOT_ALLOWED = {
 };
 
 describe('assertReviewAuthority', () => {
-  it('accepts only Admins, matching the real review guard', () => {
+  it('accepts Admins and Super Admins, matching the real review guard', () => {
     expect(() =>
       assertReviewAuthority(createViewer(UserRole.ADMIN)),
     ).not.toThrow();
 
     expect(() =>
       assertReviewAuthority(createViewer(UserRole.SUPER_ADMIN)),
-    ).toThrow();
+    ).not.toThrow();
     expect(() =>
       assertReviewAuthority(createViewer(UserRole.MEMBER)),
     ).toThrow();
@@ -190,9 +195,9 @@ const deniedScenarios: Scenario[] = [
     expected: NOT_FOUND,
   },
   {
-    name: 'another Team Admin',
+    name: 'another explicit reviewer',
     viewer: createViewer(),
-    input: { submission: createSubmission({ teamAdminId: 'admin-b' }) },
+    input: { submission: createSubmission({ reviewerUserId: 'admin-b' }) },
     expected: NOT_FOUND,
   },
   {
@@ -206,9 +211,9 @@ const deniedScenarios: Scenario[] = [
     expected: NOT_ALLOWED,
   },
   {
-    name: 'Task without a Team',
+    name: 'Task without an explicit reviewer',
     viewer: createViewer(),
-    input: { submission: createSubmission({ teamAdminId: null }) },
+    input: { submission: createSubmission({ reviewerUserId: null }) },
     expected: NOT_ALLOWED,
   },
   {
@@ -316,8 +321,8 @@ describe('resolveReviewableSubmission', () => {
   );
 });
 
-describe('non-Admin callers', () => {
-  it.each([UserRole.SUPER_ADMIN, UserRole.MEMBER])(
+describe('unauthorized callers', () => {
+  it.each([UserRole.MEMBER])(
     'is rejected by assertReviewAuthority with FORBIDDEN for %s',
     (role) => {
       let error: unknown;
@@ -332,7 +337,7 @@ describe('non-Admin callers', () => {
     },
   );
 
-  it.each([UserRole.SUPER_ADMIN, UserRole.MEMBER])(
+  it.each([UserRole.MEMBER])(
     'never resolves a Submission for %s, even when the policy is called directly',
     async (role) => {
       const error = await captureError(() =>

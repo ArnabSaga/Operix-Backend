@@ -28,7 +28,7 @@ function validDraftJson(): string {
       'Review the cold chain temperature logs for the past week.\n- Collect logger exports\n- Flag excursions',
     suggestedPriority: 'HIGH',
     suggestedCompletionMode: 'REVIEW_REQUIRED',
-    suggestedDueAt: '2026-10-25T09:00:00.000Z',
+    suggestedDueAt: '2099-10-25T09:00:00.000Z',
     reasoning: 'Excursions are compliance relevant and need a second reviewer.',
   });
 }
@@ -66,6 +66,7 @@ function createHarness(options: { timeoutMs?: number } = {}): Harness {
   const aiService = {
     assertEnabled,
     getTimeoutMs: jestApi.fn().mockReturnValue(options.timeoutMs ?? 30_000),
+    getProviderName: jestApi.fn().mockReturnValue('gemini'),
     generate,
   } as unknown as AiService;
 
@@ -144,7 +145,7 @@ describe('TaskAiService.draft generation contract', () => {
         'Review the cold chain temperature logs for the past week.\n- Collect logger exports\n- Flag excursions',
       suggestedPriority: TaskPriority.HIGH,
       suggestedCompletionMode: TaskCompletionMode.REVIEW_REQUIRED,
-      suggestedDueAt: '2026-10-25T09:00:00.000Z',
+      suggestedDueAt: '2099-10-25T09:00:00.000Z',
       reasoning:
         'Excursions are compliance relevant and need a second reviewer.',
     });
@@ -269,11 +270,7 @@ describe('TaskAiService.draft provider failure pass-through', () => {
       HttpStatus.TOO_MANY_REQUESTS,
       APP_ERROR_CODE.AI_RATE_LIMITED,
     ],
-    [
-      'a timeout',
-      HttpStatus.SERVICE_UNAVAILABLE,
-      APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
-    ],
+    ['a timeout', HttpStatus.SERVICE_UNAVAILABLE, APP_ERROR_CODE.AI_TIMEOUT],
     [
       'a generation failure',
       HttpStatus.BAD_GATEWAY,

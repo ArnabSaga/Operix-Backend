@@ -5,6 +5,10 @@ import {
   AI_MIN_RETRY_BUDGET_MS,
 } from '../../shared/ai/ai.constant.js';
 import { AiService } from '../../shared/ai/ai.service.js';
+import {
+  AiRequestTimeoutError,
+  runWithinAiDeadline,
+} from '../../shared/ai/ai-deadline.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import { DocumentTextService } from '../../shared/document-text/document-text.service.js';
 import type { DocumentTextExtraction } from '../../shared/document-text/document-text.interface.js';
@@ -92,12 +96,28 @@ export class DocumentAiService {
       throw this.fileTooLarge();
     }
 
-    const buffer = await this.readStorageObject(document.storageKey);
-    const extraction = await this.extractDocumentText(
-      viewer,
-      document.publicId,
-      document.mimeType,
-      buffer,
+    // The shared AI budget covers storage read and extraction too. Otherwise a
+    // large or slow document could run far past AI_TIMEOUT_MS before the
+    // provider was even called.
+    const startedAt = Date.now();
+    const timeoutMs = this.aiService.getTimeoutMs();
+    const deadline = startedAt + timeoutMs;
+    const signal = AbortSignal.timeout(timeoutMs);
+
+    const buffer = await this.withinDeadline(
+      this.readStorageObject(document.storageKey),
+      signal,
+      deadline,
+    );
+    const extraction = await this.withinDeadline(
+      this.extractDocumentText(
+        viewer,
+        document.publicId,
+        document.mimeType,
+        buffer,
+      ),
+      signal,
+      deadline,
     );
 
     const limitations = this.buildLimitations(extraction.limitations);
@@ -106,11 +126,6 @@ export class DocumentAiService {
       format: extraction.format,
       text: extraction.text,
     });
-
-    const startedAt = Date.now();
-    const timeoutMs = this.aiService.getTimeoutMs();
-    const deadline = startedAt + timeoutMs;
-    const signal = AbortSignal.timeout(timeoutMs);
 
     let attempts = 0;
     let lastReason: DocumentAiValidationFailureReason | 'unknown' = 'unknown';
@@ -152,10 +167,10 @@ export class DocumentAiService {
         this.logger.log(
           JSON.stringify({
             event: 'document_ai_analysis_succeeded',
-            feature: 'document_ai',
+            feature: 'DOCUMENT_AI',
             provider: this.aiService.getProviderName(),
             model: generated.model,
-            actorId: viewer.userId,
+            viewerRole: viewer.role,
             documentId: document.publicId,
             format: extraction.format,
             textLength: extraction.text.length,
@@ -183,9 +198,9 @@ export class DocumentAiService {
       this.logger.warn(
         JSON.stringify({
           event: 'document_ai_analysis_invalid',
-          feature: 'document_ai',
+          feature: 'DOCUMENT_AI',
           provider: this.aiService.getProviderName(),
-          actorId: viewer.userId,
+          viewerRole: viewer.role,
           documentId: document.publicId,
           attempt: attempts,
           reason: parsed.reason,
@@ -198,9 +213,9 @@ export class DocumentAiService {
     this.logger.warn(
       JSON.stringify({
         event: 'document_ai_analysis_rejected',
-        feature: 'document_ai',
+        feature: 'DOCUMENT_AI',
         provider: this.aiService.getProviderName(),
-        actorId: viewer.userId,
+        viewerRole: viewer.role,
         documentId: document.publicId,
         attempts,
         reason: lastReason,
@@ -231,14 +246,30 @@ export class DocumentAiService {
       this.logger.warn(
         JSON.stringify({
           event: 'document_ai_extraction_failed',
-          feature: 'document_ai',
-          actorId: viewer.userId,
+          feature: 'DOCUMENT_AI',
+          viewerRole: viewer.role,
           documentId: documentPublicId,
           mimeType,
           status: error instanceof AppException ? error.getStatus() : 'unknown',
           outcome: 'extraction_failed',
         }),
       );
+
+      throw error;
+    }
+  }
+
+  private async withinDeadline<T>(
+    work: Promise<T>,
+    signal: AbortSignal,
+    deadline: number,
+  ): Promise<T> {
+    try {
+      return await runWithinAiDeadline(work, signal, deadline);
+    } catch (error) {
+      if (error instanceof AiRequestTimeoutError) {
+        throw this.timedOut();
+      }
 
       throw error;
     }
@@ -300,7 +331,7 @@ export class DocumentAiService {
   private timedOut(): AppException {
     return new AppException(
       HttpStatus.SERVICE_UNAVAILABLE,
-      APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
+      APP_ERROR_CODE.AI_TIMEOUT,
       'AI request timed out.',
     );
   }

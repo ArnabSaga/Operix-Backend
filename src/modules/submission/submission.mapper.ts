@@ -19,6 +19,8 @@ export interface SubmissionResponseSource {
   submissionText: string | null;
   submittedAt: Date;
   createdAt: Date;
+  updatedAt: Date;
+  lastEditedBy: { publicId: string; name: string } | null;
   attachments?: {
     id: string;
     file: {
@@ -54,6 +56,13 @@ export function mapSubmissionResponse(
     submissionText: submission.submissionText,
     submittedAt: submission.submittedAt,
     createdAt: submission.createdAt,
+    updatedAt: submission.updatedAt,
+    lastEditedBy: submission.lastEditedBy
+      ? {
+          id: submission.lastEditedBy.publicId,
+          name: submission.lastEditedBy.name,
+        }
+      : null,
     attachments: submission.attachments
       ? submission.attachments.map(mapSubmissionAttachmentResponse)
       : [],

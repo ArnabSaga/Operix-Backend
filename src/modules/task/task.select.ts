@@ -19,6 +19,16 @@ export const taskSelect = {
   occurrenceKey: true,
   team: { select: { publicId: true, name: true } },
   category: { select: { publicId: true } },
+  reviewer: {
+    select: {
+      publicId: true,
+      name: true,
+      role: true,
+      employeeId: true,
+      designation: true,
+    },
+  },
+  batch: { select: { publicId: true } },
   createdBy: {
     select: {
       publicId: true,

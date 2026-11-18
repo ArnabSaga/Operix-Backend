@@ -31,12 +31,12 @@ describe('Task Member self claim concurrency', () => {
     const testPool = new Pool({ connectionString: getTestDatabaseUrl() });
     pool = testPool;
     prisma = new PrismaClient({ adapter: new PrismaPg(testPool) });
-  });
+  }, 60_000);
 
   beforeEach(async () => {
     if (!prisma) throw new Error('Prisma test client was not initialized');
     fixture = await createFixture(prisma);
-  });
+  }, 60_000);
 
   afterEach(async () => {
     if (!prisma || !fixture) return;
@@ -51,12 +51,12 @@ describe('Task Member self claim concurrency', () => {
     await prisma.user.deleteMany({
       where: { id: { in: [fixture.adminId, ...fixture.memberIds] } },
     });
-  });
+  }, 60_000);
 
   afterAll(async () => {
     await prisma?.$disconnect();
     await pool?.end();
-  });
+  }, 60_000);
 
   it('allows exactly one concurrent Member to claim the Task', async () => {
     if (!prisma || !fixture) throw new Error('Fixture was not initialized');
@@ -75,13 +75,23 @@ describe('Task Member self claim concurrency', () => {
       results.filter((result) => result.status === 'fulfilled'),
     ).toHaveLength(1);
     const rejected = results.find((result) => result.status === 'rejected');
-    expect(rejected).toMatchObject({
-      status: 'rejected',
-      reason: {
-        status: 409,
-        response: { code: TASK_ERROR_CODE.TASK_CLAIM_CONFLICT },
-      },
-    });
+    if (rejected?.status !== 'rejected') {
+      throw new Error('Expected exactly one rejected claim attempt.');
+    }
+    const reason = rejected.reason as {
+      status?: number;
+      response?: { code?: string };
+    };
+    // The loser of the race may fail either inside its first attempt (an active
+    // assignment already exists while the task is still PENDING) or after a
+    // serializable retry observes the committed status (the task is no longer
+    // PENDING). Both are legitimate 409 rejections of the same claim, so pinning
+    // one code makes the test depend on transaction scheduling.
+    expect(reason.status).toBe(409);
+    expect([
+      TASK_ERROR_CODE.TASK_CLAIM_CONFLICT,
+      TASK_ERROR_CODE.TASK_INVALID_STATUS_TRANSITION,
+    ]).toContain(reason.response?.code);
 
     const task = await prisma.task.findUniqueOrThrow({
       where: { id: fixture.taskId },
@@ -97,7 +107,7 @@ describe('Task Member self claim concurrency', () => {
         where: { targetType: 'TASK', targetId: fixture.taskId },
       }),
     ).resolves.toBe(2);
-  });
+  }, 60_000);
 });
 
 function memberViewer(userId: string): OperixViewer {

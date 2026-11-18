@@ -209,7 +209,7 @@ export class TaskAssignmentAiService {
         JSON.stringify({
           event: 'task_assignment_ai_invalid',
           feature: 'TASK_ASSIGNMENT_RECOMMENDATION',
-          role: viewer.role,
+          viewerRole: viewer.role,
           taskScope: task.scope,
           completionMode: task.completionMode,
           eligibleCandidates: allCandidates.length,
@@ -226,7 +226,7 @@ export class TaskAssignmentAiService {
       JSON.stringify({
         event: 'task_assignment_ai_rejected',
         feature: 'TASK_ASSIGNMENT_RECOMMENDATION',
-        role: viewer.role,
+        viewerRole: viewer.role,
         taskScope: task.scope,
         completionMode: task.completionMode,
         eligibleCandidates: allCandidates.length,
@@ -380,7 +380,7 @@ export class TaskAssignmentAiService {
       JSON.stringify({
         event: 'task_assignment_ai_succeeded',
         feature: 'TASK_ASSIGNMENT_RECOMMENDATION',
-        role: input.viewer.role,
+        viewerRole: input.viewer.role,
         taskScope: input.task.scope,
         completionMode: input.task.completionMode,
         eligibleCandidates: input.eligibleCandidates,
@@ -397,7 +397,7 @@ export class TaskAssignmentAiService {
   private timedOut(): AppException {
     return new AppException(
       HttpStatus.SERVICE_UNAVAILABLE,
-      APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
+      APP_ERROR_CODE.AI_TIMEOUT,
       'AI request timed out.',
     );
   }

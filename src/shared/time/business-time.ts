@@ -33,6 +33,32 @@ export function isOccurrenceKey(value: string): boolean {
   return DateTime.fromFormat(value, 'yyyy-LL-dd', { zone: 'utc' }).isValid;
 }
 
+export interface BusinessMonthWindow {
+  /** First instant of the current business month. */
+  start: Date;
+  /** First instant of the next business month; exclusive upper bound. */
+  endExclusive: Date;
+}
+
+/**
+ * Current calendar-month window in the configured business timezone.
+ *
+ * Dashboard monthly metrics are query windows, never data resets: stored rows
+ * keep their history and only the reporting window moves at the month boundary.
+ */
+export function getBusinessMonthWindow(
+  now: Date,
+  timezone: string,
+): BusinessMonthWindow {
+  const local = DateTime.fromJSDate(now, { zone: 'utc' }).setZone(timezone);
+  const startOfMonth = local.startOf('month');
+
+  return {
+    start: startOfMonth.toUTC().toJSDate(),
+    endExclusive: startOfMonth.plus({ months: 1 }).toUTC().toJSDate(),
+  };
+}
+
 export function getNextOccurrence(
   current: Date,
   timezone: string,

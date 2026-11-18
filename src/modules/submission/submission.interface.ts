@@ -20,11 +20,13 @@ export type SafeSubmissionBaseResponse = Pick<
   | 'submissionText'
   | 'submittedAt'
   | 'createdAt'
+  | 'updatedAt'
 >;
 
 export interface SafeSubmissionResponse extends SafeSubmissionBaseResponse {
   submittedBy?: SafeSubmissionUserResponse | null;
   attachments?: SafeSubmissionAttachmentResponse[];
+  lastEditedBy?: { id: string; name: string } | null;
 }
 export interface PaginatedSubmissionResponse {
   data: SafeSubmissionResponse[];

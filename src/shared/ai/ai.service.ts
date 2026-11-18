@@ -9,11 +9,16 @@ import type {
   AiGenerationResult,
   AiProvider,
 } from './ai.interface.js';
-import { AiProviderError } from './ai-provider.error.js';
+import {
+  AiProviderError,
+  type AiProviderErrorClassification,
+} from './ai-provider.error.js';
 
 interface MappedAiFailure {
   exception: AppException;
   code: string;
+  /** Internal, log-only refinement. Never returned to a client. */
+  errorClassification: AiProviderErrorClassification;
   providerStatus: number | null;
 }
 
@@ -79,6 +84,7 @@ export class AiService {
           event: 'ai_generation_succeeded',
           provider: this.providerName,
           latencyMs: Date.now() - startedAt,
+          outcome: 'success',
         }),
       );
       return result;
@@ -89,9 +95,11 @@ export class AiService {
           event: 'ai_generation_failed',
           provider: this.providerName,
           code: failure.code,
+          errorClassification: failure.errorClassification,
           providerStatus: failure.providerStatus,
           deadlineExceeded: request.signal?.aborted === true,
           latencyMs: Date.now() - startedAt,
+          outcome: 'failed',
         }),
       );
       throw failure.exception;
@@ -103,18 +111,14 @@ export class AiService {
     signal: AbortSignal | undefined,
   ): MappedAiFailure {
     if (signal?.aborted === true) {
-      return {
-        exception: new AppException(
-          HttpStatus.SERVICE_UNAVAILABLE,
-          APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
-          'AI request timed out.',
-        ),
-        code: APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
-        providerStatus: null,
-      };
+      return this.timeoutFailure();
     }
 
     if (error instanceof AiProviderError) {
+      if (error.kind === 'TIMEOUT') {
+        return this.timeoutFailure(error.providerStatus);
+      }
+
       if (error.kind === 'RATE_LIMITED') {
         return {
           exception: new AppException(
@@ -123,6 +127,7 @@ export class AiService {
             'The AI provider is rate limited. Try again shortly.',
           ),
           code: APP_ERROR_CODE.AI_RATE_LIMITED,
+          errorClassification: error.classification,
           providerStatus: error.providerStatus,
         };
       }
@@ -135,6 +140,7 @@ export class AiService {
             'The AI provider is unavailable.',
           ),
           code: APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
+          errorClassification: error.classification,
           providerStatus: error.providerStatus,
         };
       }
@@ -146,6 +152,7 @@ export class AiService {
           'AI generation failed.',
         ),
         code: APP_ERROR_CODE.AI_GENERATION_FAILED,
+        errorClassification: error.classification,
         providerStatus: error.providerStatus,
       };
     }
@@ -157,7 +164,27 @@ export class AiService {
         'AI generation failed.',
       ),
       code: APP_ERROR_CODE.AI_GENERATION_FAILED,
+      errorClassification: 'PROVIDER_UNKNOWN',
       providerStatus: null,
+    };
+  }
+
+  /**
+   * A timeout keeps the existing recoverable 503 so no client behaviour changes
+   * beyond the now-distinct `AI_TIMEOUT` code.
+   */
+  private timeoutFailure(
+    providerStatus: number | null = null,
+  ): MappedAiFailure {
+    return {
+      exception: new AppException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        APP_ERROR_CODE.AI_TIMEOUT,
+        'AI request timed out.',
+      ),
+      code: APP_ERROR_CODE.AI_TIMEOUT,
+      errorClassification: 'PROVIDER_TIMEOUT',
+      providerStatus,
     };
   }
 }

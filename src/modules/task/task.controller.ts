@@ -27,6 +27,7 @@ import { TaskService } from './task.service.js';
 import { TaskDistributionService } from './task-distribution.service.js';
 import { RescheduleTaskDistributionDto } from './dto/reschedule-task-distribution.dto.js';
 import { UpdateTaskSelfClaimDto } from './dto/update-task-self-claim.dto.js';
+import { UpdateTaskDto } from './dto/update-task.dto.js';
 
 @ApiTags('tasks')
 @Controller('tasks')
@@ -73,6 +74,17 @@ export class TaskController {
     @Param('taskId', PublicIdPipe) taskId: string,
   ) {
     return this.taskService.getTask(viewer, taskId);
+  }
+
+  @Patch(':taskId')
+  @RequireRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  updateTask(
+    @CurrentViewer() viewer: OperixViewer,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: UpdateTaskDto,
+  ) {
+    return this.taskService.updateTask(viewer, taskId, dto);
   }
 
   @Post(':taskId/assignments')

@@ -364,6 +364,49 @@ describe('MailService', () => {
     }
   });
 
+  it('reports unavailable delivery for strict onboarding mail', async () => {
+    const service = new MailService(
+      createConfig() as unknown as ConfigService<
+        ApplicationConfiguration,
+        true
+      >,
+      new MailTemplateRenderer(),
+    );
+
+    const strictCalls = [
+      () =>
+        service.sendRegistrationReceivedEmail({
+          requestId: 'req-a',
+          recipientName: 'Applicant A',
+          email: 'applicant@example.com',
+        }),
+      () =>
+        service.sendRegistrationRejectedEmail({
+          requestId: 'req-a',
+          recipientName: 'Applicant A',
+          email: 'applicant@example.com',
+        }),
+      () =>
+        service.sendAccountSetupEmail({
+          userId: 'admin-a',
+          recipientName: 'Admin A',
+          email: 'admin@example.com',
+          setupUrl: 'https://api.operix.test/reset-password/token',
+        }),
+    ];
+
+    for (const call of strictCalls) {
+      try {
+        await call();
+        throw new Error('Expected delivery to fail.');
+      } catch (error) {
+        expect(getAppErrorCode(error)).toBe(
+          APP_ERROR_CODE.MAIL_DELIVERY_UNAVAILABLE,
+        );
+      }
+    }
+  });
+
   it('exposes bounded timeout constants for SMTP transport creation', () => {
     expect(SMTP_TIMEOUT_MS).toEqual({
       CONNECTION: 10_000,

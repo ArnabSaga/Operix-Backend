@@ -11,11 +11,17 @@ export function buildSubmissionScopeWhere(
 
   if (viewer.role === UserRole.ADMIN) {
     return {
-      task: {
-        teamId: {
-          in: viewer.scope.type === 'ADMIN' ? viewer.scope.teamIds : [],
+      OR: [
+        { submittedById: viewer.userId },
+        { task: { reviewerUserId: viewer.userId } },
+        {
+          task: {
+            teamId: {
+              in: viewer.scope.type === 'ADMIN' ? viewer.scope.teamIds : [],
+            },
+          },
         },
-      },
+      ],
     };
   }
 

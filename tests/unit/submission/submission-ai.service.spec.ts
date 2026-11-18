@@ -100,6 +100,7 @@ function createSubmission(overrides: SubmissionOverrides = {}) {
       status: overrides.status ?? TaskStatus.SUBMITTED,
       dueAt: new Date('2026-08-25T10:00:00.000Z'),
       completionMode: TaskCompletionMode.REVIEW_REQUIRED,
+      reviewerUserId: 'admin-a',
       team: {
         adminId: 'admin-a',
         publicId: 'team-public-a',
@@ -432,7 +433,7 @@ describe('SubmissionAiService', () => {
     expect(aiService.generate).toHaveBeenCalledTimes(1);
   });
 
-  it('fails with AI_PROVIDER_UNAVAILABLE when no time budget remains', async () => {
+  it('fails with AI_TIMEOUT when no time budget remains', async () => {
     const prisma = createPrisma();
     const aiService = createAiService();
     aiService.getTimeoutMs.mockReturnValue(0);
@@ -444,7 +445,41 @@ describe('SubmissionAiService', () => {
       ),
       {
         status: HttpStatus.SERVICE_UNAVAILABLE,
-        code: APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE,
+        code: APP_ERROR_CODE.AI_TIMEOUT,
+      },
+    );
+
+    expect(aiService.generate).not.toHaveBeenCalled();
+  });
+
+  it('bounds attachment download inside the shared AI budget', async () => {
+    const prisma = createPrisma({
+      attachments: [
+        {
+          file: {
+            originalName: 'batch-record.pdf',
+            mimeType: 'application/pdf',
+            sizeBytes: 10,
+            storageKey: 'storage-key-a',
+          },
+        },
+      ],
+    });
+    const aiService = createAiService();
+    aiService.getTimeoutMs.mockReturnValue(20);
+    const fileStorage = {
+      download: jestApi
+        .fn()
+        .mockReturnValue(new Promise<never>(() => undefined)),
+    };
+    await expectRejects(
+      createService(prisma, aiService, fileStorage).analyze(
+        createViewer(),
+        'submission-public-a',
+      ),
+      {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        code: APP_ERROR_CODE.AI_TIMEOUT,
       },
     );
 
@@ -504,7 +539,7 @@ describe('SubmissionAiService', () => {
     expect(aiService.generate).not.toHaveBeenCalled();
   });
 
-  it.each([UserRole.SUPER_ADMIN, UserRole.MEMBER])(
+  it.each([UserRole.MEMBER])(
     'denies %s before touching the database',
     async (role) => {
       const prisma = createPrisma();

@@ -1,4 +1,4 @@
-import { HttpStatus } from '@nestjs/common';
+import { HttpStatus, Logger } from '@nestjs/common';
 import { UserRole, UserStatus } from '../../../generated/prisma/enums';
 import type { AiService } from '../../../src/shared/ai/ai.service';
 import type {
@@ -9,6 +9,7 @@ import type { OperixViewer } from '../../../src/shared/auth/viewer.interface';
 import { APP_ERROR_CODE } from '../../../src/shared/errors/app-error-code.constant';
 import { AppException } from '../../../src/shared/errors/app.exception';
 import { DashboardAiService } from '../../../src/modules/dashboard/dashboard-ai.service';
+import { DASHBOARD_AI_PERIOD } from '../../../src/modules/dashboard/dashboard-ai.constant';
 import { DashboardTrendDays } from '../../../src/modules/dashboard/dashboard.constant';
 import type { DashboardOperationalSnapshot } from '../../../src/modules/dashboard/dashboard.interface';
 import type { DashboardService } from '../../../src/modules/dashboard/dashboard.service';
@@ -126,19 +127,23 @@ function snapshot(): DashboardOperationalSnapshot {
 
 interface Harness {
   service: DashboardAiService;
-  getOperationalSnapshot: jest.Mock;
+  getAiOperationalSnapshot: jest.Mock;
   generate: jest.Mock<Promise<AiGenerationResult>, [AiGenerationRequest]>;
   assertEnabled: jest.Mock;
 }
 
 function harness(): Harness {
-  const getOperationalSnapshot = jestApi.fn().mockResolvedValue(snapshot());
+  const getAiOperationalSnapshot = jestApi
+    .fn()
+    .mockImplementation((_viewer: OperixViewer, days: number) =>
+      Promise.resolve({ ...snapshot(), days }),
+    );
   const generate = jestApi
     .fn<Promise<AiGenerationResult>, [AiGenerationRequest]>()
     .mockResolvedValue({ text: validBriefJson(), model: MODEL });
   const assertEnabled = jestApi.fn();
   const dashboardService = {
-    getOperationalSnapshot,
+    getAiOperationalSnapshot,
   } as unknown as DashboardService;
   const aiService = {
     assertEnabled,
@@ -147,8 +152,10 @@ function harness(): Harness {
     generate,
   } as unknown as AiService;
   return {
-    service: new DashboardAiService(dashboardService, aiService),
-    getOperationalSnapshot,
+    service: new DashboardAiService(dashboardService, aiService, {
+      get: jestApi.fn().mockReturnValue('Asia/Dhaka'),
+    } as never),
+    getAiOperationalSnapshot,
     generate,
     assertEnabled,
   };
@@ -166,37 +173,94 @@ describe('DashboardAiService authorization and context', () => {
       response: { code: APP_ERROR_CODE.FORBIDDEN },
     });
     expect(test.assertEnabled).not.toHaveBeenCalled();
-    expect(test.getOperationalSnapshot).not.toHaveBeenCalled();
+    expect(test.getAiOperationalSnapshot).not.toHaveBeenCalled();
     expect(test.generate).not.toHaveBeenCalled();
+  });
+
+  it('resolves role-specific KPI keys without logging a miss', async () => {
+    const warn = jestApi
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const test = harness();
+
+    await test.service.generate(viewer(UserRole.ADMIN));
+
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(
+      'dashboard_ai_snapshot_kpi_missing',
+    );
+  });
+
+  it('logs a warning instead of silently zeroing an unknown KPI', async () => {
+    const warn = jestApi
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const test = harness();
+    const broken = snapshot();
+    delete (broken.overview.kpis as unknown as Record<string, unknown>)
+      .overdueTasks;
+    test.getAiOperationalSnapshot.mockResolvedValueOnce(broken);
+
+    const result = await test.service.generate(viewer(UserRole.ADMIN));
+
+    expect(result.snapshot.overdueTasks).toBe(0);
+    expect(JSON.stringify(warn.mock.calls)).toContain(
+      'dashboard_ai_snapshot_kpi_missing',
+    );
+    expect(JSON.stringify(warn.mock.calls)).toContain('overdueTasks');
   });
 
   it('uses the canonical snapshot and sends exact deterministic metrics', async () => {
     const test = harness();
     const result = await test.service.generate(
       viewer(UserRole.ADMIN),
-      DashboardTrendDays.SEVEN,
+      DASHBOARD_AI_PERIOD.LAST_7_DAYS,
     );
-    expect(test.getOperationalSnapshot).toHaveBeenCalledWith(
+    expect(test.getAiOperationalSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ role: UserRole.ADMIN }),
-      DashboardTrendDays.SEVEN,
+      7,
       10,
+      'Asia/Dhaka',
     );
     const request = test.generate.mock.calls[0]![0];
     expect(request.userPrompt).toContain('"overdueTasks": 7');
     expect(request.userPrompt).toContain('"scopedCompletionRate": 82');
     expect(request.userPrompt).not.toContain('private-id');
     expect(request.userPrompt).not.toContain('metadata');
-    expect(result.meta).toMatchObject({
-      provider: 'gemini',
-      model: MODEL,
-      attempts: 1,
-      days: 7,
-      asOf: '2026-10-24T08:00:00.000Z',
+    expect(result).toMatchObject({
+      snapshot: {
+        activeTasks: 7,
+        overdueTasks: 7,
+        completedInPeriod: 2,
+      },
+      meta: {
+        provider: 'gemini',
+        model: MODEL,
+        attempts: 1,
+        period: 'LAST_7_DAYS',
+        days: 7,
+        asOf: '2026-10-24T08:00:00.000Z',
+      },
     });
-    expect(result.limitations.slice(0, 2)).toEqual([
+    expect(result.brief.limitations.slice(0, 2)).toEqual([
       'This is an advisory AI summary of the current authorized Operix Dashboard snapshot.',
       'The brief does not change Tasks, Reviews, Reports, assignments, or workflow state.',
     ]);
+  });
+
+  it('requests Today as one configured business-calendar day', async () => {
+    const test = harness();
+    const result = await test.service.generate(
+      viewer(UserRole.ADMIN),
+      DASHBOARD_AI_PERIOD.TODAY,
+    );
+    expect(test.getAiOperationalSnapshot).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      10,
+      'Asia/Dhaka',
+    );
+    expect(result.meta).toMatchObject({ period: 'TODAY', days: 1 });
+    expect(result.snapshot.period).toBe('TODAY');
   });
 });
 
@@ -232,6 +296,7 @@ describe('DashboardAiService retry contract', () => {
   it.each([
     [HttpStatus.TOO_MANY_REQUESTS, APP_ERROR_CODE.AI_RATE_LIMITED],
     [HttpStatus.SERVICE_UNAVAILABLE, APP_ERROR_CODE.AI_PROVIDER_UNAVAILABLE],
+    [HttpStatus.SERVICE_UNAVAILABLE, APP_ERROR_CODE.AI_TIMEOUT],
   ])('does not retry provider failures', async (status, code) => {
     const test = harness();
     test.generate.mockRejectedValue(

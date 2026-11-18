@@ -19,6 +19,10 @@ export const submissionSelect = {
   submissionText: true,
   submittedAt: true,
   createdAt: true,
+  updatedAt: true,
+  lastEditedBy: {
+    select: { publicId: true, name: true },
+  },
   attachments: {
     select: {
       id: true,

@@ -1,13 +1,15 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client.js';
 import {
   TaskCompletionMode,
   TaskStatus,
+  UserRole,
 } from '../../../generated/prisma/enums.js';
 import { PrismaService } from '../../database/prisma.service.js';
 import { writeActivity } from '../../shared/activity/activity-write.js';
 import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import { runSerializableTransaction } from '../../shared/database/serializable-transaction.js';
+import type { PrismaTransactionClient } from '../../shared/database/transaction-client.type.js';
 import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
 import { AppException } from '../../shared/errors/app.exception.js';
 import { MAX_ATTACHMENT_FILES } from '../../shared/file-storage/file-storage.constant.js';
@@ -23,6 +25,7 @@ import { mapSubmissionAttachmentResponse } from '../file/file.mapper.js';
 import { safeAttachmentSelect } from '../file/file.select.js';
 import type { SafeSubmissionAttachmentResponse } from '../file/file.interface.js';
 import type { CreateSubmissionDto } from './dto/create-submission.dto.js';
+import type { UpdateSubmissionDto } from './dto/update-submission.dto.js';
 import { buildSubmissionScopeWhere } from './policies/submission-scope.policy.js';
 import {
   SUBMISSION_ACTIVITY,
@@ -47,6 +50,8 @@ const SUBMISSION_TRANSACTION_TIMEOUT_MS = 15_000;
 
 @Injectable()
 export class SubmissionService {
+  private readonly logger = new Logger(SubmissionService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage?: FileStorageService,
@@ -103,11 +108,7 @@ export class SubmissionService {
               id: true,
               status: true,
               completionMode: true,
-              team: {
-                select: {
-                  adminId: true,
-                },
-              },
+              reviewerUserId: true,
             },
           });
 
@@ -123,7 +124,7 @@ export class SubmissionService {
             );
           }
 
-          if (!task.team) {
+          if (!task.reviewerUserId) {
             throw this.submissionNotAllowed();
           }
 
@@ -228,7 +229,7 @@ export class SubmissionService {
           });
 
           await createNotification(tx, {
-            receiverId: task.team.adminId,
+            receiverId: task.reviewerUserId,
             actorId: viewer.userId,
             type: isResubmission
               ? SUBMISSION_NOTIFICATION.TASK_RESUBMITTED
@@ -323,6 +324,238 @@ export class SubmissionService {
     return mapSubmissionResponse(submission);
   }
 
+  async updateSubmission(
+    viewer: OperixViewer,
+    submissionId: string,
+    dto: UpdateSubmissionDto,
+  ): Promise<SafeSubmissionResponse> {
+    const now = new Date();
+    const submission = await runSerializableTransaction(
+      this.prisma,
+      async (tx) => {
+        const editable = await this.resolveEditableSubmission(
+          tx,
+          viewer,
+          submissionId,
+          now,
+        );
+
+        if (editable.submissionText === dto.submissionText) {
+          const current = await tx.taskSubmission.findUnique({
+            where: { id: editable.id },
+            select: submissionSelect,
+          });
+          if (!current) throw this.submissionNotFound();
+          return current;
+        }
+
+        const updated = await tx.taskSubmission.update({
+          where: { id: editable.id },
+          data: {
+            submissionText: dto.submissionText,
+            lastEditedById: viewer.userId,
+          },
+          select: submissionSelect,
+        });
+
+        await writeActivity(tx, {
+          actorId: viewer.userId,
+          action: SUBMISSION_ACTIVITY.SUBMISSION_UPDATED,
+          entityType: 'SUBMISSION',
+          entityId: editable.id,
+          metadata: {
+            version: editable.version,
+            changedFields: ['submissionText'],
+            deadlineOverride: editable.deadlineOverride,
+          },
+        });
+
+        return updated;
+      },
+      { timeoutMs: SUBMISSION_TRANSACTION_TIMEOUT_MS },
+    );
+
+    return mapSubmissionResponse(submission);
+  }
+
+  async uploadSubmissionAttachments(
+    viewer: OperixViewer,
+    submissionId: string,
+    files: Express.Multer.File[] | undefined,
+  ): Promise<SafeSubmissionAttachmentResponse[]> {
+    const initial = await this.resolveEditableSubmission(
+      this.prisma,
+      viewer,
+      submissionId,
+      new Date(),
+    );
+    const validatedFiles = await this.getStorage().validateFiles(files, {
+      requireAtLeastOne: true,
+    });
+    await this.assertSubmissionAttachmentCapacity(
+      this.prisma,
+      initial.id,
+      validatedFiles.length,
+    );
+    const uploaded = await this.getStorage().uploadValidatedFiles(
+      validatedFiles,
+      'submission-attachments',
+    );
+
+    try {
+      return await runSerializableTransaction(
+        this.prisma,
+        async (tx) => {
+          const editable = await this.resolveEditableSubmission(
+            tx,
+            viewer,
+            submissionId,
+            new Date(),
+          );
+          await this.assertSubmissionAttachmentCapacity(
+            tx,
+            editable.id,
+            uploaded.length,
+          );
+
+          const attachments: SafeSubmissionAttachmentResponse[] = [];
+          for (const file of uploaded) {
+            const fileAsset = await tx.fileAsset.create({
+              data: {
+                originalName: file.originalName,
+                mimeType: file.mimeType,
+                sizeBytes: file.sizeBytes,
+                storageKey: file.storageKey,
+                publicUrl: null,
+                uploadedById: viewer.userId,
+              },
+              select: { id: true },
+            });
+            const attachment = await tx.submissionAttachment.create({
+              data: {
+                submissionId: editable.id,
+                fileId: fileAsset.id,
+              },
+              select: safeAttachmentSelect,
+            });
+            attachments.push(mapSubmissionAttachmentResponse(attachment));
+          }
+
+          await tx.taskSubmission.update({
+            where: { id: editable.id },
+            data: { lastEditedById: viewer.userId },
+            select: { id: true },
+          });
+          await writeActivity(tx, {
+            actorId: viewer.userId,
+            action: SUBMISSION_ACTIVITY.SUBMISSION_ATTACHMENTS_ADDED,
+            entityType: 'SUBMISSION',
+            entityId: editable.id,
+            metadata: {
+              version: editable.version,
+              fileCount: uploaded.length,
+              deadlineOverride: editable.deadlineOverride,
+            },
+          });
+
+          return attachments;
+        },
+        { timeoutMs: SUBMISSION_TRANSACTION_TIMEOUT_MS },
+      );
+    } catch (error) {
+      await this.getStorage().destroyUploadedBestEffort(
+        uploaded,
+        'submission attachment edit rollback',
+      );
+      throw error;
+    }
+  }
+
+  async deleteSubmissionAttachment(
+    viewer: OperixViewer,
+    submissionId: string,
+    fileId: string,
+  ): Promise<{ id: string }> {
+    const deleted = await runSerializableTransaction(
+      this.prisma,
+      async (tx) => {
+        const editable = await this.resolveEditableSubmission(
+          tx,
+          viewer,
+          submissionId,
+          new Date(),
+        );
+        const attachment = await tx.submissionAttachment.findFirst({
+          where: {
+            submissionId: editable.id,
+            file: { publicId: fileId },
+          },
+          select: {
+            id: true,
+            fileId: true,
+            file: { select: { publicId: true, storageKey: true } },
+          },
+        });
+        if (!attachment) throw this.fileNotFound();
+
+        this.getStorage().assertEnabled();
+        const [taskAttachmentCount, submissionAttachmentCount] =
+          await Promise.all([
+            tx.taskAttachment.count({ where: { fileId: attachment.fileId } }),
+            tx.submissionAttachment.count({
+              where: { fileId: attachment.fileId },
+            }),
+          ]);
+        if (taskAttachmentCount !== 0 || submissionAttachmentCount !== 1) {
+          this.logger.error(
+            `FileAsset ${attachment.fileId} has invalid attachment references.`,
+          );
+          throw new AppException(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            APP_ERROR_CODE.INTERNAL_SERVER_ERROR,
+            'File attachment integrity violation.',
+          );
+        }
+
+        await tx.submissionAttachment.delete({
+          where: { id: attachment.id },
+        });
+        await tx.fileAsset.delete({ where: { id: attachment.fileId } });
+        await tx.taskSubmission.update({
+          where: { id: editable.id },
+          data: { lastEditedById: viewer.userId },
+          select: { id: true },
+        });
+        await writeActivity(tx, {
+          actorId: viewer.userId,
+          action: SUBMISSION_ACTIVITY.SUBMISSION_ATTACHMENT_REMOVED,
+          entityType: 'SUBMISSION',
+          entityId: editable.id,
+          metadata: {
+            version: editable.version,
+            deadlineOverride: editable.deadlineOverride,
+          },
+        });
+
+        return {
+          id: attachment.file.publicId,
+          storageKey: attachment.file.storageKey,
+        };
+      },
+      { timeoutMs: SUBMISSION_TRANSACTION_TIMEOUT_MS },
+    );
+
+    try {
+      await this.getStorage().destroy(deleted.storageKey);
+    } catch (error) {
+      this.logger.warn(
+        `Storage cleanup failed after Submission attachment delete ${fileId}: ${getErrorName(error)}`,
+      );
+    }
+
+    return { id: deleted.id };
+  }
+
   async listSubmissionAttachments(
     viewer: OperixViewer,
     submissionId: string,
@@ -370,6 +603,7 @@ export class SubmissionService {
         id: true,
         status: true,
         completionMode: true,
+        reviewerUserId: true,
       },
     });
 
@@ -385,11 +619,116 @@ export class SubmissionService {
       );
     }
 
+    if (!task.reviewerUserId) {
+      throw this.submissionNotAllowed();
+    }
+
     if (
       task.status !== TaskStatus.IN_PROGRESS &&
       task.status !== TaskStatus.REVISION_REQUIRED
     ) {
       throw this.submissionNotAllowed();
+    }
+  }
+
+  private async resolveEditableSubmission(
+    client: Pick<PrismaTransactionClient, 'taskSubmission'>,
+    viewer: OperixViewer,
+    submissionId: string,
+    now: Date,
+  ) {
+    const submission = await client.taskSubmission.findFirst({
+      where: { publicId: submissionId },
+      select: {
+        id: true,
+        publicId: true,
+        taskId: true,
+        submittedById: true,
+        version: true,
+        submissionText: true,
+        reviews: { take: 1, select: { id: true } },
+        task: {
+          select: {
+            status: true,
+            dueAt: true,
+            assignments: {
+              where: { unassignedAt: null },
+              take: 2,
+              select: { responsibleUserId: true },
+            },
+          },
+        },
+      },
+    });
+    if (!submission) throw this.submissionNotFound();
+
+    if (submission.task.assignments.length > 1) {
+      this.logger.error(
+        `Task ${submission.taskId} has multiple active assignments during Submission edit.`,
+      );
+      throw new AppException(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        APP_ERROR_CODE.INTERNAL_SERVER_ERROR,
+        'Task assignment integrity violation.',
+      );
+    }
+
+    const superAdminOverride = viewer.role === UserRole.SUPER_ADMIN;
+    const currentResponsibleUserId =
+      submission.task.assignments[0]?.responsibleUserId ?? null;
+    if (
+      !superAdminOverride &&
+      (submission.submittedById !== viewer.userId ||
+        currentResponsibleUserId !== viewer.userId)
+    ) {
+      throw this.forbidden();
+    }
+
+    if (
+      submission.task.status !== TaskStatus.SUBMITTED &&
+      submission.task.status !== TaskStatus.RESUBMITTED
+    ) {
+      throw this.submissionNotEditable();
+    }
+    const latest = await client.taskSubmission.findFirst({
+      where: { taskId: submission.taskId },
+      orderBy: [{ version: 'desc' }, { id: 'desc' }],
+      select: { id: true },
+    });
+    if (latest?.id !== submission.id || submission.reviews.length > 0) {
+      throw this.submissionNotEditable();
+    }
+
+    const deadlinePassed =
+      submission.task.dueAt !== null && now >= submission.task.dueAt;
+    if (deadlinePassed && !superAdminOverride) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        SUBMISSION_ERROR_CODE.SUBMISSION_EDIT_DEADLINE_PASSED,
+        'Submission editing is locked after the Task deadline.',
+      );
+    }
+
+    return {
+      ...submission,
+      deadlineOverride: superAdminOverride && deadlinePassed,
+    };
+  }
+
+  private async assertSubmissionAttachmentCapacity(
+    client: Pick<PrismaTransactionClient, 'submissionAttachment'>,
+    submissionId: string,
+    incomingCount: number,
+  ): Promise<void> {
+    const count = await client.submissionAttachment.count({
+      where: { submissionId },
+    });
+    if (count + incomingCount > MAX_ATTACHMENT_FILES) {
+      throw new AppException(
+        HttpStatus.CONFLICT,
+        SUBMISSION_ERROR_CODE.SUBMISSION_ATTACHMENT_LIMIT_REACHED,
+        'Submission attachment limit reached.',
+      );
     }
   }
 
@@ -417,6 +756,30 @@ export class SubmissionService {
     );
   }
 
+  private submissionNotEditable(): AppException {
+    return new AppException(
+      HttpStatus.CONFLICT,
+      SUBMISSION_ERROR_CODE.SUBMISSION_NOT_EDITABLE,
+      'Submission can no longer be changed.',
+    );
+  }
+
+  private forbidden(): AppException {
+    return new AppException(
+      HttpStatus.FORBIDDEN,
+      APP_ERROR_CODE.FORBIDDEN,
+      'You do not have access to this action.',
+    );
+  }
+
+  private fileNotFound(): AppException {
+    return new AppException(
+      HttpStatus.NOT_FOUND,
+      APP_ERROR_CODE.FILE_NOT_FOUND,
+      'File not found.',
+    );
+  }
+
   private getStorage(): FileStorageService {
     if (!this.storage) {
       throw new AppException(
@@ -428,6 +791,10 @@ export class SubmissionService {
 
     return this.storage;
   }
+}
+
+function getErrorName(error: unknown): string {
+  return error instanceof Error ? error.name : 'UnknownError';
 }
 
 function mapSubmissionConflict(error: unknown): Error {

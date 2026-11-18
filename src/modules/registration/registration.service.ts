@@ -19,7 +19,9 @@ import type { OperixViewer } from '../../shared/auth/viewer.interface.js';
 import { runSerializableTransaction } from '../../shared/database/serializable-transaction.js';
 import { APP_ERROR_CODE } from '../../shared/errors/app-error-code.constant.js';
 import { AppException } from '../../shared/errors/app.exception.js';
+import type { MailOutcome } from '../../shared/mail/mail.interface.js';
 import { MailService } from '../../shared/mail/mail.service.js';
+import { resolveNotifications } from '../../shared/notification/notification-resolution.js';
 import { ApiRateLimitService } from '../../shared/rate-limit/rate-limit.service.js';
 import {
   createPaginationMeta,
@@ -39,9 +41,11 @@ import {
   REGISTRATION_ERROR_CODE,
   REGISTRATION_GENERIC_RESPONSE,
   REGISTRATION_NOTIFICATION,
+  REGISTRATION_NOTIFICATION_TARGET,
   REGISTRATION_RATE_LIMIT,
   REGISTRATION_REJECTION_COOLDOWN_MS,
   REGISTRATION_RETENTION_MS,
+  REGISTRATION_SETUP_RESEND_COOLDOWN_MS,
   REGISTRATION_THROTTLE_RETENTION_MS,
 } from './registration.constant.js';
 import { mapRegistrationRequest } from './registration.mapper.js';
@@ -131,7 +135,7 @@ export class RegistrationService {
                 type: REGISTRATION_NOTIFICATION.REQUESTED,
                 title: 'New registration request',
                 body: `${request.name} submitted an access request.`,
-                targetType: 'REGISTRATION_REQUEST',
+                targetType: REGISTRATION_NOTIFICATION_TARGET,
                 targetId: request.id,
                 targetPublicId: request.publicId,
               })),
@@ -148,15 +152,17 @@ export class RegistrationService {
         },
       );
 
-      void this.mailService
-        .sendRegistrationReceivedEmail({
+      try {
+        await this.mailService.sendRegistrationReceivedEmail({
           requestId: created.publicId,
           recipientName: created.name,
           email: created.normalizedEmail,
-        })
-        .catch((error: unknown) =>
-          this.logMailFailure('registration-received', created.publicId, error),
-        );
+        });
+      } catch (error) {
+        // The request is already persisted; never surface mail failure to the
+        // anonymous caller or fail the registration.
+        this.logMailFailure('registration-received', created.publicId, error);
+      }
     } catch (error) {
       if (isUniqueConflict(error)) return REGISTRATION_GENERIC_RESPONSE;
       throw error;
@@ -293,81 +299,88 @@ export class RegistrationService {
           claimId,
           viewer.userId,
         );
-        void this.mailService
-          .sendRegistrationRejectedEmail({
+        try {
+          await this.mailService.sendRegistrationRejectedEmail({
             requestId,
             recipientName: request.name,
             email: request.normalizedEmail,
-          })
-          .catch((mailError: unknown) =>
-            this.logMailFailure('registration-rejected', requestId, mailError),
-          );
+          });
+        } catch (mailError) {
+          this.logMailFailure('registration-rejected', requestId, mailError);
+        }
       } else {
         await this.restoreClaim(request.id, claimId);
       }
       throw this.mapProvisioningError(error);
     }
 
+    let finalized: Prisma.RegistrationRequestGetPayload<{
+      select: typeof registrationRequestSelect;
+    }>;
+
     try {
-      const finalized = await runSerializableTransaction(
-        this.prisma,
-        async (tx) => {
-          const current = await tx.registrationRequest.findFirst({
-            where: {
-              id: request.id,
-              status: RegistrationRequestStatus.APPROVING,
-              approvalClaimId: claimId,
-            },
-            select: { id: true },
+      finalized = await runSerializableTransaction(this.prisma, async (tx) => {
+        const current = await tx.registrationRequest.findFirst({
+          where: {
+            id: request.id,
+            status: RegistrationRequestStatus.APPROVING,
+            approvalClaimId: claimId,
+          },
+          select: { id: true },
+        });
+        if (!current)
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            APP_ERROR_CODE.CONCURRENT_MODIFICATION,
+            'Registration approval changed while processing.',
+          );
+        const internalUser = await tx.user.findFirst({
+          where: { id: user.id, registrationRequestId: request.id },
+          select: { id: true },
+        });
+        if (!internalUser)
+          throw new AppException(
+            HttpStatus.CONFLICT,
+            APP_ERROR_CODE.CONCURRENT_MODIFICATION,
+            'Provisioned account could not be reconciled.',
+          );
+        if (dto.role === UserRole.MEMBER && teamId) {
+          await tx.teamMember.create({
+            data: { teamId, memberId: internalUser.id },
           });
-          if (!current)
-            throw new AppException(
-              HttpStatus.CONFLICT,
-              APP_ERROR_CODE.CONCURRENT_MODIFICATION,
-              'Registration approval changed while processing.',
-            );
-          const internalUser = await tx.user.findFirst({
-            where: { id: user.id, registrationRequestId: request.id },
-            select: { id: true },
-          });
-          if (!internalUser)
-            throw new AppException(
-              HttpStatus.CONFLICT,
-              APP_ERROR_CODE.CONCURRENT_MODIFICATION,
-              'Provisioned account could not be reconciled.',
-            );
-          if (dto.role === UserRole.MEMBER && teamId) {
-            await tx.teamMember.create({
-              data: { teamId, memberId: internalUser.id },
-            });
-          }
-          const now = new Date();
-          await writeActivity(tx, {
-            actorId: viewer.userId,
-            action: REGISTRATION_ACTIVITY.APPROVED,
-            entityType: 'REGISTRATION_REQUEST',
-            entityId: request.id,
-          });
-          return tx.registrationRequest.update({
-            where: { id: request.id },
-            data: {
-              status: RegistrationRequestStatus.APPROVED,
-              approvedAt: now,
-              reviewedAt: now,
-              approvalClaimId: null,
-              approvalClaimedAt: null,
-            },
-            select: registrationRequestSelect,
-          });
-        },
-      );
-      await this.authService
-        .requestPasswordSetup(request.normalizedEmail)
-        .catch((error: unknown) =>
-          this.logMailFailure('account-setup', requestId, error),
-        );
-      return mapRegistrationRequest(finalized);
+        }
+        const now = new Date();
+        await writeActivity(tx, {
+          actorId: viewer.userId,
+          action: REGISTRATION_ACTIVITY.APPROVED,
+          entityType: 'REGISTRATION_REQUEST',
+          entityId: request.id,
+        });
+        const approved = await tx.registrationRequest.update({
+          where: { id: request.id },
+          data: {
+            status: RegistrationRequestStatus.APPROVED,
+            approvedAt: now,
+            reviewedAt: now,
+            approvalClaimId: null,
+            approvalClaimedAt: null,
+          },
+          select: registrationRequestSelect,
+        });
+
+        // Resolution is part of the same transaction as the status change, so a
+        // committed approval can never leave an actionable notification behind.
+        await resolveNotifications(tx, {
+          targetType: REGISTRATION_NOTIFICATION_TARGET,
+          targetId: request.id,
+          resolution: RegistrationRequestStatus.APPROVED,
+          resolvedAt: now,
+        });
+
+        return approved;
+      });
     } catch (error) {
+      // The final approval did not commit, so compensating is appropriate.
       try {
         const internal = await this.prisma.user.findUnique({
           where: { id: user.id },
@@ -383,6 +396,18 @@ export class RegistrationService {
       }
       throw error;
     }
+
+    // The approval is committed from here on. Nothing below this point may
+    // delete the provisioned account or revert the APPROVED state.
+    const setupEmailStatus = await this.dispatchSetupEmail(
+      request.normalizedEmail,
+      requestId,
+    );
+
+    return {
+      ...mapRegistrationRequest(finalized),
+      setupEmail: { status: setupEmailStatus },
+    };
   }
 
   async reject(
@@ -419,18 +444,27 @@ export class RegistrationService {
           },
           select: registrationRequestSelect,
         });
+
+        await resolveNotifications(tx, {
+          targetType: REGISTRATION_NOTIFICATION_TARGET,
+          targetId: current.id,
+          resolution: RegistrationRequestStatus.REJECTED,
+          resolvedAt: now,
+        });
+
         return { result, mail: current };
       },
     );
-    void this.mailService
-      .sendRegistrationRejectedEmail({
+    try {
+      await this.mailService.sendRegistrationRejectedEmail({
         requestId,
         recipientName: updated.mail.name,
         email: updated.mail.normalizedEmail,
-      })
-      .catch((error: unknown) =>
-        this.logMailFailure('registration-rejected', requestId, error),
-      );
+      });
+    } catch (error) {
+      // Rejection is committed; mail failure must not undo it.
+      this.logMailFailure('registration-rejected', requestId, error);
+    }
     return mapRegistrationRequest(updated.result);
   }
 
@@ -441,6 +475,7 @@ export class RegistrationService {
         id: true,
         status: true,
         normalizedEmail: true,
+        passwordConfiguredAt: true,
         approvedUser: { select: { status: true, passwordSetupRequired: true } },
       },
     });
@@ -448,7 +483,8 @@ export class RegistrationService {
     if (
       request.status !== RegistrationRequestStatus.APPROVED ||
       request.approvedUser?.status !== UserStatus.INACTIVE ||
-      !request.approvedUser.passwordSetupRequired
+      !request.approvedUser.passwordSetupRequired ||
+      request.passwordConfiguredAt !== null
     ) {
       throw new AppException(
         HttpStatus.CONFLICT,
@@ -456,20 +492,17 @@ export class RegistrationService {
         'Account setup is not available for this request.',
       );
     }
-    await this.prisma.$transaction(async (tx) =>
-      writeActivity(tx, {
-        actorId: viewer.userId,
-        action: REGISTRATION_ACTIVITY.SETUP_RESENT,
-        entityType: 'REGISTRATION_REQUEST',
-        entityId: request.id,
-      }),
+
+    await this.claimSetupResend(request.id, viewer.userId);
+
+    const setupEmailStatus = await this.dispatchSetupEmail(
+      request.normalizedEmail,
+      requestId,
     );
-    await this.authService
-      .requestPasswordSetup(request.normalizedEmail)
-      .catch((error: unknown) =>
-        this.logMailFailure('account-setup', requestId, error),
-      );
-    return { message: 'A new account setup link was requested.' };
+    return {
+      message: 'A new account setup link was requested.',
+      setupEmail: { status: setupEmailStatus },
+    };
   }
 
   async cleanup() {
@@ -503,7 +536,10 @@ export class RegistrationService {
           data: { registrationRequestId: null },
         });
         await tx.notification.deleteMany({
-          where: { targetType: 'REGISTRATION_REQUEST', targetId: request.id },
+          where: {
+            targetType: REGISTRATION_NOTIFICATION_TARGET,
+            targetId: request.id,
+          },
         });
         await tx.activityLog.updateMany({
           where: { entityType: 'REGISTRATION_REQUEST', entityId: request.id },
@@ -692,7 +728,7 @@ export class RegistrationService {
           entityId: stale.id,
         });
         const now = new Date();
-        return tx.registrationRequest.update({
+        const approved = await tx.registrationRequest.update({
           where: { id: stale.id },
           data: {
             status: RegistrationRequestStatus.APPROVED,
@@ -703,14 +739,25 @@ export class RegistrationService {
           },
           select: registrationRequestSelect,
         });
+
+        await resolveNotifications(tx, {
+          targetType: REGISTRATION_NOTIFICATION_TARGET,
+          targetId: stale.id,
+          resolution: RegistrationRequestStatus.APPROVED,
+          resolvedAt: now,
+        });
+
+        return approved;
       },
     );
-    await this.authService
-      .requestPasswordSetup(stale.normalizedEmail)
-      .catch((error: unknown) =>
-        this.logMailFailure('account-setup', requestId, error),
-      );
-    return mapRegistrationRequest(finalized);
+    const setupEmailStatus = await this.dispatchSetupEmail(
+      stale.normalizedEmail,
+      requestId,
+    );
+    return {
+      ...mapRegistrationRequest(finalized),
+      setupEmail: { status: setupEmailStatus },
+    };
   }
 
   private async rejectClaimForUnavailableEmail(
@@ -719,22 +766,31 @@ export class RegistrationService {
     reviewerId: string,
   ): Promise<void> {
     const now = new Date();
-    await this.prisma.registrationRequest.updateMany({
-      where: {
-        id,
-        status: RegistrationRequestStatus.APPROVING,
-        approvalClaimId: claimId,
-      },
-      data: {
-        status: RegistrationRequestStatus.REJECTED,
-        rejectionCode: 'EMAIL_UNAVAILABLE',
-        rejectionReason: null,
-        reviewerId,
-        reviewedAt: now,
-        rejectedAt: now,
-        approvalClaimId: null,
-        approvalClaimedAt: null,
-      },
+    await runSerializableTransaction(this.prisma, async (tx) => {
+      await tx.registrationRequest.updateMany({
+        where: {
+          id,
+          status: RegistrationRequestStatus.APPROVING,
+          approvalClaimId: claimId,
+        },
+        data: {
+          status: RegistrationRequestStatus.REJECTED,
+          rejectionCode: 'EMAIL_UNAVAILABLE',
+          rejectionReason: null,
+          reviewerId,
+          reviewedAt: now,
+          rejectedAt: now,
+          approvalClaimId: null,
+          approvalClaimedAt: null,
+        },
+      });
+
+      await resolveNotifications(tx, {
+        targetType: REGISTRATION_NOTIFICATION_TARGET,
+        targetId: id,
+        resolution: RegistrationRequestStatus.REJECTED,
+        resolvedAt: now,
+      });
     });
   }
 
@@ -774,6 +830,70 @@ export class RegistrationService {
       REGISTRATION_ERROR_CODE.NOT_PENDING,
       'Registration request is not pending.',
     );
+  }
+
+  private async dispatchSetupEmail(
+    email: string,
+    eventId: string,
+  ): Promise<MailOutcome> {
+    try {
+      return await this.authService.requestPasswordSetup(email);
+    } catch (error) {
+      // Integration-level failure only. Business state is already committed
+      // and must never be rolled back because mail failed.
+      this.logMailFailure('account-setup', eventId, error);
+      return 'FAILED';
+    }
+  }
+
+  /**
+   * Anti-abuse claim for individual setup-email resends.
+   *
+   * The claim is written inside a serializable transaction before SMTP runs, so
+   * concurrent requests cannot both pass. A failed send therefore still
+   * consumes the cooldown window; this is intentional and is not proof of
+   * delivery.
+   */
+  private async claimSetupResend(
+    registrationRequestId: string,
+    actorId: string,
+  ): Promise<void> {
+    await runSerializableTransaction(this.prisma, async (tx) => {
+      const lastClaim = await tx.activityLog.findFirst({
+        where: {
+          entityType: 'REGISTRATION_REQUEST',
+          entityId: registrationRequestId,
+          action: REGISTRATION_ACTIVITY.SETUP_RESENT,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      });
+
+      if (lastClaim) {
+        const elapsedMs = Date.now() - lastClaim.createdAt.getTime();
+        if (elapsedMs < REGISTRATION_SETUP_RESEND_COOLDOWN_MS) {
+          const retryAfterSeconds = Math.max(
+            1,
+            Math.ceil(
+              (REGISTRATION_SETUP_RESEND_COOLDOWN_MS - elapsedMs) / 1000,
+            ),
+          );
+          throw new AppException(
+            HttpStatus.TOO_MANY_REQUESTS,
+            REGISTRATION_ERROR_CODE.SETUP_RESEND_COOLDOWN,
+            'A setup email was requested recently.',
+            { retryAfterSeconds },
+          );
+        }
+      }
+
+      await writeActivity(tx, {
+        actorId,
+        action: REGISTRATION_ACTIVITY.SETUP_RESENT,
+        entityType: 'REGISTRATION_REQUEST',
+        entityId: registrationRequestId,
+      });
+    });
   }
 
   private logMailFailure(

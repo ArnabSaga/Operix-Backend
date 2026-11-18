@@ -43,19 +43,19 @@ describe('SubmissionAiController route contract', () => {
 });
 
 describe('SubmissionAiController authorization contract', () => {
-  it('permits only Admins, matching the real review authority', () => {
+  it('permits explicit Admin and Super Admin reviewers', () => {
     expect(
       Reflect.getMetadata(OPERIX_REQUIRED_ROLES_METADATA_KEY, analyzeHandler()),
-    ).toEqual([UserRole.ADMIN]);
+    ).toEqual([UserRole.SUPER_ADMIN, UserRole.ADMIN]);
   });
 
-  it('does not grant the route to Super Admin or Members', () => {
+  it('does not grant the route to Members', () => {
     const roles = Reflect.getMetadata(
       OPERIX_REQUIRED_ROLES_METADATA_KEY,
       analyzeHandler(),
     ) as UserRole[];
 
-    expect(roles).not.toContain(UserRole.SUPER_ADMIN);
+    expect(roles).toContain(UserRole.SUPER_ADMIN);
     expect(roles).not.toContain(UserRole.MEMBER);
   });
 });
